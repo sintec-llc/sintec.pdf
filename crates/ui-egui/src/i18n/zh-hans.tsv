@@ -1926,3 +1926,16 @@
 	Choose picture…	选择图片…
 	Choose a picture of your signature	选择签名图片
 	{file} is too large for a signature (at most {n} MB)	{file} 作为签名太大（最多 {n} MB）
+	Add {what}	添加{what}
+	Use {what}	使用{what}
+	Remove saved {what}	删除已保存的{what}
+	Place saved {what}	放置已保存的{what}
+	By name at time, date	姓名、时间、日期
+	Soon	即将推出
+	not available yet	暂不可用
+	some of its tools aren't available yet	部分工具暂不可用
+	Tools marked Soon aren't available yet; the others work today.	标有“即将推出”的工具暂不可用，其余工具现在即可使用。
+signature	Type	输入
+	Save (⌘S)	保存 (⌘S)
+	This link's action ({s}) isn't supported yet	暂不支持此链接的操作（{s}）
+	Has JavaScript actions	包含 JavaScript 操作

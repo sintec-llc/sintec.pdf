@@ -283,6 +283,17 @@ pub fn t(s: &str) -> &str {
     tr(current(), s)
 }
 
+/// Keyboard shortcuts as the platform writes them: the strings use the Mac's ⌘ ⇧ ⌥, which
+/// read Ctrl+, Shift+ and Alt+ on Windows and Linux.
+pub fn keys(s: &str) -> std::borrow::Cow<'_, str> {
+    if cfg!(target_os = "macos") || !s.contains(['⌘', '⇧', '⌥']) {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    std::borrow::Cow::Owned(
+        s.replace("⇧⌘", "Ctrl+Shift+").replace("⌥⌘", "Ctrl+Alt+").replace('⌘', "Ctrl+").replace('⇧', "Shift+").replace('⌥', "Alt+"),
+    )
+}
+
 /// Translate an English UI string; unknown strings come back unchanged.
 pub fn tr(lang: Lang, s: &str) -> &str {
     lang.catalog().plain(s).unwrap_or(s)

@@ -1938,3 +1938,16 @@ date	December	декабря
 	Choose picture…	Выбрать изображение…
 	Choose a picture of your signature	Выберите изображение подписи
 	{file} is too large for a signature (at most {n} MB)	{file} слишком большой для подписи (не более {n} МБ)
+	Add {what}	Добавить: {what}
+	Use {what}	Использовать: {what}
+	Remove saved {what}	Удалить сохранённое: {what}
+	Place saved {what}	Поставить: {what}
+	By name at time, date	Имя, время, дата
+	Soon	Скоро
+	not available yet	пока недоступно
+	some of its tools aren't available yet	часть инструментов пока недоступна
+	Tools marked Soon aren't available yet; the others work today.	Инструменты с пометкой «Скоро» пока недоступны, остальные уже работают.
+signature	Type	Ввести
+	Save (⌘S)	Сохранить (⌘S)
+	This link's action ({s}) isn't supported yet	Действие ссылки ({s}) пока не поддерживается
+	Has JavaScript actions	Есть действия JavaScript

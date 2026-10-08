@@ -76,7 +76,8 @@ pub fn search_box(ui: &mut egui::Ui, placeholder: &str, width: f32) -> Response 
     let fill = if resp.hovered() { t.hover } else { t.field };
     ui.painter().rect(rect, CornerRadius::same(16), fill, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     icons::paint(ui, Rect::from_min_size(rect.min + vec2(10.0, 8.0), vec2(16.0, 16.0)), "search", 15.0, t.text_muted);
-    let hint = ui.painter().text(rect.right_center() - vec2(12.0, 0.0), Align2::RIGHT_CENTER, "⌘K", theme::regular(11.5), t.text_faint);
+    let hint =
+        ui.painter().text(rect.right_center() - vec2(12.0, 0.0), Align2::RIGHT_CENTER, crate::i18n::keys("⌘K"), theme::regular(11.5), t.text_faint);
     // The placeholder stops short of the ⌘K hint.
     let galley = elided(ui, placeholder, theme::regular(13.0), t.text_faint, hint.left() - rect.left() - 34.0 - 8.0, 1);
     ui.painter().galley(rect.left_center() + vec2(34.0, -galley.size().y / 2.0), galley, t.text_faint);
@@ -84,7 +85,7 @@ pub fn search_box(ui: &mut egui::Ui, placeholder: &str, width: f32) -> Response 
 }
 
 pub fn menu_item(ui: &mut egui::Ui, label: &str, shortcut: &str) -> Response {
-    ui.add(egui::Button::new(label).shortcut_text(shortcut))
+    ui.add(egui::Button::new(label).shortcut_text(crate::i18n::keys(shortcut)))
 }
 
 pub fn section_title(ui: &mut egui::Ui, text: &str) {

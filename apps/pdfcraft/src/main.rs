@@ -266,9 +266,22 @@ fn configure_gpu(native: &mut eframe::NativeOptions) {
             }
         }
     }
-    if cfg!(target_os = "windows") && std::env::var_os("WGPU_BACKEND").is_none() {
-        setup.instance_descriptor.backends = eframe::wgpu::Backends::DX12 | eframe::wgpu::Backends::GL;
+    #[cfg(target_os = "windows")]
+    if std::env::var_os("WGPU_BACKEND").is_none() {
+        // DX12 alone when a DX12 adapter is there (every Windows 10/11 PC with a working
+        // driver): starting the OpenGL fallback too costs about 85 MB for nothing.
+        setup.instance_descriptor.backends =
+            if dx12_adapter_available() { eframe::wgpu::Backends::DX12 } else { eframe::wgpu::Backends::DX12 | eframe::wgpu::Backends::GL };
     }
+}
+
+/// Whether a DX12 adapter is available (a throwaway instance, dropped before the window opens).
+#[cfg(target_os = "windows")]
+fn dx12_adapter_available() -> bool {
+    let mut desc = eframe::wgpu::InstanceDescriptor::new_without_display_handle();
+    desc.backends = eframe::wgpu::Backends::DX12;
+    let instance = eframe::wgpu::Instance::new(desc);
+    !pollster::block_on(instance.enumerate_adapters(eframe::wgpu::Backends::DX12)).is_empty()
 }
 
 /// PCI `(vendor, device)` ids of the GPUs with a connected monitor, read from the DRM connectors

@@ -1893,3 +1893,16 @@
 	Choose picture…	選擇圖片…
 	Choose a picture of your signature	選擇簽名圖片
 	{file} is too large for a signature (at most {n} MB)	{file} 作為簽名太大（最多 {n} MB）
+	Add {what}	新增{what}
+	Use {what}	使用{what}
+	Remove saved {what}	刪除已儲存的{what}
+	Place saved {what}	放置已儲存的{what}
+	By name at time, date	姓名、時間、日期
+	Soon	即將推出
+	not available yet	暫不可用
+	some of its tools aren't available yet	部分工具暫不可用
+	Tools marked Soon aren't available yet; the others work today.	標有「即將推出」的工具暫不可用，其餘工具現在即可使用。
+signature	Type	輸入
+	Save (⌘S)	儲存 (⌘S)
+	This link's action ({s}) isn't supported yet	暫不支援此連結的動作（{s}）
+	Has JavaScript actions	包含 JavaScript 動作

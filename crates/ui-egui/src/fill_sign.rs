@@ -548,7 +548,9 @@ pub(crate) fn signature_pad(ui: &mut egui::Ui, t: &Tokens, d: &mut SigDraft, pre
     let title = if d.editing { tl!("Change {what}") } else { tl!("Create {what}") };
     ui.label(egui::RichText::new(crate::i18n::fmt(title, &[("what", what)])).font(crate::theme::semibold(18.0)));
     ui.horizontal(|ui| {
-        if crate::widgets::pill_button(ui, tl!("Type"), !d.drawing && !d.picture).clicked() {
+        // "Type" as a verb (type your name), not "Type" as in kind.
+        let type_tab = crate::i18n::tr_ctx(crate::i18n::current(), "signature", "Type");
+        if crate::widgets::pill_button(ui, type_tab, !d.drawing && !d.picture).clicked() {
             (d.drawing, d.picture) = (false, false);
         }
         if crate::widgets::pill_button(ui, tl!("Draw"), d.drawing && !d.picture).clicked() {

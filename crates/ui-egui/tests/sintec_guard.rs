@@ -133,3 +133,40 @@ fn the_upstream_name_and_marks_stay_out_of_the_app() {
     assert!(found.is_empty(), "upstream branding in the app (run the rebrand step, docs/upstream-sync.md):\n{}", found.join("\n"));
     assert!(!root.join("docs/brand").exists(), "the ArtCraft marks (docs/brand/) must not come back");
 }
+
+/// Shortcuts read as the platform writes them: Ctrl+ on Windows and Linux, ⌘ on the Mac.
+#[test]
+fn shortcuts_use_the_platform_s_keys() {
+    let keys = pdfcraft_ui_egui::i18n::keys;
+    if cfg!(target_os = "macos") {
+        assert_eq!(keys("⇧⌘G"), "⇧⌘G");
+    } else {
+        assert_eq!(keys("⌘K"), "Ctrl+K");
+        assert_eq!(keys("Next (⇧⌘G)"), "Next (Ctrl+Shift+G)");
+        assert_eq!(keys("⌥⌘1 / ⌥F"), "Ctrl+Alt+1 / Alt+F");
+    }
+    assert_eq!(keys("Esc"), "Esc");
+}
+
+/// No internal milestone codes ("M4", "(M6)", "этапе M7") in Russian text the app still uses;
+/// the web-only attachment note is the one place left (the desktop app never shows it).
+#[test]
+fn russian_text_shows_no_internal_milestones() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    rust_files(&src, &mut files);
+    let sources: Vec<String> = files.iter().filter_map(|f| std::fs::read_to_string(f).ok()).collect();
+    let ru = std::fs::read_to_string(src.join("i18n/ru.tsv")).unwrap();
+    let bad: Vec<&str> = ru
+        .lines()
+        .filter(|l| {
+            let mut cols = l.split('\t');
+            let (_context, english, russian) = (cols.next(), cols.next().unwrap_or(""), cols.next().unwrap_or(""));
+            let milestone = russian
+                .split(|c: char| !c.is_alphanumeric() && c != '.')
+                .any(|w| w.strip_prefix('M').is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit() || c == '.')));
+            milestone && !english.contains("on the web") && sources.iter().any(|s| s.contains(&format!("\"{english}\"")))
+        })
+        .collect();
+    assert!(bad.is_empty(), "milestone codes in Russian text the app uses: {bad:#?}");
+}

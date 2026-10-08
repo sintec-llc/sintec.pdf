@@ -250,10 +250,10 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     });
     ui.add_space(8.0);
     ui.label(egui::RichText::new(tl!("Documents and view")).font(theme::semibold(13.0)));
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.label(tl!("Default workspace mode"));
         for (mode, label) in [
-            (crate::Mode::AllTools, "All Tools"),
+            (crate::Mode::AllTools, "All tools"),
             (crate::Mode::Read, "Read"),
             (crate::Mode::Edit, "Edit"),
             (crate::Mode::Convert, "Convert"),
@@ -268,13 +268,13 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
             .color(t.text_muted),
     );
     let defaults = &mut app.view_defaults;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.label(tl!("Default page display"));
         for l in crate::canvas::PageLayout::ORDER {
             ui.radio_value(&mut defaults.layout, l, tl!(l.label()));
         }
     });
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         use crate::canvas::Fit;
         ui.label(tl!("Default zoom"));
         ui.radio_value(&mut defaults.fit, Fit::Width, tl!("Fit to width"));
