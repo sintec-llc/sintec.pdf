@@ -1064,8 +1064,13 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     1 => crate::credits::contributors_ui(ui),
                     2 => crate::credits::models_ui(ui),
                     _ => {
-                        ui.label(egui::RichText::new("Sintec.PDF").font(theme::semibold(20.0)));
-                        ui.label(crate::i18n::fmt(tl!("Version {v}"), &[("v", env!("CARGO_PKG_VERSION"))]));
+                        ui.horizontal(|ui| {
+                            widgets::app_logo(ui, 44.0);
+                            ui.vertical(|ui| {
+                                ui.label(egui::RichText::new("Sintec.PDF").font(theme::semibold(20.0)));
+                                ui.label(crate::i18n::fmt(tl!("Version {v}"), &[("v", env!("CARGO_PKG_VERSION"))]));
+                            });
+                        });
                         ui.add_space(6.0);
                         ui.label(tl!("A clean-room, open-source PDF application written in Rust. MIT OR Apache-2.0."));
                         ui.label(

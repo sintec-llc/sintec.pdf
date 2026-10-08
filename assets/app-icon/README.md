@@ -1,38 +1,37 @@
-# PdfCraft app icon
+# Sintec.PDF app icon
 
-<img src="pdfcraft-small.svg" alt="PdfCraft app icon: an engraved lion's head on green" width="128">
+<img src="pdfcraft-small.svg" alt="Sintec.PDF app icon: an orange P on a black rounded square" width="128">
 
-**Creature:** a lion, in a frontal head-and-shoulders portrait, mane running off the bottom of the tile.
+**Design:** Sintec LLC's Sintec.PDF logo: a wide, heavy orange **P** on a black rounded square.
 
-**Style:** an engraving (woodcut-weight line work) portrait in the Crafting Apps "owl template" framing:
-a full-bleed colour field, no frame or roundel, the animal looking at the viewer and filling the tile.
-
-**Palette:** exactly three colours.
+**Palette:** exactly two colours.
 
 | Colour | Hex | Used for |
 |---|---|---|
-| Ink | `#0b0b0c` | line work and the figure's contour |
-| Paper | `#efe9dc` | the figure (the lion's silhouette) |
-| PdfCraft green (app colour) | `#12a58a` | the full-bleed field |
+| Black | `#000000` | the full-bleed tile |
+| Sintec orange | `#FC9A1A` | the P |
 
-**Tile:** `viewBox="0 0 512 512"`, a rounded square with `rx=112` that clips everything. Windows and Linux
-icons use the full-bleed tile. macOS icons put it on Apple's grid (an 824 px body centred on a transparent
-1024 px canvas).
+**Tile:** `viewBox="0 0 512 512"`, a rounded square with `rx=37.5`, full bleed. Windows and Linux icons use
+the full-bleed tile. macOS icons put it on Apple's grid (an 824 px body centred on a transparent 1024 px
+canvas).
 
-**Provenance:** the project owner's original drawing, made in ArtCraft (2880 px, keyed to the palette), then
-vectorised with craftrules `assets/logo-options/_tools/vectorize_tile.py` (potrace; no filtering or
-warping). The source drawing is kept in craftrules at `assets/app-icons/pdfcraft/source.png`, not here.
-Licence: [LICENSE.txt](LICENSE.txt) (`MIT OR Apache-2.0`, like the repo).
+**Provenance:** Sintec LLC's 163 px logo PNG, rebuilt as a vector rather than traced pixel by pixel: the
+stem and bars are straight lines at the measured positions, and the bowl and the counter are superellipses
+(exponents 2.3 and 2.4) fitted to the logo's edges by least squares (0.4 px RMS at the source size). Drawn
+back at 163 px, the vector matches the source PNG to a mean difference of 0.4/255. The file names keep the
+upstream `pdfcraft` stem because the build, the MSI and the app refer to them.
+Licence: [LICENSE.txt](LICENSE.txt) (`MIT OR Apache-2.0` for the files; the Sintec names and logos remain
+Sintec LLC's trademarks).
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `pdfcraft.svg` | the master vector (traced at 2048 px); every PNG, `.ico` and `.icns` is rendered from it |
-| `pdfcraft-small.svg` | a lighter vector (traced at 1024 px) for places where size matters, such as this README |
+| `pdfcraft.svg` | the master vector; every PNG, `.ico` and `.icns` is rendered from it |
+| `pdfcraft-small.svg` | the same vector, for places that link the small file, such as this README |
 | `pdfcraft-1024.png` | 1024 px on Apple's grid; also the runtime Dock icon on macOS |
 | `pdfcraft.icns` | macOS icon (16–1024 px) |
-| `pdfcraft.ico` | Windows icon (16–256 px), embedded in `pdfcraft.exe` by `apps/pdfcraft/build.rs` |
+| `pdfcraft.ico` | Windows icon (16–256 px), embedded in the app exe (shipped as `sintec-pdf.exe`) by `apps/pdfcraft/build.rs` |
 | `hicolor/<n>x<n>/apps/ai.storyteller.pdfcraft.png` | Linux hicolor theme, 16–512 px; the 256 px one is the runtime icon on Windows and Linux |
 | `hicolor/scalable/apps/ai.storyteller.pdfcraft.svg` | Linux scalable icon (copy of the master) |
 

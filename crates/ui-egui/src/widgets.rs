@@ -119,6 +119,15 @@ pub fn toast(app: &mut PdfCraftApp, ctx: &egui::Context) {
     ctx.request_repaint_after(std::time::Duration::from_millis(100));
 }
 
+/// The Sintec.PDF logo (the app icon's master vector), `size` points square.
+pub fn app_logo(ui: &mut egui::Ui, size: f32) -> Response {
+    ui.add(
+        egui::Image::from_bytes("bytes://sintec-pdf-logo.svg", include_bytes!("../../../assets/app-icon/pdfcraft.svg"))
+            .fit_to_exact_size(vec2(size, size))
+            .alt_text("Sintec.PDF logo"),
+    )
+}
+
 /// Buttons for every project link (`pdfcraft_engine::links`), the first one prominent.
 /// Returns the registry command of the one clicked.
 pub fn community_links(ui: &mut egui::Ui) -> Option<&'static str> {
