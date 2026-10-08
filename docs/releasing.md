@@ -1,9 +1,12 @@
-# Releasing PdfCraft
+# Releasing Sintec.PDF
 
-Every push to the `release` branch runs `.github/workflows/release.yml`. It builds installers for
-macOS, Windows, Linux, FreeBSD and the web, signs the ones it has certificates for, and creates or
-updates a **draft** GitHub Release named `PdfCraft v<version>`. Nobody sees a draft until a
-maintainer publishes it.
+> **Sintec.PDF builds for Windows only.** Every push to the `release` branch runs
+> `.github/workflows/release.yml`, which builds the x64 MSI and portable zip
+> (`sintec-pdf-<version>-windows-x64.*`), checks the MSI with `packaging/windows/test-msi.ps1`, and
+> creates or updates a **draft** GitHub Release named `Sintec.PDF v<version>`. Nobody sees a draft
+> until a maintainer publishes it. The macOS, Linux, FreeBSD, web and ARM64 jobs described below
+> come from upstream PdfCraft; their workflows were removed here, and the packaging scripts are
+> kept only as reference.
 
 The pipeline was ported from PhotoCraft's. User-facing names say **PdfCraft**; files, binaries and
 ids stay lowercase (`pdfcraft-<version>-<platform>-<arch>.<ext>`, `ai.storyteller.pdfcraft`).
