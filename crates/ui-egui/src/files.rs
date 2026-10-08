@@ -116,8 +116,16 @@ impl PdfCraftApp {
     }
 
     fn pick_files(&mut self, purpose: FilePurpose, multiple: bool) {
+        // Insert pages takes every type «Преобразовать в PDF» converts; the rest take PDFs.
         #[cfg(not(target_arch = "wasm32"))]
-        self.pick(crate::pickers::PickFor::Files(purpose), rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]), multiple);
+        let dialog = if purpose == FilePurpose::InsertPages {
+            let exts: Vec<&str> = pdfcraft_engine::convert::supported_exts().collect();
+            rfd::AsyncFileDialog::new().add_filter(tl!("PDFs, images, text and Office documents"), &exts).add_filter("PDF", &["pdf"])
+        } else {
+            rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"])
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        self.pick(crate::pickers::PickFor::Files(purpose), dialog, multiple);
         #[cfg(target_arch = "wasm32")]
         {
             let requests = self.requests.clone();
@@ -170,7 +178,11 @@ impl PdfCraftApp {
             FilePurpose::Combine => self.stage_combine(files),
             FilePurpose::InsertPages => {
                 for (name, bytes) in files {
-                    self.insert_pages_from(&name, bytes);
+                    // Images, text and Office documents are converted to PDF pages first.
+                    match pdfcraft_engine::convert::file_to_pdf(&self.session, &name, bytes) {
+                        Ok(pdf) => self.insert_pages_from(&name, pdf.as_ref().clone()),
+                        Err(e) => self.notify_fmt("Couldn't add {name}: {e}", &[("name", &name), ("e", &e)]),
+                    }
                 }
             }
             FilePurpose::ReplacePages => {

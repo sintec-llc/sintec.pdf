@@ -1869,3 +1869,7 @@
 	Couldn't update: {e}	無法更新：{e}
 	Update downloads the new installer, checks it and restarts Sintec.PDF on the new version. Download opens the release page.	「更新」會下載新的安裝程式、驗證後以新版本重新啟動 Sintec.PDF。「下載」會開啟發佈頁面。
 	Asks GitHub for the latest release. Nothing is downloaded or installed until you choose.	向 GitHub 查詢最新版本。在您選擇之前不會下載或安裝任何內容。
+	Arrange the pages	整理頁面
+	Drag pages to reorder them; delete, rotate or add pages from other files with the buttons below. Nothing is saved until you save.	拖曳頁面以調整順序；使用下方按鈕刪除、旋轉頁面或從其他檔案新增頁面。儲存前不會寫入任何檔案。
+	Skipped: {list}	已略過：{list}
+	PDFs, images, text and Office documents	PDF、影像、文字和 Office 文件

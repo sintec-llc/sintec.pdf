@@ -45,7 +45,7 @@ pub mod marks {
 }
 mod content_ui;
 mod link_ui;
-pub use create_ui::Clip;
+pub use create_ui::{Clip, ConvertDone};
 pub use link_ui::LinkDraft;
 pub use optimize_ui::{OptimizeDraft, OptimizeTab};
 pub use sign_ui::{DigitalIdEntry, SignDraft, SignStep};
@@ -363,10 +363,9 @@ pub struct PdfCraftApp {
     /// A print job running in the background (Windows renders the sheets first): the printer's
     /// name and the result once it is done.
     pub print_run: Option<print_ui::PrintRun>,
-    /// A «Преобразовать в PDF» conversion running in the background: the saved PDF's path and
-    /// the skipped files, or the error.
+    /// A «Преобразовать в PDF» conversion running in the background.
     #[allow(clippy::type_complexity)]
-    pub convert_run: Option<std::sync::Arc<std::sync::Mutex<Option<Result<(String, Vec<(String, String)>), String>>>>>,
+    pub convert_run: Option<std::sync::Arc<std::sync::Mutex<Option<Result<ConvertDone, String>>>>>,
     /// Document Properties ▸ Description fields being edited: (document, Title/Author/Subject/Keywords).
     pub props_draft: Option<(DocId, [String; 4])>,
     /// Document Properties ▸ Initial View (and reading options) being edited.

@@ -1911,3 +1911,7 @@ date	December	декабря
 	Couldn't update: {e}	Не удалось обновить: {e}
 	Update downloads the new installer, checks it and restarts Sintec.PDF on the new version. Download opens the release page.	«Обновить» скачает новый установщик, проверит его и перезапустит Sintec.PDF в новой версии. «Скачать» откроет страницу выпуска.
 	Asks GitHub for the latest release. Nothing is downloaded or installed until you choose.	Запрашивает у GitHub последний выпуск. Ничего не скачивается и не устанавливается, пока вы не выберете.
+	Arrange the pages	Расставьте страницы
+	Drag pages to reorder them; delete, rotate or add pages from other files with the buttons below. Nothing is saved until you save.	Перетаскивайте страницы, чтобы изменить порядок; удаляйте, поворачивайте или добавляйте страницы из других файлов кнопками ниже. Ничего не сохраняется, пока вы не сохраните.
+	Skipped: {list}	Пропущено: {list}
+	PDFs, images, text and Office documents	PDF, изображения, текст и документы Office

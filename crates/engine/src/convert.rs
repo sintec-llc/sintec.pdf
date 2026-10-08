@@ -1,5 +1,6 @@
 //! Convert to PDF (Windows Explorer ▸ «Преобразовать в PDF»): turn a selection of files (images,
-//! text files, Office documents, PDFs) into one PDF, in natural name order, saved next to them.
+//! text files, Office documents, PDFs) into one PDF, in natural name order, opened as a new,
+//! unsaved document for the user to arrange and save.
 //! Office documents go through the installed office suite ([`crate::office`]). Files that can't be
 //! converted are skipped and reported, not fatal.
 
@@ -71,25 +72,49 @@ pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     }
 }
 
-/// Where the combined PDF goes: next to the first file, named after it when there is one file
-/// and after its folder when there are several; never over an existing file.
-pub fn output_path(paths: &[PathBuf]) -> Option<PathBuf> {
-    let first = paths.first()?;
-    let dir = first.parent().map(Path::to_path_buf).unwrap_or_default();
+/// The name for the converted document: the file's when there is one, the folder's when there
+/// are several ("Счета.pdf").
+pub fn output_name(paths: &[PathBuf]) -> String {
+    let first = paths.first();
     let stem = if paths.len() == 1 {
-        first.file_stem().map(|s| s.to_string_lossy().into_owned())
+        first.and_then(|f| f.file_stem()).map(|s| s.to_string_lossy().into_owned())
     } else {
-        dir.file_name().map(|s| s.to_string_lossy().into_owned())
+        first.and_then(|f| f.parent()).and_then(Path::file_name).map(|s| s.to_string_lossy().into_owned())
     }
     .filter(|s| !s.trim().is_empty())
     .unwrap_or_else(|| "Документ".to_string());
-    let mut candidate = dir.join(format!("{stem}.pdf"));
-    let mut n = 2;
-    while candidate.exists() && n < 10_000 {
-        candidate = dir.join(format!("{stem} ({n}).pdf"));
-        n += 1;
+    format!("{stem}.pdf")
+}
+
+/// One file's bytes as a PDF, for Insert pages from a file: PDFs as they are, images, text files
+/// and Office documents converted as [`convert_files`] does.
+pub fn file_to_pdf(session: &Session, file_name: &str, bytes: Vec<u8>) -> Result<Arc<Vec<u8>>, String> {
+    let path = Path::new(file_name);
+    let e = ext(path);
+    let head = bytes.get(..bytes.len().min(1024)).unwrap_or_default();
+    if e == "pdf" || head.windows(5).any(|w| w == b"%PDF-") {
+        return Ok(Arc::new(bytes));
     }
-    Some(candidate)
+    if IMAGE_EXTS.contains(&e.as_str()) {
+        return session.create_from_images(&[(file_name.to_string(), bytes)]).map_err(|e| e.to_string());
+    }
+    if TEXT_EXTS.contains(&e.as_str()) {
+        let title = path.file_stem().map_or_else(|| file_name.to_string(), |s| s.to_string_lossy().into_owned());
+        return session.create_from_text_file(&title, &bytes).map_err(|e| e.to_string());
+    }
+    if let Some(kind) = crate::office::kind_for(&e) {
+        // Office converts files, not bytes: hand it a temporary copy under the same name.
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+        let dir = std::env::temp_dir().join(format!("sintec-pdf-insert-{}-{stamp}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let copy = dir.join(path.file_name().unwrap_or(path.as_os_str()));
+        let result = std::fs::write(&copy, &bytes).map_err(|e| e.to_string()).and_then(|()| {
+            crate::office::convert(&[(kind, copy.clone())]).into_iter().next().map_or_else(|| Err("not converted".to_string()), |(_, r)| r)
+        });
+        let _ = std::fs::remove_dir_all(&dir);
+        return result.map(Arc::new);
+    }
+    Err("this file type can't be converted to PDF".to_string())
 }
 
 /// Convert `paths` (any order) into one PDF. Errors only when nothing could be converted.
@@ -189,18 +214,24 @@ mod tests {
     }
 
     #[test]
-    fn output_goes_next_to_the_files_without_overwriting() {
-        let dir = std::env::temp_dir().join(format!("sintec-convert-name-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let folder = dir.join("Счета");
-        std::fs::create_dir_all(&folder).unwrap();
-        let one = vec![folder.join("акт.jpg")];
-        assert_eq!(output_path(&one), Some(folder.join("акт.pdf")));
-        let many = vec![folder.join("a.jpg"), folder.join("b.txt")];
-        assert_eq!(output_path(&many), Some(folder.join("Счета.pdf")));
-        std::fs::write(folder.join("Счета.pdf"), b"x").unwrap();
-        assert_eq!(output_path(&many), Some(folder.join("Счета (2).pdf")));
-        let _ = std::fs::remove_dir_all(dir);
+    fn the_document_is_named_after_the_file_or_the_folder() {
+        let folder = PathBuf::from("C:\\Документы").join("Счета");
+        assert_eq!(output_name(&[folder.join("акт.jpg")]), "акт.pdf");
+        assert_eq!(output_name(&[folder.join("a.jpg"), folder.join("b.txt")]), "Счета.pdf");
+        assert_eq!(output_name(&[]), "Документ.pdf");
+    }
+
+    #[test]
+    fn single_files_convert_for_insert_pages() {
+        let s = Session::new();
+        let png = crate::export::encode_png(2, 2, &[255; 16]).unwrap();
+        let from_image = file_to_pdf(&s, "фото.png", png).unwrap();
+        assert!(from_image.starts_with(b"%PDF"));
+        let from_text = file_to_pdf(&s, "заметка.txt", "Привет".as_bytes().to_vec()).unwrap();
+        assert!(from_text.starts_with(b"%PDF"));
+        let pdf = s.create_blank(100.0, 100.0, 1).unwrap();
+        assert_eq!(file_to_pdf(&s, "a.pdf", pdf.as_ref().clone()).unwrap(), pdf, "a PDF goes in as it is");
+        assert!(file_to_pdf(&s, "archive.zip", b"PK".to_vec()).is_err());
     }
 
     #[test]
