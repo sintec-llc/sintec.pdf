@@ -2509,101 +2509,20 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
 fn organize_toolbar(view: &mut DocView, info: &DocInfo, editable: bool, ui: &mut egui::Ui, t: &Tokens) {
     let targets = view.target_pages();
     let n = info.pages.len();
-    let (first, last) = (targets.first().copied().unwrap_or(0), targets.last().copied().unwrap_or(0));
     egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(16, 8)).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            let label = match view.selected.len() {
-                0 => crate::i18n::fmt(tl!("Page {p} of {n}"), &[("p", &(view.current + 1).to_string()), ("n", &n.to_string())]),
-                1 => tl!("1 page selected").to_string(),
-                k => crate::i18n::fmt(tl!("{n} pages selected"), &[("n", &k.to_string())]),
-            };
-            // Fixed width so the buttons never shift as the selection text changes.
-            ui.add_sized([150.0, 30.0], egui::Label::new(egui::RichText::new(label).font(theme::medium(13.0)).color(t.text_muted)).truncate());
-            ui.add_enabled_ui(editable, |ui| {
-                if icons::button(ui, "rotate-ccw", 30.0, false, "Rotate counterclockwise").clicked() {
-                    view.pending_edit = Some(Edit::RotatePages { pages: targets.clone(), degrees: -90 });
-                }
-                if icons::button(ui, "rotate-cw", 30.0, false, "Rotate clockwise").clicked() {
-                    view.pending_edit = Some(Edit::RotatePages { pages: targets.clone(), degrees: 90 });
-                }
-                let can_delete = targets.len() < n;
-                if ui.add_enabled_ui(can_delete, |ui| icons::button(ui, "trash-2", 30.0, false, tl!("Delete pages (Delete)"))).inner.clicked() {
-                    view.pending_edit = Some(Edit::DeletePages { pages: targets.clone() });
-                }
-                if icons::button(ui, "file-plus", 30.0, false, tl!("Insert a blank page after the selection")).clicked() {
-                    let c = info.pages[last].crop;
-                    let (w, h) = ((c[2] - c[0]).abs().max(1.0) as f64, (c[3] - c[1]).abs().max(1.0) as f64);
-                    view.pending_edit = Some(Edit::InsertBlankPage { at: last + 1, width: w, height: h });
-                }
-                if icons::button(ui, "file-input", 30.0, false, tl!("Insert pages from a file…")).clicked() {
-                    view.pending_action = Some(ViewAction::InsertFromFile);
-                }
-                if icons::button(ui, "file-output", 30.0, false, tl!("Extract pages to a new document")).clicked() {
-                    view.pending_action = Some(ViewAction::Extract);
-                }
-                if icons::button(ui, "scissors", 30.0, false, tl!("Split into files…")).clicked() {
-                    view.pending_action = Some(ViewAction::Split);
-                }
-                // Select ▸ all, odd, even, landscape, portrait pages (Acrobat's page range
-                // selection in Organize Pages).
-                let sel = icons::button(ui, "list", 30.0, false, tl!("Select pages"));
-                egui::Popup::menu(&sel).show(|ui| {
-                    use pdfcraft_engine::{PageOrientation as O, PageParity as P, filter_pages};
-                    let all: Vec<usize> = (0..n).collect();
-                    for (label, parity, orient) in [
-                        ("All pages", P::Both, O::Both),
-                        ("Odd pages", P::Odd, O::Both),
-                        ("Even pages", P::Even, O::Both),
-                        ("Landscape pages", P::Both, O::Landscape),
-                        ("Portrait pages", P::Both, O::Portrait),
-                    ] {
-                        if ui.button(tl!(label)).clicked() {
-                            view.select_pages(&filter_pages(info, &all, parity, orient));
-                            ui.close();
-                        }
-                    }
-                    if ui.button(tl!("None")).clicked() {
-                        view.select_pages(&[]);
-                        ui.close();
-                    }
-                });
-                ui.add_space(8.0);
-                if ui.add_enabled_ui(first > 0, |ui| icons::button(ui, "chevron-left", 30.0, false, tl!("Move earlier"))).inner.clicked() {
-                    view.pending_edit = Some(Edit::MovePages { pages: targets.clone(), to: first - 1 });
-                }
-                if ui.add_enabled_ui(last + 1 < n, |ui| icons::button(ui, "chevron-right", 30.0, false, tl!("Move later"))).inner.clicked() {
-                    view.pending_edit = Some(Edit::MovePages { pages: targets.clone(), to: first + 1 });
-                }
+        // Both groups on one row when they fit; otherwise zoom and Close go to a second row
+        // instead of drawing over the page tools.
+        if ui.available_width() >= 820.0 {
+            ui.horizontal(|ui| {
+                organize_tools(view, info, editable, ui, t, &targets);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| organize_view_controls(view, ui, t));
             });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::ghost_button(ui, "x", tl!("Close")).on_hover_text(tl!("Back to the document")).clicked() {
-                    view.organize = false;
-                }
-                ui.add_space(8.0);
-                let preview_tip = if view.preview_open { tl!("Hide the page preview") } else { tl!("Show the page preview") };
-                if icons::button(ui, "panel-right", 30.0, view.preview_open, preview_tip).clicked() {
-                    view.preview_open = !view.preview_open;
-                }
-                ui.add_space(8.0);
-                let (lo, hi) = (*GRID_ZOOM.start(), *GRID_ZOOM.end());
-                if ui.add_enabled_ui(view.grid_zoom < hi - 0.001, |ui| icons::button(ui, "zoom-in", 30.0, false, tl!("Larger pages"))).inner.clicked()
-                {
-                    view.grid_zoom = (view.grid_zoom * 1.25).min(hi);
-                }
-                ui.add_sized(
-                    [46.0, 30.0],
-                    egui::Label::new(egui::RichText::new(format!("{:.0}%", view.grid_zoom * 100.0)).font(theme::medium(12.5)).color(t.text_muted)),
-                );
-                if ui
-                    .add_enabled_ui(view.grid_zoom > lo + 0.001, |ui| icons::button(ui, "zoom-out", 30.0, false, tl!("Smaller pages")))
-                    .inner
-                    .clicked()
-                {
-                    view.grid_zoom = (view.grid_zoom / 1.25).max(lo);
-                }
+        } else {
+            ui.horizontal_wrapped(|ui| organize_tools(view, info, editable, ui, t, &targets));
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| organize_view_controls(view, ui, t));
             });
-        });
+        }
     });
     // Keys act on the selection unless a text field has focus.
     if editable && !ui.ctx().egui_wants_keyboard_input() {
@@ -2631,6 +2550,101 @@ fn organize_toolbar(view: &mut DocView, info: &DocInfo, editable: bool, ui: &mut
         if esc {
             view.selected.clear();
         }
+    }
+}
+
+/// The page grid's page tools: the selection, rotate, delete, insert, extract, split, select, move.
+fn organize_tools(view: &mut DocView, info: &DocInfo, editable: bool, ui: &mut egui::Ui, t: &Tokens, targets: &[usize]) {
+    let targets = targets.to_vec();
+    let n = info.pages.len();
+    let (first, last) = (targets.first().copied().unwrap_or(0), targets.last().copied().unwrap_or(0));
+    ui.spacing_mut().item_spacing.x = 4.0;
+    let label = match view.selected.len() {
+        0 => crate::i18n::fmt(tl!("Page {p} of {n}"), &[("p", &(view.current + 1).to_string()), ("n", &n.to_string())]),
+        1 => tl!("1 page selected").to_string(),
+        k => crate::i18n::fmt(tl!("{n} pages selected"), &[("n", &k.to_string())]),
+    };
+    // Fixed width so the buttons never shift as the selection text changes.
+    ui.add_sized([150.0, 30.0], egui::Label::new(egui::RichText::new(label).font(theme::medium(13.0)).color(t.text_muted)).truncate());
+    ui.add_enabled_ui(editable, |ui| {
+        if icons::button(ui, "rotate-ccw", 30.0, false, tl!("Rotate counterclockwise")).clicked() {
+            view.pending_edit = Some(Edit::RotatePages { pages: targets.clone(), degrees: -90 });
+        }
+        if icons::button(ui, "rotate-cw", 30.0, false, tl!("Rotate clockwise")).clicked() {
+            view.pending_edit = Some(Edit::RotatePages { pages: targets.clone(), degrees: 90 });
+        }
+        let can_delete = targets.len() < n;
+        if ui.add_enabled_ui(can_delete, |ui| icons::button(ui, "trash-2", 30.0, false, tl!("Delete pages (Delete)"))).inner.clicked() {
+            view.pending_edit = Some(Edit::DeletePages { pages: targets.clone() });
+        }
+        if icons::button(ui, "file-plus", 30.0, false, tl!("Insert a blank page after the selection")).clicked() {
+            let c = info.pages[last].crop;
+            let (w, h) = ((c[2] - c[0]).abs().max(1.0) as f64, (c[3] - c[1]).abs().max(1.0) as f64);
+            view.pending_edit = Some(Edit::InsertBlankPage { at: last + 1, width: w, height: h });
+        }
+        if icons::button(ui, "file-input", 30.0, false, tl!("Insert pages from a file…")).clicked() {
+            view.pending_action = Some(ViewAction::InsertFromFile);
+        }
+        if icons::button(ui, "file-output", 30.0, false, tl!("Extract pages to a new document")).clicked() {
+            view.pending_action = Some(ViewAction::Extract);
+        }
+        if icons::button(ui, "scissors", 30.0, false, tl!("Split into files…")).clicked() {
+            view.pending_action = Some(ViewAction::Split);
+        }
+        // Select ▸ all, odd, even, landscape, portrait pages (Acrobat's page range
+        // selection in Organize Pages).
+        let sel = icons::button(ui, "list", 30.0, false, tl!("Select pages"));
+        egui::Popup::menu(&sel).show(|ui| {
+            use pdfcraft_engine::{PageOrientation as O, PageParity as P, filter_pages};
+            let all: Vec<usize> = (0..n).collect();
+            for (label, parity, orient) in [
+                ("All pages", P::Both, O::Both),
+                ("Odd pages", P::Odd, O::Both),
+                ("Even pages", P::Even, O::Both),
+                ("Landscape pages", P::Both, O::Landscape),
+                ("Portrait pages", P::Both, O::Portrait),
+            ] {
+                if ui.button(tl!(label)).clicked() {
+                    view.select_pages(&filter_pages(info, &all, parity, orient));
+                    ui.close();
+                }
+            }
+            if ui.button(tl!("None")).clicked() {
+                view.select_pages(&[]);
+                ui.close();
+            }
+        });
+        ui.add_space(8.0);
+        if ui.add_enabled_ui(first > 0, |ui| icons::button(ui, "chevron-left", 30.0, false, tl!("Move earlier"))).inner.clicked() {
+            view.pending_edit = Some(Edit::MovePages { pages: targets.clone(), to: first - 1 });
+        }
+        if ui.add_enabled_ui(last + 1 < n, |ui| icons::button(ui, "chevron-right", 30.0, false, tl!("Move later"))).inner.clicked() {
+            view.pending_edit = Some(Edit::MovePages { pages: targets.clone(), to: first + 1 });
+        }
+    });
+}
+
+/// The page grid's view controls (right-aligned): Close, the preview, the thumbnail size.
+fn organize_view_controls(view: &mut DocView, ui: &mut egui::Ui, t: &Tokens) {
+    if widgets::ghost_button(ui, "x", tl!("Close")).on_hover_text(tl!("Back to the document")).clicked() {
+        view.organize = false;
+    }
+    ui.add_space(8.0);
+    let preview_tip = if view.preview_open { tl!("Hide the page preview") } else { tl!("Show the page preview") };
+    if icons::button(ui, "panel-right", 30.0, view.preview_open, preview_tip).clicked() {
+        view.preview_open = !view.preview_open;
+    }
+    ui.add_space(8.0);
+    let (lo, hi) = (*GRID_ZOOM.start(), *GRID_ZOOM.end());
+    if ui.add_enabled_ui(view.grid_zoom < hi - 0.001, |ui| icons::button(ui, "zoom-in", 30.0, false, tl!("Larger pages"))).inner.clicked() {
+        view.grid_zoom = (view.grid_zoom * 1.25).min(hi);
+    }
+    ui.add_sized(
+        [46.0, 30.0],
+        egui::Label::new(egui::RichText::new(format!("{:.0}%", view.grid_zoom * 100.0)).font(theme::medium(12.5)).color(t.text_muted)),
+    );
+    if ui.add_enabled_ui(view.grid_zoom > lo + 0.001, |ui| icons::button(ui, "zoom-out", 30.0, false, tl!("Smaller pages"))).inner.clicked() {
+        view.grid_zoom = (view.grid_zoom / 1.25).max(lo);
     }
 }
 
@@ -2694,6 +2708,16 @@ fn page_preview(view: &DocView, info: &DocInfo, ui: &mut egui::Ui, t: &Tokens, p
     (fit * ppp).min(8.0)
 }
 
+/// A page grid cell at 100 %.
+const GRID_CELL: Vec2 = vec2(190.0, 250.0);
+
+/// The size a page is drawn at in a page grid cell: its width fills the cell, unless it is too
+/// tall for it.
+fn grid_page_size(cell: Vec2, p: &pdfcraft_render::PageInfo) -> Vec2 {
+    let s = (cell.x - 44.0) / p.width.max(1.0);
+    vec2(p.width * s, p.height * s).min(vec2(cell.x - 44.0, cell.y - 56.0))
+}
+
 fn organize_grid(view: &mut DocView, info: &DocInfo, pool: &RenderPool, editable: bool, auto_scroll_enabled: bool, ui: &mut egui::Ui, t: &Tokens) {
     let ppp = ui.ctx().pixels_per_point();
     let mut open_page = None;
@@ -2703,7 +2727,7 @@ fn organize_grid(view: &mut DocView, info: &DocInfo, pool: &RenderPool, editable
     if (pinch - 1.0).abs() > f32::EPSILON && ui.rect_contains_pointer(ui.available_rect_before_wrap()) {
         view.grid_zoom = (view.grid_zoom * pinch).clamp(*GRID_ZOOM.start(), *GRID_ZOOM.end());
     }
-    let cell = vec2(190.0, 250.0) * view.grid_zoom;
+    let cell = GRID_CELL * view.grid_zoom;
     let mut preview_scale = 0.0;
     if view.preview_open && !info.pages.is_empty() {
         let width = ui.available_width();
@@ -2761,8 +2785,7 @@ fn organize_grid(view: &mut DocView, info: &DocInfo, pool: &RenderPool, editable
                 }
                 let info = crate::i18n::fmt(tl!("Page {label}"), &[("label", &p.label)]);
                 resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, view.selected.contains(&i), info.clone()));
-                let s = (cell.x - 44.0) / p.width.max(1.0);
-                let size = vec2(p.width * s, p.height * s).min(vec2(cell.x - 44.0, cell.y - 56.0));
+                let size = grid_page_size(cell, p);
                 let pr = Rect::from_center_size(pos2(c.center().x, c.top() + 16.0 + size.y / 2.0), size);
                 let selected = view.selected.contains(&i) || (view.selected.is_empty() && i == view.current);
                 if selected || resp.hovered() {
@@ -2858,7 +2881,13 @@ fn organize_grid(view: &mut DocView, info: &DocInfo, pool: &RenderPool, editable
         view.thumbs_zoom = view.grid_zoom;
         view.stale_thumbs.extend(view.thumbs.keys().copied());
     }
-    let s = THUMB_W * view.thumbs_zoom.max(1.0) * ppp / info.pages.iter().map(|p| p.width).fold(1.0, f32::max);
+    // Each page as sharp as its cell draws it (zoomed out, still at 100 %): scaling every page
+    // by the widest one left the others, and in fact all of them, stretched and blurry.
+    let thumb_cell = GRID_CELL * view.thumbs_zoom.max(1.0);
+    let thumb_scale = |p: &pdfcraft_render::PageInfo| {
+        let w = p.width.max(1.0);
+        (grid_page_size(thumb_cell, p).x * ppp / w).min(2048.0 / w)
+    };
     let mut queue: Vec<RenderRequest> = Vec::new();
     // The preview first: it is what the user is looking at.
     let want_preview = view.preview_open && preview_scale > 0.0;
@@ -2868,11 +2897,13 @@ fn organize_grid(view: &mut DocView, info: &DocInfo, pool: &RenderPool, editable
     {
         queue.push(RenderRequest { page: view.current, kind: RequestKind::Pixels, tile: None, scale: preview_scale, tag: PREVIEW_TAG });
     }
-    queue.extend(
-        (0..info.pages.len())
-            .filter(|p| (!view.thumbs.contains_key(p) || view.stale_thumbs.contains(p)) && !view.errors.contains_key(p))
-            .map(|page| RenderRequest { page, kind: RequestKind::Pixels, tile: None, scale: s, tag: THUMB_TAG }),
-    );
+    queue.extend(info.pages.iter().enumerate().filter_map(|(page, p)| {
+        let scale = thumb_scale(p);
+        // Missing, out of date, or rendered smaller than this (e.g. for the print preview).
+        let too_small = view.thumbs.get(&page).is_some_and(|t| (t.size()[0] as f32) < p.width.max(1.0) * scale * 0.85);
+        ((!view.thumbs.contains_key(&page) || too_small || view.stale_thumbs.contains(&page)) && !view.errors.contains_key(&page))
+            .then_some(RenderRequest { page, kind: RequestKind::Pixels, tile: None, scale, tag: THUMB_TAG })
+    }));
     if want_preview && queue.first().is_some_and(|r| r.tag == PREVIEW_TAG) {
         view.preview_scale = preview_scale;
     }
