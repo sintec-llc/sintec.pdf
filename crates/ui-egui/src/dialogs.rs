@@ -1030,7 +1030,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     ("⌘+ / ⌘−", tl!("Zoom in / out (also pinch or ⌘-scroll)")),
                     ("⇧⌘+ / ⇧⌘−", tl!("Rotate view")),
                     ("Home / End", tl!("First / last page")),
-                    ("⌘← / ⌘→", tl!("Previous / next page")),
+                    ("← / →, ⌘← / ⌘→", tl!("Previous / next page")),
                     ("Delete", tl!("Delete selected pages (Organize)")),
                     ("⌘A", tl!("Select all pages (Organize)")),
                 ] {
@@ -1140,7 +1140,11 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
             app.discard_recovered(&keys);
         }
     }
-    if replace_now && let Some(d) = app.replace_draft.take() {
+    // The pages to replace belong to the document the dialog was opened on (#167).
+    if replace_now
+        && let Some(d) = app.replace_draft.take()
+        && app.still_pick_target(d.target)
+    {
         let n = d.to - d.from + 1;
         app.apply_edit(Edit::ReplacePages {
             pages: (d.from - 1..d.to).collect(),
@@ -1149,8 +1153,9 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
             src_pages: (d.src_from - 1..d.src_from - 1 + n).collect(),
         });
     }
-    if print_go {
-        app.print_now();
+    // A print or save that fails keeps the dialog open, with the reason in a notice.
+    if print_go && !app.print_now() {
+        close = false;
     }
     if revert_now {
         app.revert_active();
@@ -1340,7 +1345,7 @@ pub(crate) fn save_prompt_key(ctx: &egui::Context) -> Option<Option<bool>> {
 fn save_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let Some(req) = app.close_request else { return };
     let index = match req {
-        CloseRequest::Tab(i) => Some(i),
+        CloseRequest::Tab(id) => app.views.iter().position(|v| v.id == id),
         CloseRequest::Quit | CloseRequest::All => app.first_dirty(),
     };
     let Some(name) = index.and_then(|i| app.views.get(i)).and_then(|v| app.session.get(v.id)).map(|d| d.name.clone()) else {

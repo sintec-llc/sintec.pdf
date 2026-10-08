@@ -1877,3 +1877,7 @@
 	Show the page preview	顯示頁面預覽
 	Larger pages	放大頁面
 	Smaller pages	縮小頁面
+	Switch to two-page view first to show the cover page	請先切換到雙頁檢視，才能顯示封面
+	Page display: {layout}	頁面顯示：{layout}
+	Fit to width scrolling	符合寬度連續捲動
+	Fit one full page	單頁完整顯示

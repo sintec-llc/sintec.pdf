@@ -8,6 +8,7 @@ mod fuzz;
 mod gates;
 mod layers;
 mod parity;
+mod rebrand;
 mod screenshots;
 mod version;
 
@@ -29,6 +30,7 @@ const COMMANDS: &[(&str, &str, Command)] = &[
     ("screenshots", "Regenerate the README screenshots in docs/images/ and their ATTRIBUTION entries", screenshots::run),
     ("models", "Fetch the OCR models (ATTRIBUTION.toml kind = \"model\") into assets/models/, verified by SHA-256", assets::models),
     ("demo-pdf", "Build dist/demo/pdfcraft-showcase.pdf (needs Google Chrome or Chromium)", demo_pdf::run),
+    ("rebrand", "Sintec.PDF: name the product in upstream's new strings and catalogs after a sync (--check only lists)", rebrand::run),
 ];
 
 fn version_cmd(args: &[String]) -> anyhow::Result<()> {
