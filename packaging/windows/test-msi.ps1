@@ -2,7 +2,7 @@
 .SYNOPSIS
   Check the compiled MSI's shortcuts, desktop-shortcut checkbox and full-UI outcome wiring (#143), without installing it.
 .EXAMPLE
-  pwsh packaging/windows/test-msi.ps1 dist/release/sintec-pdf-0.1.0-windows-x64.msi
+  pwsh packaging/windows/test-msi.ps1 dist/release/sintec-pdf-0.1.1-windows-x64.msi
 #>
 param([Parameter(Mandatory)] [string] $Path)
 $ErrorActionPreference = 'Stop'
