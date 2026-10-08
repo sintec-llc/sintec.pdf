@@ -301,7 +301,12 @@ impl PdfCraftApp {
             "edit.remove_links" => {
                 self.apply_edit(Edit::RemoveLinks { pages: None });
             }
-            "redact.mark" => {
+            "redact.mark" | "redact.mask" => {
+                // «Маска» marks white areas; Redact uses the redaction properties.
+                self.mask_mode = id == "redact.mask";
+                if self.mask_mode {
+                    self.notify_tr("Drag over the areas to cover with white, then Apply redactions: what is under them is removed for good.");
+                }
                 self.quick_tool = crate::QuickTool::Redact;
                 self.left = crate::LeftPanel::Tool("redact");
                 self.left_open = true;
@@ -313,7 +318,7 @@ impl PdfCraftApp {
                     if let Some((page, quads)) = self.views[i].selection_quads(info) {
                         self.views[i].clear_selection();
                         let author = self.comment_prefs.author.clone();
-                        self.apply_edit(self.redact_prefs.mark(page, quads, &author));
+                        self.apply_edit(self.mark_prefs().mark(page, quads, &author));
                     }
                 }
             }

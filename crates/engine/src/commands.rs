@@ -244,6 +244,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("edit.bates", "Add Bates numbering…", None, None, Modification, "hash"),
     c("edit.image", "Add image…", None, None, Modification, "image-plus"),
     c("redact.mark", "Redact text and images", None, None, Modification, "rectangle-horizontal"),
+    c("redact.mask", "Mask areas with white", None, None, Modification, "square"),
     c("redact.pages", "Redact pages…", None, None, Modification, "file-x"),
     c("redact.search", "Find text and redact…", None, None, Modification, "file-search"),
     c("redact.properties", "Redaction properties…", None, None, Document, "settings-2"),

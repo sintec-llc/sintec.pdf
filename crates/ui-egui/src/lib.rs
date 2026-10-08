@@ -495,6 +495,9 @@ pub struct PdfCraftApp {
     pub comment_props: Option<comment_props::PropsDraft>,
     pub field_props: Option<prepare::FieldDraft>,
     pub redact_prefs: RedactPrefs,
+    /// The redaction tool is the «Маска» (white mask): areas it marks are white, without
+    /// changing the redaction properties.
+    pub mask_mode: bool,
     pub redact_pages_draft: RedactPagesDraft,
     pub redact_search: RedactSearchDraft,
     pub hidden_draft: HiddenDraft,
@@ -668,6 +671,7 @@ impl PdfCraftApp {
             comment_props: None,
             field_props: None,
             redact_prefs: RedactPrefs::default(),
+            mask_mode: false,
             redact_pages_draft: RedactPagesDraft::default(),
             redact_search: RedactSearchDraft::default(),
             hidden_draft: HiddenDraft::default(),

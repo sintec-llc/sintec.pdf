@@ -1926,3 +1926,6 @@ date	December	декабря
 	Page display: {layout}	Отображение страниц: {layout}
 	Switch to two-page view first to show the cover page	Чтобы показать обложку, сначала включите двухстраничный режим
 	Used when a PDF doesn't ask for a layout or zoom. Continuous scrolling never snaps between pages.	Используется, когда PDF не задаёт режим и масштаб. При непрерывной прокрутке страницы не «прищёлкиваются».
+	Mask areas with white	Закрыть белым
+	White	Белый
+	Drag over the areas to cover with white, then Apply redactions: what is under them is removed for good.	Выделите области, которые нужно закрыть белым, затем нажмите «Применить скрытие»: всё под ними будет удалено безвозвратно.

@@ -1881,3 +1881,6 @@
 	Page display: {layout}	頁面顯示：{layout}
 	Fit to width scrolling	符合寬度連續捲動
 	Fit one full page	單頁完整顯示
+	Mask areas with white	用白色遮蓋區域
+	White	白色
+	Drag over the areas to cover with white, then Apply redactions: what is under them is removed for good.	拖曳選取要用白色遮蓋的區域，然後套用遮蔽：其下的內容將被永久刪除。

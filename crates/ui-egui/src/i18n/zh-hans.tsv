@@ -1914,3 +1914,6 @@
 	Show the page preview	显示页面预览
 	Larger pages	放大页面
 	Smaller pages	缩小页面
+	Mask areas with white	用白色遮盖区域
+	White	白色
+	Drag over the areas to cover with white, then Apply redactions: what is under them is removed for good.	拖动选择要用白色遮盖的区域，然后应用密文：其下的内容将被永久删除。
