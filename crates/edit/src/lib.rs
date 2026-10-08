@@ -264,6 +264,69 @@ fn contents(doc: &mut Document, page: &pdfcraft_model::Page) -> Result<Vec<Objec
     })
 }
 
+/// Resource name of the Unicode font for text WinAnsi can't encode (OCR text in Cyrillic and
+/// other scripts): a Type0 font, Identity-H, whose 2-byte codes are UTF-16 code units
+/// ([`pdfcraft_fonts::unicode_hex`]), with an identity ToUnicode CMap so search and copy read it.
+/// It is not embedded and has no glyphs of its own, so use it only for invisible text
+/// (rendering mode 3); viewers substitute a face for metrics.
+pub const UNICODE_FONT: &[u8] = b"PCUni";
+const UNICODE_BASE_FONT: &str = "PdfCraftUnicode";
+
+/// Whether page content refers to the resource `/name`.
+fn names(content: &[u8], name: &[u8]) -> bool {
+    content.windows(name.len() + 1).any(|w| w.first() == Some(&b'/') && w.get(1..) == Some(name))
+}
+
+/// The document's Unicode font object: the one an earlier page already uses, else a new one.
+fn unicode_font(doc: &mut Document) -> pdfcraft_cos::ObjRef {
+    let existing = page_list(doc).iter().find_map(|p| {
+        let res = doc.resolve(p.dict.get(b"Resources")?);
+        let fonts = doc.resolve(res.as_dict()?.get(b"Font")?);
+        let r = match fonts.as_dict()?.get(UNICODE_FONT)? {
+            Object::Ref(r) => *r,
+            _ => return None,
+        };
+        let is_ours = doc.get(r).as_dict()?.get(b"BaseFont").and_then(|b| b.as_name()) == Some(UNICODE_BASE_FONT.as_bytes());
+        is_ours.then_some(r)
+    });
+    if let Some(r) = existing {
+        return r;
+    }
+    let to_unicode = doc.add(Object::Stream(Stream::flate(Dict::new(), &pdfcraft_fonts::identity_to_unicode_cmap())));
+    let mut info = Dict::new();
+    info.set(b"Registry".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(&b"Adobe"[..])));
+    info.set(b"Ordering".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(&b"Identity"[..])));
+    info.set(b"Supplement".to_vec(), Object::Int(0));
+    let mut cid = Dict::new();
+    cid.set(b"Type".to_vec(), Object::name("Font"));
+    cid.set(b"Subtype".to_vec(), Object::name("CIDFontType2"));
+    cid.set(b"BaseFont".to_vec(), Object::name(UNICODE_BASE_FONT));
+    cid.set(b"CIDSystemInfo".to_vec(), Object::Dict(info));
+    cid.set(b"CIDToGIDMap".to_vec(), Object::name("Identity"));
+    // Every code is 1 em wide; the text matrix stretches each word to its box.
+    cid.set(b"DW".to_vec(), Object::Int(1000));
+    // Required for a CIDFont (ISO 32000-2 §9.7.4.1). Not embedded: the text is never drawn.
+    let mut desc = Dict::new();
+    desc.set(b"Type".to_vec(), Object::name("FontDescriptor"));
+    desc.set(b"FontName".to_vec(), Object::name(UNICODE_BASE_FONT));
+    desc.set(b"Flags".to_vec(), Object::Int(4));
+    desc.set(b"FontBBox".to_vec(), Object::Array([0, -200, 1000, 800].into_iter().map(Object::Int).collect()));
+    desc.set(b"ItalicAngle".to_vec(), Object::Int(0));
+    desc.set(b"Ascent".to_vec(), Object::Int(800));
+    desc.set(b"Descent".to_vec(), Object::Int(-200));
+    desc.set(b"CapHeight".to_vec(), Object::Int(700));
+    desc.set(b"StemV".to_vec(), Object::Int(80));
+    cid.set(b"FontDescriptor".to_vec(), Object::Ref(doc.add(Object::Dict(desc))));
+    let mut font = Dict::new();
+    font.set(b"Type".to_vec(), Object::name("Font"));
+    font.set(b"Subtype".to_vec(), Object::name("Type0"));
+    font.set(b"BaseFont".to_vec(), Object::name(UNICODE_BASE_FONT));
+    font.set(b"Encoding".to_vec(), Object::name("Identity-H"));
+    font.set(b"DescendantFonts".to_vec(), Object::Array(vec![Object::Dict(cid)]));
+    font.set(b"ToUnicode".to_vec(), Object::Ref(to_unicode));
+    doc.add(Object::Dict(font))
+}
+
 /// Add the font (and an opacity state) to the page's own resources.
 fn add_resources(doc: &mut Document, page: &pdfcraft_model::Page, opacity: Option<f64>, content: Option<&[u8]>) -> Result<(), EditError> {
     let mut res = page.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
@@ -279,6 +342,9 @@ fn add_resources(doc: &mut Document, page: &pdfcraft_model::Page, opacity: Optio
         font.set(b"BaseFont".to_vec(), Object::name(base));
         font.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
         fonts.set(name.to_vec(), Object::Dict(font));
+    }
+    if content.is_some_and(|c| names(c, UNICODE_FONT)) {
+        fonts.set(UNICODE_FONT.to_vec(), Object::Ref(unicode_font(doc)));
     }
     res.set(b"Font".to_vec(), Object::Dict(fonts));
     if let Some(o) = opacity {

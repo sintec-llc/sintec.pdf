@@ -214,7 +214,13 @@ fn calendar(ctx: &egui::Context, view: &mut DocView, field: egui::Rect, fmt: &st
                                 .selectable_label(selected, text)
                                 .on_hover_text(crate::i18n::fmt(
                                     tl!("{month} {day}, {y}"),
-                                    &[("month", tl!(MONTHS[(m - 1) as usize])), ("day", &day.to_string()), ("y", &y.to_string())],
+                                    // "date" context: languages that inflect month names (Russian
+                                    // "5 января") translate the in-a-date form separately.
+                                    &[
+                                        ("month", crate::i18n::tr_ctx(crate::i18n::current(), "date", MONTHS[(m - 1) as usize])),
+                                        ("day", &day.to_string()),
+                                        ("y", &y.to_string()),
+                                    ],
                                 ))
                                 .clicked()
                             {

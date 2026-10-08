@@ -25,6 +25,7 @@ pub struct OcrDraft {
     pub pages: OcrPages,
     pub from: usize,
     pub to: usize,
+    /// An OCR language code; empty until first used, then the UI's language if OCR reads it.
     pub language: String,
     /// "Downsample to" resolution.
     pub dpi: u32,
@@ -32,7 +33,19 @@ pub struct OcrDraft {
 
 impl Default for OcrDraft {
     fn default() -> Self {
-        OcrDraft { pages: OcrPages::All, from: 1, to: 1, language: "en".into(), dpi: 300 }
+        OcrDraft { pages: OcrPages::All, from: 1, to: 1, language: String::new(), dpi: 300 }
+    }
+}
+
+impl OcrDraft {
+    /// The chosen language, settling an unset one on the UI's language (Russian UI → Russian
+    /// text) when OCR reads it, else English.
+    pub fn language(&mut self) -> String {
+        if self.language.is_empty() {
+            let ui = crate::i18n::current().code();
+            self.language = LANGUAGES.iter().find(|l| l.0 == ui).map_or("en", |l| l.0).to_string();
+        }
+        self.language.clone()
     }
 }
 
@@ -60,8 +73,8 @@ pub struct OcrRun {
 
 pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool, bool) {
     let pages = app.active_ids().and_then(|(_, id)| app.session.get(id)).map_or(1, |d| d.info.pages.len().max(1));
-    let available = pdfcraft_engine::ocr::available();
     let d = &mut app.ocr_draft;
+    let available = pdfcraft_engine::ocr::available(&d.language());
     d.to = d.to.clamp(1, pages);
     d.from = d.from.clamp(1, d.to);
     ui.label(egui::RichText::new(tl!("Recognize Text")).font(theme::semibold(18.0)));
@@ -146,18 +159,19 @@ impl PdfCraftApp {
             self.notify(why);
             return;
         }
+        let language = self.ocr_draft.language();
         let d = &self.ocr_draft;
         let pages: Vec<usize> = match d.pages {
             OcrPages::All => Vec::new(),
             OcrPages::Current => vec![self.views[vi].current],
             OcrPages::Range => (d.from.saturating_sub(1)..d.to).collect(),
         };
-        let settings = OcrSettings { dpi: d.dpi as f32, language: d.language.clone(), ..Default::default() };
+        let settings = OcrSettings { dpi: d.dpi as f32, language: language.clone(), ..Default::default() };
         let Some(job) = self.session.ocr_job(id, &pages, settings) else { return };
         let progress = Arc::new(Mutex::new(OcrProgress { total: job.pages.len(), ..Default::default() }));
         let p = progress.clone();
         let work = move || {
-            let result = pdfcraft_engine::ocr::engine().map(|ocr| {
+            let result = pdfcraft_engine::ocr::engine(&language).map(|ocr| {
                 job.run(&ocr, |done, total| {
                     let Ok(mut s) = p.lock() else { return false };
                     s.done = done;
@@ -188,7 +202,7 @@ impl PdfCraftApp {
             self.notify_tr("Text recognition is already running");
             return;
         }
-        let settings = OcrSettings { dpi: self.ocr_draft.dpi as f32, language: self.ocr_draft.language.clone(), ..Default::default() };
+        let settings = OcrSettings { dpi: self.ocr_draft.dpi as f32, language: self.ocr_draft.language(), ..Default::default() };
         let progress = Arc::new(Mutex::new(BatchProgress { total: files.len(), ..Default::default() }));
         #[cfg(not(target_arch = "wasm32"))]
         let dir = match &self.export_dir_override {
@@ -203,7 +217,7 @@ impl PdfCraftApp {
         let work = move || {
             crate::i18n::set_current(lang);
             let (mut ok, mut words, mut failed) = (0, 0, Vec::new());
-            match pdfcraft_engine::ocr::engine() {
+            match pdfcraft_engine::ocr::engine(&settings.language) {
                 Err(e) => failed.push(e),
                 Ok(ocr) => {
                     for (i, (name, bytes)) in files.into_iter().enumerate() {

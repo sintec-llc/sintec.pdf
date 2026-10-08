@@ -7,6 +7,11 @@ use serde_json::{Value, json};
 
 use crate::ToolError;
 
+/// The OCR language codes, for the tools' `language` enums.
+fn ocr_languages() -> Vec<&'static str> {
+    pdfcraft_engine::ocr::LANGUAGES.iter().map(|l| l.0).collect()
+}
+
 #[derive(Clone, Debug)]
 pub struct ToolDef {
     pub name: &'static str,
@@ -851,7 +856,7 @@ pub fn tools() -> Vec<ToolDef> {
                     "doc": doc(),
                     "pages": pages("to recognise (default: all)"),
                     "dpi": { "type": "number", "minimum": 72, "maximum": 600, "description": "Resolution pages are read at (default 300; a scanned page is read at most at its own resolution)." },
-                    "language": { "type": "string", "enum": ["en"], "description": "Document language (default en)." },
+                    "language": { "type": "string", "enum": ocr_languages(), "description": "Document language (default en): en reads Latin text; ru, uk and be read Cyrillic (with Latin mixed in)." },
                     "skip_text_pages": { "type": "boolean", "description": "Leave pages that already contain text alone (default true)." },
                 }),
                 &["doc"],
@@ -863,7 +868,7 @@ pub fn tools() -> Vec<ToolDef> {
                     "paths": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
                     "folder": { "type": "string" },
                     "dpi": { "type": "number", "minimum": 72, "maximum": 600 },
-                    "language": { "type": "string", "enum": ["en"] },
+                    "language": { "type": "string", "enum": ocr_languages() },
                 }),
                 &["paths", "folder"],
             )),

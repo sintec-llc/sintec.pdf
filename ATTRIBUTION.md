@@ -4,7 +4,7 @@
 
 Every asset PdfCraft includes, bundles or uses to build its published material, with its author, source and licence. The policy is in [AGENTS.md](AGENTS.md) §1. The machine-readable list, with SHA-256 hashes, is [ATTRIBUTION.toml](ATTRIBUTION.toml). Licence texts are kept beside the assets and summarised in [NOTICE](NOTICE).
 
-## In this repository (247)
+## In this repository (249)
 
 | Asset | Title | Author | Licence | Source | Used for |
 |---|---|---|---|---|---|
@@ -12,6 +12,7 @@ Every asset PdfCraft includes, bundles or uses to build its published material, 
 | `crates/ui-egui/src/i18n/zh-hant.tsv` | Traditional Chinese (Taiwan) interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Traditional Chinese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
 | `crates/ui-egui/src/i18n/cs.tsv` | Czech interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Czech UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
 | `crates/ui-egui/src/i18n/pt-br.tsv` | Brazilian Portuguese interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Brazilian Portuguese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
+| `crates/ui-egui/src/i18n/ru.tsv` | Russian interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Russian UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
 | `crates/ui-egui/src/i18n/ja.tsv` | Japanese interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Japanese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
 | `assets/icons/accessibility.svg` | Lucide icon "accessibility" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/accessibility.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |
 | `assets/icons/align-left.svg` | Lucide icon "align-left" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/align-left.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |
@@ -252,6 +253,7 @@ Every asset PdfCraft includes, bundles or uses to build its published material, 
 | `crates/ui-egui/tests/data/form.pdf` | One-page AcroForm test fixture (text, check box, radio group, combo box) | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: hand-written PDF objects, no third-party content | Form-filling UI tests (crates/ui-egui/tests/forms.rs, commands.rs) |
 | `assets/icons/pentagon.svg` | Lucide icon "pentagon" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/pentagon.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |
 | `assets/icons/message-square-quote.svg` | Lucide icon "message-square-quote" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/message-square-quote.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |
+| `crates/engine/tests/data/ru-scan.png` | Russian invoice lines rendered as a greyscale scan (OCR test fixture) | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: invented invoice text drawn with Pillow in the bundled Inter Regular font (assets/fonts/Inter-Regular.ttf) | Cyrillic OCR test (crates/engine/src/tests.rs) |
 | `crates/sign/tests/data/openssl-signed.pdf` | One-page PDF signed with OpenSSL CMS (adbe.pkcs7.detached) by the RSA test key | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: hand-written PDF objects; signature made with `openssl cms -sign` over its byte ranges (see crates/sign/tests/data/README.md) | Signature validation tests (crates/sign/tests/pdf.rs): a signature PdfCraft did not make |
 | `assets/icons/clipboard-paste.svg` | Lucide icon "clipboard-paste" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/clipboard-paste.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |
 | `assets/fonts/DancingScript.ttf` | Dancing Script (variable) | The Dancing Script Project Authors (Pablo Impallari) | OFL-1.1 | https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/dancingscript/DancingScript%5Bwght%5D.ttf | Fill & Sign typed signatures and initials: the typed name's glyph outlines, drawn as filled paths (the font file itself is not embedded in PDFs) |
@@ -267,7 +269,7 @@ Every asset PdfCraft includes, bundles or uses to build its published material, 
 | `hayro-cmap` 0.1.0 | `assets/cmaps.brotli` | Adobe CMap resources (predefined CJK CMaps) (non-visual data, AGENTS.md §1.1) | Adobe | BSD-3-Clause | https://github.com/adobe-type-tools/cmap-resources (via hayro-cmap) | Character-code mapping tables required to read CJK PDFs. Non-visual data, allowed by AGENTS.md §1.1 |
 | `hayro-interpret` 0.7.0 | `src/font/generated/metrics.rs` | Standard-14 font metrics and encodings (as Rust tables) (non-visual data, AGENTS.md §1.1) | Adobe (Core 14 AFM metrics, PDF specification encodings); tables by The Hayro Authors | MIT OR Apache-2.0 | ISO 32000-2 Annex D; Adobe Core14 AFM files (via vendored hayro-interpret) | Glyph widths and encodings for non-embedded standard fonts. Non-visual data, allowed by AGENTS.md §1.1 |
 
-## Downloaded at build time (22)
+## Downloaded at build time (25)
 
 Fonts are fetched by `cargo xtask demo-pdf` into `target/demo-fonts/`, OCR models by `cargo xtask models` into `assets/models/`; each is verified by SHA-256 and never committed.
 
@@ -295,6 +297,9 @@ Fonts are fetched by `cargo xtask demo-pdf` into `target/demo-fonts/`, OCR model
 | `Inter-Italic[opsz,wght].ttf` | Inter Italic (variable) | The Inter Project Authors (Rasmus Andersson) | OFL-1.1 | https://github.com/google/fonts/tree/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/inter | Showcase PDF (cargo xtask demo-pdf) |
 | `text-detection.rten` | Ocrs text detection model | Robert Knight (ocrs-models; trained on HierText, CC-BY-SA-4.0) | CC-BY-SA-4.0 | https://github.com/robertknight/ocrs-models (the models ocrs downloads; model card: https://huggingface.co/robertknight/ocrs, cc-by-sa-4.0) | Scan & OCR: finds words on page images (cargo xtask models) |
 | `text-recognition.rten` | Ocrs text recognition model | Robert Knight (ocrs-models; trained on HierText, CC-BY-SA-4.0) | CC-BY-SA-4.0 | https://github.com/robertknight/ocrs-models (the models ocrs downloads; model card: https://huggingface.co/robertknight/ocrs, cc-by-sa-4.0) | Scan & OCR: reads the words it finds (cargo xtask models) |
+| `pp-ocrv5_mobile_det.onnx` | PP-OCRv5 mobile text detection model | PaddlePaddle Authors (PaddleOCR) | Apache-2.0 | PaddlePaddle PP-OCRv5 (https://github.com/PaddlePaddle/PaddleOCR, Apache-2.0), exported to ONNX and republished unchanged in the oar-ocr v0.3.0 release (https://github.com/GreatV/oar-ocr/releases/tag/v0.3.0) | Scan & OCR: finds text lines for Russian, Ukrainian and Belarusian (cargo xtask models) |
+| `eslav_pp-ocrv5_mobile_rec.onnx` | PP-OCRv5 East Slavic text recognition model | PaddlePaddle Authors (PaddleOCR) | Apache-2.0 | PaddlePaddle PP-OCRv5 (https://github.com/PaddlePaddle/PaddleOCR, Apache-2.0), exported to ONNX and republished unchanged in the oar-ocr v0.3.0 release (https://github.com/GreatV/oar-ocr/releases/tag/v0.3.0) | Scan & OCR: reads Cyrillic text lines (cargo xtask models) |
+| `ppocrv5_eslav_dict.txt` | PP-OCRv5 East Slavic character dictionary | PaddlePaddle Authors (PaddleOCR) | Apache-2.0 | PaddlePaddle PP-OCRv5 (https://github.com/PaddlePaddle/PaddleOCR, Apache-2.0), exported to ONNX and republished unchanged in the oar-ocr v0.3.0 release (https://github.com/GreatV/oar-ocr/releases/tag/v0.3.0) | Scan & OCR: maps the Cyrillic recognition model's outputs to characters (cargo xtask models) |
 
 ## Optional build inputs (1)
 

@@ -1,14 +1,19 @@
 //! pdfcraft-ocr — Scan & OCR ▸ Recognize text (L4).
 //!
-//! Recognition runs the ocrs engine (MIT/Apache-2.0) with its pre-trained models (CC-BY-SA-4.0,
-//! fetched by `cargo xtask models`; see ATTRIBUTION.toml). The caller renders a page to pixels;
+//! Latin text is read by the ocrs engine (MIT/Apache-2.0) with its pre-trained models
+//! (CC-BY-SA-4.0); Cyrillic text by PaddleOCR's PP-OCRv5 models (Apache-2.0, see [`paddle`]).
+//! Both are fetched by `cargo xtask models` (see ATTRIBUTION.toml). The caller renders a page to pixels;
 //! [`Ocr::recognize`] finds the words in them, and [`text_layer`] turns words placed in user space
 //! into page content: invisible text (rendering mode 3) over each word, so the page becomes a
 //! searchable image (Acrobat's "Searchable Image (Exact)": the image is left untouched).
 //!
-//! The models read the Latin alphabet (English and other languages written without accents).
+//! The ocrs models read the Latin alphabet (English and other languages written without
+//! accents); the PP-OCRv5 East Slavic model reads Russian, Ukrainian and Belarusian, and the Latin
+//! letters, digits and punctuation mixed in with them.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+
+mod paddle;
 
 use std::path::{Path, PathBuf};
 
@@ -18,8 +23,40 @@ pub use pdfcraft_fonts::helvetica_width;
 pub const DETECTION_MODEL: &str = "text-detection.rten";
 pub const RECOGNITION_MODEL: &str = "text-recognition.rten";
 
-/// The languages the models read (ISO 639-1); all use the Latin alphabet without accents.
-pub const LANGUAGES: &[(&str, &str)] = &[("en", "English")];
+/// The Cyrillic (PP-OCRv5) model files, as named in ATTRIBUTION.toml.
+pub const CYRILLIC_DETECTION_MODEL: &str = "pp-ocrv5_mobile_det.onnx";
+pub const CYRILLIC_RECOGNITION_MODEL: &str = "eslav_pp-ocrv5_mobile_rec.onnx";
+pub const CYRILLIC_DICTIONARY: &str = "ppocrv5_eslav_dict.txt";
+
+/// The languages text can be recognised in (ISO 639-1 code, name in the language itself).
+pub const LANGUAGES: &[(&str, &str)] = &[("en", "English"), ("ru", "Русский"), ("uk", "Українська"), ("be", "Беларуская")];
+
+/// The writing system a set of models reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Script {
+    /// ocrs: English and other Latin-alphabet text without accents.
+    Latin,
+    /// PP-OCRv5 East Slavic: Russian, Ukrainian, Belarusian (with Latin mixed in).
+    Cyrillic,
+}
+
+impl Script {
+    /// The script for a [`LANGUAGES`] code; unknown codes read as Latin.
+    pub fn for_language(code: &str) -> Script {
+        match code {
+            "ru" | "uk" | "be" => Script::Cyrillic,
+            _ => Script::Latin,
+        }
+    }
+
+    /// Whether this script's model files are installed.
+    pub fn available(self) -> bool {
+        match self {
+            Script::Latin => Models::find().is_some(),
+            Script::Cyrillic => CyrillicModels::find().is_some(),
+        }
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum OcrError {
@@ -68,6 +105,31 @@ impl Models {
     }
 }
 
+/// Where the three Cyrillic model files are.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CyrillicModels {
+    pub detection: PathBuf,
+    pub recognition: PathBuf,
+    pub dictionary: PathBuf,
+}
+
+impl CyrillicModels {
+    /// The models in `dir`, if all three files are there.
+    pub fn in_dir(dir: &Path) -> Option<CyrillicModels> {
+        let m = CyrillicModels {
+            detection: dir.join(CYRILLIC_DETECTION_MODEL),
+            recognition: dir.join(CYRILLIC_RECOGNITION_MODEL),
+            dictionary: dir.join(CYRILLIC_DICTIONARY),
+        };
+        (m.detection.is_file() && m.recognition.is_file() && m.dictionary.is_file()).then_some(m)
+    }
+
+    /// Look in the same places as [`Models::find`].
+    pub fn find() -> Option<CyrillicModels> {
+        Models::search_dirs().iter().find_map(|d| Self::in_dir(d))
+    }
+}
+
 /// A recognised word: its text and its box in image pixels `[left, top, right, bottom]`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Word {
@@ -89,7 +151,12 @@ impl Line {
 
 /// A loaded recogniser. Loading takes a moment; keep one and reuse it.
 pub struct Ocr {
-    engine: ocrs::OcrEngine,
+    engine: Engine,
+}
+
+enum Engine {
+    Ocrs(Box<ocrs::OcrEngine>),
+    Paddle(Box<paddle::PaddleOcr>),
 }
 
 impl Ocr {
@@ -101,12 +168,26 @@ impl Ocr {
             ..Default::default()
         };
         let engine = ocrs::OcrEngine::new(params).map_err(|e| OcrError::Load("ocr engine".into(), e.to_string()))?;
-        Ok(Ocr { engine })
+        Ok(Ocr { engine: Engine::Ocrs(Box::new(engine)) })
     }
 
-    /// Load the models found by [`Models::find`].
+    /// Load the Cyrillic (PP-OCRv5) models.
+    pub fn load_cyrillic(models: &CyrillicModels) -> Result<Ocr, OcrError> {
+        let p = paddle::PaddleOcr::load(&models.detection, &models.recognition, &models.dictionary)?;
+        Ok(Ocr { engine: Engine::Paddle(Box::new(p)) })
+    }
+
+    /// Load the Latin models found by [`Models::find`].
     pub fn find() -> Result<Ocr, OcrError> {
         Self::load(&Models::find().ok_or(OcrError::NoModels)?)
+    }
+
+    /// Load the installed models for `script`.
+    pub fn find_for(script: Script) -> Result<Ocr, OcrError> {
+        match script {
+            Script::Latin => Self::find(),
+            Script::Cyrillic => Self::load_cyrillic(&CyrillicModels::find().ok_or(OcrError::NoModels)?),
+        }
     }
 
     /// Recognise the text in an RGBA (or RGB, or grey) image, `width` × `height` pixels.
@@ -120,12 +201,24 @@ impl Ocr {
         } else {
             pixels.into()
         };
+        let engine = match &self.engine {
+            Engine::Ocrs(e) => e,
+            Engine::Paddle(p) => {
+                // The Paddle pipeline wants exactly 3 channels.
+                let rgb3: std::borrow::Cow<[u8]> =
+                    if rgb.len() == (width * height) as usize { rgb.iter().flat_map(|g| [*g, *g, *g]).collect::<Vec<u8>>().into() } else { rgb };
+                if rgb3.len() < (width as usize).saturating_mul(height as usize).saturating_mul(3) {
+                    return Err(OcrError::EmptyImage);
+                }
+                return p.recognize(&rgb3, width, height);
+            }
+        };
         let err = |e: &dyn std::fmt::Display| OcrError::Recognize(e.to_string());
         let source = ocrs::ImageSource::from_bytes(&rgb, (width, height)).map_err(|e| err(&e))?;
-        let input = self.engine.prepare_input(source).map_err(|e| err(&e))?;
-        let found = self.engine.detect_words(&input).map_err(|e| err(&e))?;
-        let lines = self.engine.find_text_lines(&input, &found);
-        let read = self.engine.recognize_text(&input, &lines).map_err(|e| err(&e))?;
+        let input = engine.prepare_input(source).map_err(|e| err(&e))?;
+        let found = engine.detect_words(&input).map_err(|e| err(&e))?;
+        let lines = engine.find_text_lines(&input, &found);
+        let read = engine.recognize_text(&input, &lines).map_err(|e| err(&e))?;
         use ocrs::TextItem;
         Ok(read
             .into_iter()
@@ -177,13 +270,21 @@ fn num(v: f64) -> String {
     if s == "-0" { "0".into() } else { s.into() }
 }
 
-/// Page content that writes `words` as invisible text in `/PCHelv` (standard Helvetica,
-/// WinAnsiEncoding), each word stretched to its box so selection and search highlight the
-/// right place. Marked content `/OCR` so it can be told apart from the page's own text.
+/// Page content that writes `words` as invisible text, each word stretched to its box so
+/// selection and search highlight the right place. Words WinAnsiEncoding can hold use `/PCHelv`
+/// (standard Helvetica); others (Cyrillic…) use the Unicode font `/PCUni` (see
+/// `pdfcraft_edit::UNICODE_FONT`), whose codes are UTF-16 and every code 1 em wide. Marked
+/// content `/OCR` so it can be told apart from the page's own text.
 pub fn text_layer(words: &[PlacedWord]) -> Vec<u8> {
     let mut out = b"/OCR BMC\nBT\n3 Tr\n/PCHelv 1 Tf\n".to_vec();
+    let mut unicode = false;
     for w in words {
-        let width = helvetica_width(&w.text, 1.0);
+        let latin = pdfcraft_fonts::is_win_ansi(&w.text);
+        if latin == unicode {
+            out.extend_from_slice(if latin { b"/PCHelv 1 Tf\n" } else { b"/PCUni 1 Tf\n" });
+            unicode = !latin;
+        }
+        let width = if latin { helvetica_width(&w.text, 1.0) } else { w.text.chars().count() as f64 };
         let height = w.up[0].hypot(w.up[1]);
         if width <= 0.0 || height <= 0.0 {
             continue;
@@ -196,7 +297,11 @@ pub fn text_layer(words: &[PlacedWord]) -> Vec<u8> {
         let nums: Vec<String> = m.iter().map(|v| num(*v)).collect();
         out.extend_from_slice(nums.join(" ").as_bytes());
         out.extend_from_slice(b" Tm ");
-        out.extend(pdfcraft_fonts::literal(&pdfcraft_fonts::win_ansi(&w.text)));
+        if latin {
+            out.extend(pdfcraft_fonts::literal(&pdfcraft_fonts::win_ansi(&w.text)));
+        } else {
+            out.extend(pdfcraft_fonts::unicode_hex(&w.text));
+        }
         out.extend_from_slice(b" Tj\n");
     }
     out.extend_from_slice(b"ET\nEMC\n");

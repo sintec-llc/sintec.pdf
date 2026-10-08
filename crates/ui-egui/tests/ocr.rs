@@ -28,7 +28,7 @@ fn recognize_text_dialog_adds_searchable_text() {
     h.run_steps(2);
     h.get_by_label("Document language");
     h.get_by_label("Output");
-    if !pdfcraft_engine::ocr::available() {
+    if !pdfcraft_engine::ocr::available("en") {
         eprintln!("skipped: OCR models not installed");
         return;
     }
@@ -44,7 +44,7 @@ fn recognize_text_dialog_adds_searchable_text() {
 
 #[test]
 fn recognize_text_in_multiple_files_writes_searchable_copies() {
-    if !pdfcraft_engine::ocr::available() {
+    if !pdfcraft_engine::ocr::available("en") {
         eprintln!("skipped: OCR models not installed");
         return;
     }

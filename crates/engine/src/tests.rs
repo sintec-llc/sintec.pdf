@@ -1205,7 +1205,7 @@ fn backgrounds_and_watermarks_from_files() {
 /// `cargo xtask models`; skipped without them).
 #[test]
 fn recognize_text_makes_a_scanned_page_searchable() {
-    if !ocr::available() {
+    if !ocr::available("en") {
         eprintln!("skipped: OCR models not installed");
         return;
     }
@@ -1234,6 +1234,30 @@ fn recognize_text_makes_a_scanned_page_searchable() {
     // A second pass skips the page: it has text now.
     let again = s.recognize_text(id, &[], ocr::OcrSettings::default()).unwrap();
     assert!(again[0].skipped.is_some());
+}
+
+/// Russian OCR (the PP-OCRv5 Cyrillic models; skipped without them): the words come back in
+/// Cyrillic, sit in reading order, and the text layer keeps them searchable as Unicode.
+#[test]
+fn recognize_text_reads_russian() {
+    if !ocr::available("ru") {
+        eprintln!("skipped: Cyrillic OCR models not installed");
+        return;
+    }
+    let mut s = Session::new().with_clock(|| 1_700_000_000);
+    let png = include_bytes!("../tests/data/ru-scan.png").to_vec();
+    let scan = s.create_from_images(&[("scan.png".into(), png)]).unwrap();
+    let id = s.open("scan.pdf", None, scan, None).unwrap();
+    let settings = ocr::OcrSettings { language: "ru".into(), ..Default::default() };
+    let found = s.recognize_text(id, &[], settings).unwrap();
+    assert!(found[0].skipped.is_none(), "{:?}", found[0].skipped);
+    // Read back from the saved file's text layer, not just the recogniser's output.
+    let text = page_texts(&s, id)[0].to_lowercase();
+    for w in ["поставщик", "ромашка", "итого", "оплате", "руб", "марта", "invoice", "equipment"] {
+        assert!(text.contains(w), "{w:?} missing from {text:?}");
+    }
+    let at = |w: &str| text.find(w).unwrap();
+    assert!(at("марта") < at("поставщик") && at("поставщик") < at("итого") && at("итого") < at("invoice"), "{text}");
 }
 
 /// A form whose scripts are custom JavaScript: total = price × qty (calculate, through a

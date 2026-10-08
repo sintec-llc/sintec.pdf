@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use pdfcraft_render::{PageInfo, PageRenderer, RenderConfig, RenderRequest, RequestKind};
 
-pub use pdfcraft_ocr::{LANGUAGES, Models, Ocr, OcrError, PlacedWord};
+pub use pdfcraft_ocr::{CyrillicModels, LANGUAGES, Models, Ocr, OcrError, PlacedWord, Script};
 
 use crate::{DocId, Edit, EditError, Session};
 
@@ -18,7 +18,7 @@ use crate::{DocId, Edit, EditError, Session};
 pub struct OcrSettings {
     /// Resolution pages are rendered at for recognition (Acrobat's "Downsample to" choices).
     pub dpi: f32,
-    /// Language code from [`LANGUAGES`] (the models read the Latin alphabet, whatever this says).
+    /// Language code from [`LANGUAGES`]; it picks the models ([`Script::for_language`]).
     pub language: String,
     /// Leave pages that already have text alone (Acrobat reports "page contains renderable
     /// text" and skips them).
@@ -46,21 +46,28 @@ impl OcrPage {
     }
 }
 
-/// The recogniser, loaded once (it takes a moment) and shared.
-pub fn engine() -> Result<Arc<Ocr>, String> {
-    static OCR: Mutex<Option<Arc<Ocr>>> = Mutex::new(None);
-    let mut slot = OCR.lock().unwrap_or_else(|e| e.into_inner());
+/// The recogniser for `language` (a [`LANGUAGES`] code), loaded once per script (it takes a
+/// moment) and shared.
+pub fn engine(language: &str) -> Result<Arc<Ocr>, String> {
+    static LATIN: Mutex<Option<Arc<Ocr>>> = Mutex::new(None);
+    static CYRILLIC: Mutex<Option<Arc<Ocr>>> = Mutex::new(None);
+    let script = Script::for_language(language);
+    let cell = match script {
+        Script::Latin => &LATIN,
+        Script::Cyrillic => &CYRILLIC,
+    };
+    let mut slot = cell.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(o) = slot.as_ref() {
         return Ok(o.clone());
     }
-    let o = Arc::new(Ocr::find().map_err(|e| e.to_string())?);
+    let o = Arc::new(Ocr::find_for(script).map_err(|e| e.to_string())?);
     *slot = Some(o.clone());
     Ok(o)
 }
 
-/// Whether the recognition models are installed.
-pub fn available() -> bool {
-    Models::find().is_some()
+/// Whether the models for `language` (a [`LANGUAGES`] code) are installed.
+pub fn available(language: &str) -> bool {
+    Script::for_language(language).available()
 }
 
 /// Everything recognition needs from a document, detached from the session.
@@ -167,7 +174,7 @@ impl Session {
         if let Some(why) = self.get(id).and_then(|d| d.read_only_reason.clone()) {
             return Err(why);
         }
-        let ocr = engine()?;
+        let ocr = engine(&job.settings.language)?;
         let found = job.run(&ocr, |_, _| true);
         self.apply_ocr(id, &found).map_err(|e| e.to_string())?;
         Ok(found)

@@ -85,6 +85,48 @@ pub fn win_ansi(s: &str) -> Vec<u8> {
         .collect()
 }
 
+/// Whether every character of `s` has a WinAnsiEncoding code (so [`win_ansi`] loses nothing).
+pub fn is_win_ansi(s: &str) -> bool {
+    s.chars().zip(win_ansi(s)).all(|(c, b)| b != b'?' || c == '?')
+}
+
+/// Text as a hex string of 2-byte codes for an Identity-H font whose code is the UTF-16 code
+/// unit (see [`identity_to_unicode_cmap`]): `<041F0440>`. Characters outside the Basic
+/// Multilingual Plane become U+FFFD, since a surrogate half alone has no meaning.
+pub fn unicode_hex(s: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.len() * 4 + 2);
+    out.push(b'<');
+    for c in s.chars() {
+        let u = if (c as u32) <= 0xFFFF { c as u32 } else { 0xFFFD };
+        out.extend_from_slice(format!("{u:04X}").as_bytes());
+    }
+    out.push(b'>');
+    out
+}
+
+/// A ToUnicode CMap mapping each 2-byte code to the same UTF-16 code unit, for the whole Basic
+/// Multilingual Plane except the surrogates. `bfrange` may only vary the last byte, so there is
+/// one range per high byte.
+pub fn identity_to_unicode_cmap() -> Vec<u8> {
+    let ranges: Vec<u32> = (0x00..=0xFFu32).filter(|hi| !(0xD8..=0xDF).contains(hi)).collect();
+    let mut s = String::from(
+        "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n\
+         /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n\
+         /CMapName /PdfCraft-Identity-UCS def\n/CMapType 2 def\n\
+         1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n",
+    );
+    // At most 100 entries per block (ISO 32000-2 §9.10.3).
+    for chunk in ranges.chunks(100) {
+        s.push_str(&format!("{} beginbfrange\n", chunk.len()));
+        for hi in chunk {
+            s.push_str(&format!("<{hi:02X}00> <{hi:02X}FF> <{hi:02X}00>\n"));
+        }
+        s.push_str("endbfrange\n");
+    }
+    s.push_str("endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n");
+    s.into_bytes()
+}
+
 /// Bytes as a PDF literal string, `(` … `)`, with delimiters escaped.
 pub fn literal(bytes: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(bytes.len() + 2);

@@ -64,7 +64,7 @@ Read this before choosing work. The feature table above counts what exists; this
 | J Create | 32% | From images, text, clipboard; Word/HTML/RTF export. Missing: Office import, Excel/PowerPoint export |
 | N Misc | 27% | CLI, MCP, UI control channel, Action Wizard. Missing: AI providers, performance budgets |
 | K Optimize | 26% | Reduce File Size, Optimizer. Missing: preflight, PDF/X/UA, transparency/fonts panels |
-| I OCR | 19% | Searchable image for Latin script. Missing: other scripts and accents, editable-text output, deskew |
+| I OCR | 19% | Searchable image for Latin and Cyrillic (Russian, Ukrainian, Belarusian) script. Missing: other scripts and accents, editable-text output, deskew |
 
 **What "shipped" means, and doesn't.** A feature is shipped when it exists and at least one specific test covers it. 159 of 398 shipped features rest on exactly one test, and only about 5 cite an external oracle (`pdftotext`, `pdfsig`, OpenSSL, a corpus). Shipped does not mean "as good as Acrobat".
 

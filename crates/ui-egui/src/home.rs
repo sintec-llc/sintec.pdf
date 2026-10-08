@@ -53,7 +53,9 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         ui.spacing_mut().item_spacing = vec2(14.0, 14.0);
                         for id in RECOMMENDED {
                             let Some(g) = catalog::group(id) else { continue };
-                            let (rect, resp) = ui.allocate_exact_size(vec2(190.0, 104.0), Sense::click());
+                            // Wide enough for the (possibly translated) title beside its icon.
+                            let title = ui.fonts_mut(|f| f.layout_no_wrap(tl!(g.label).to_owned(), theme::semibold(13.5), t.text));
+                            let (rect, resp) = ui.allocate_exact_size(vec2((title.size().x + 58.0).clamp(190.0, 280.0), 104.0), Sense::click());
                             resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!(g.label)));
                             let fill = if resp.hovered() { t.hover } else { t.card };
                             ui.painter().rect(rect, CornerRadius::same(10), fill, Stroke::new(1.0, t.divider), egui::StrokeKind::Inside);
@@ -65,7 +67,8 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                 .first()
                                 .map(|s| s.items.iter().take(3).map(|i| tl!(i.label)).collect::<Vec<_>>().join(" · "))
                                 .unwrap_or_default();
-                            let galley = ui.fonts_mut(|f| f.layout(blurb, theme::regular(11.5), t.text_muted, rect.width() - 28.0));
+                            // Two lines at most, so it never runs into "Use now".
+                            let galley = widgets::elided(ui, &blurb, theme::regular(11.5), t.text_muted, rect.width() - 28.0, 2);
                             ui.painter().galley(rect.min + vec2(14.0, 46.0), galley, t.text_muted);
                             ui.painter().text(
                                 rect.left_bottom() + vec2(14.0, -14.0),

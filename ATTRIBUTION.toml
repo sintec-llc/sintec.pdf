@@ -55,6 +55,17 @@ usage = "Brazilian Portuguese UI strings, compiled in by crates/ui-egui/src/i18n
 sha256 = "0ee4d2f630623ef7e06413a7c34a4a0269a2600fba682f06988a1346be4d07a5"
 
 [[asset]]
+path = "crates/ui-egui/src/i18n/ru.tsv"
+title = "Russian interface translation catalog"
+author = "PdfCraft contributors"
+source = "Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources"
+licence = "MIT OR Apache-2.0"
+licence_file = "LICENSE-MIT"
+kind = "translation"
+usage = "Russian UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
+sha256 = "1b95327a3825fb2e355fac843f0f5f878b6f70b5f7831b3baaa46d046fcc1690"
+
+[[asset]]
 path = "crates/ui-egui/src/i18n/ja.tsv"
 title = "Japanese interface translation catalog"
 author = "PdfCraft contributors"
@@ -3029,6 +3040,17 @@ usage = "UI icon, embedded via crates/ui-egui/src/icon_data.rs"
 sha256 = "69a76b4cd352dbdea61c63ed1e8d1e02083ee1773b3ced2a1c8cdf8c90fb2055"
 
 [[asset]]
+path = "crates/engine/tests/data/ru-scan.png"
+title = "Russian invoice lines rendered as a greyscale scan (OCR test fixture)"
+author = "PdfCraft contributors"
+source = "Contributor-original: invented invoice text drawn with Pillow in the bundled Inter Regular font (assets/fonts/Inter-Regular.ttf)"
+licence = "MIT OR Apache-2.0"
+licence_file = "LICENSE-MIT"
+kind = "image"
+usage = "Cyrillic OCR test (crates/engine/src/tests.rs)"
+sha256 = "716eed4c1eb25ef29af4816440b92a0f5795f0b601a37d188acb42fe96a0a600"
+
+[[asset]]
 path = "crates/sign/tests/data/openssl-signed.pdf"
 title = "One-page PDF signed with OpenSSL CMS (adbe.pkcs7.detached) by the RSA test key"
 author = "PdfCraft contributors"
@@ -3086,6 +3108,45 @@ licence_sha256 = "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1c
 kind = "model"
 usage = "Scan & OCR: reads the words it finds (cargo xtask models)"
 sha256 = "e484866d4cce403175bd8d00b128feb08ab42e208de30e42cd9889d8f1735a6e"
+
+[[fetched]]
+file = "pp-ocrv5_mobile_det.onnx"
+url = "https://github.com/GreatV/oar-ocr/releases/download/v0.3.0/pp-ocrv5_mobile_det.onnx"
+title = "PP-OCRv5 mobile text detection model"
+author = "PaddlePaddle Authors (PaddleOCR)"
+source = "PaddlePaddle PP-OCRv5 (https://github.com/PaddlePaddle/PaddleOCR, Apache-2.0), exported to ONNX and republished unchanged in the oar-ocr v0.3.0 release (https://github.com/GreatV/oar-ocr/releases/tag/v0.3.0)"
+licence = "Apache-2.0"
+licence_url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
+licence_sha256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+kind = "model"
+usage = "Scan & OCR: finds text lines for Russian, Ukrainian and Belarusian (cargo xtask models)"
+sha256 = "1eb7b4f7ab657ebd1c66d5f79bca7497f29768a2e3c15e52daecbba1a8e4a039"
+
+[[fetched]]
+file = "eslav_pp-ocrv5_mobile_rec.onnx"
+url = "https://github.com/GreatV/oar-ocr/releases/download/v0.3.0/eslav_pp-ocrv5_mobile_rec.onnx"
+title = "PP-OCRv5 East Slavic text recognition model"
+author = "PaddlePaddle Authors (PaddleOCR)"
+source = "PaddlePaddle PP-OCRv5 (https://github.com/PaddlePaddle/PaddleOCR, Apache-2.0), exported to ONNX and republished unchanged in the oar-ocr v0.3.0 release (https://github.com/GreatV/oar-ocr/releases/tag/v0.3.0)"
+licence = "Apache-2.0"
+licence_url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
+licence_sha256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+kind = "model"
+usage = "Scan & OCR: reads Cyrillic text lines (cargo xtask models)"
+sha256 = "36a66a68097e88b103e0f60f489e88c7239d3ea79d96fbac2d80ac9d134944cd"
+
+[[fetched]]
+file = "ppocrv5_eslav_dict.txt"
+url = "https://github.com/GreatV/oar-ocr/releases/download/v0.3.0/ppocrv5_eslav_dict.txt"
+title = "PP-OCRv5 East Slavic character dictionary"
+author = "PaddlePaddle Authors (PaddleOCR)"
+source = "PaddlePaddle PP-OCRv5 (https://github.com/PaddlePaddle/PaddleOCR, Apache-2.0), exported to ONNX and republished unchanged in the oar-ocr v0.3.0 release (https://github.com/GreatV/oar-ocr/releases/tag/v0.3.0)"
+licence = "Apache-2.0"
+licence_url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
+licence_sha256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+kind = "model"
+usage = "Scan & OCR: maps the Cyrillic recognition model's outputs to characters (cargo xtask models)"
+sha256 = "3e95f1581557162870cacdba5af91a4c6be2890710d395b0c3c7578e7ee5e6eb"
 
 [[build_input]]
 name = "craft-fonts"

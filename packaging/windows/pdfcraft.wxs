@@ -129,6 +129,26 @@
       <Component Id="PdfcraftCli">
         <File Id="PdfcraftCliExe" Source="$(var.BinDir)\pdfcraft-cli.exe" KeyPath="yes" />
       </Component>
+
+      <!-- OCR models (CC-BY-SA-4.0, licences alongside) in models\ beside the exe, where
+           pdfcraft_ocr::Models::find looks, so Scan & OCR works offline right after install. -->
+      <Component Id="PdfcraftOcrModels" Subdirectory="models" Guid="3B0D6E1A-7C52-4F0E-9A8D-2E5B1C4F7A93">
+        <File Id="OcrDetectionModel" Source="$(var.BinDir)\models\text-detection.rten" KeyPath="yes" />
+        <File Id="OcrRecognitionModel" Source="$(var.BinDir)\models\text-recognition.rten" />
+        <File Id="OcrDetectionLicence" Source="$(var.BinDir)\models\text-detection.rten.LICENCE.txt" />
+        <File Id="OcrRecognitionLicence" Source="$(var.BinDir)\models\text-recognition.rten.LICENCE.txt" />
+      </Component>
+
+      <!-- Cyrillic OCR models (PP-OCRv5, Apache-2.0, licences alongside): Russian, Ukrainian and
+           Belarusian, found by pdfcraft_ocr::CyrillicModels::find in the same folder. -->
+      <Component Id="PdfcraftOcrCyrillic" Subdirectory="models" Guid="8E4F2A6C-1D3B-4C7E-B95A-0F6D2E8C4B17">
+        <File Id="OcrCyrDetectionModel" Source="$(var.BinDir)\models\pp-ocrv5_mobile_det.onnx" KeyPath="yes" />
+        <File Id="OcrCyrRecognitionModel" Source="$(var.BinDir)\models\eslav_pp-ocrv5_mobile_rec.onnx" />
+        <File Id="OcrCyrDictionary" Source="$(var.BinDir)\models\ppocrv5_eslav_dict.txt" />
+        <File Id="OcrCyrDetectionLicence" Source="$(var.BinDir)\models\pp-ocrv5_mobile_det.onnx.LICENCE.txt" />
+        <File Id="OcrCyrRecognitionLicence" Source="$(var.BinDir)\models\eslav_pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
+        <File Id="OcrCyrDictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_eslav_dict.txt.LICENCE.txt" />
+      </Component>
     </ComponentGroup>
   </Fragment>
 </Wix>

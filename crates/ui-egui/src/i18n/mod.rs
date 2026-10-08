@@ -64,13 +64,22 @@ fn plural_cs(n: u64) -> usize {
     }
 }
 
+/// Russian: one (1, 21, 31… but not 11) | few (2–4, 22–24… but not 12–14) | many (everything else).
+fn plural_ru(n: u64) -> usize {
+    match (n % 10, n % 100) {
+        (1, r) if r != 11 => 0,
+        (2..=4, r) if !(12..=14).contains(&r) => 1,
+        _ => 2,
+    }
+}
+
 /// Portuguese: 0 and 1 take the singular, everything else the plural.
 fn plural_pt(n: u64) -> usize {
     usize::from(n > 1)
 }
 
 /// The registry. English first: it is the fallback and the source language.
-pub static LANGUAGES: [LangInfo; 6] = [
+pub static LANGUAGES: [LangInfo; 7] = [
     LangInfo { code: "en", name: "English", source: "", plural: plural_one_other, catalog: OnceLock::new() },
     LangInfo { code: "ja", name: "日本語", source: include_str!("ja.tsv"), plural: plural_none, catalog: OnceLock::new() },
     // Simplified Chinese; `zh`, `zh-CN`, `zh-SG` and `zh-Hans-*` locales resolve here (see `candidates`).
@@ -81,6 +90,7 @@ pub static LANGUAGES: [LangInfo; 6] = [
     LangInfo { code: "cs", name: "Čeština", source: include_str!("cs.tsv"), plural: plural_cs, catalog: OnceLock::new() },
     // Brazilian Portuguese; `pt`, `pt-BR` and `pt-PT` locales all resolve here (see `candidates`).
     LangInfo { code: "pt-br", name: "Português (Brasil)", source: include_str!("pt-br.tsv"), plural: plural_pt, catalog: OnceLock::new() },
+    LangInfo { code: "ru", name: "Русский", source: include_str!("ru.tsv"), plural: plural_ru, catalog: OnceLock::new() },
 ];
 
 impl LangInfo {
@@ -417,10 +427,13 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[test]
     fn windows_display_language_query_returns_a_locale_tag() {
-        let tag = windows_ui_language().expect("Windows should report a display language");
-        let tag = tag.trim();
-        assert!(!tag.is_empty());
-        assert!(tag.split('-').all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_alphanumeric())));
+        let tags = windows_ui_language().expect("Windows should report a display language");
+        // One tag per line: machines with several display languages (e.g. `ru` then `en-US`)
+        // report all of them in preference order.
+        for tag in tags.lines().map(str::trim) {
+            assert!(!tag.is_empty(), "{tags:?}");
+            assert!(tag.split('-').all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_alphanumeric())), "{tags:?}");
+        }
     }
 
     #[test]
@@ -639,6 +652,21 @@ mod tests {
         let mut legacy = crate::PdfCraftApp::default();
         legacy.restore("{}");
         assert_eq!(legacy.language, AUTO);
+    }
+
+    #[test]
+    fn russian_is_registered_with_its_plurals_and_date_months() {
+        let ru = Lang::from_code("ru").expect("ru registered");
+        assert_eq!(lang_from_tag("ru_RU.UTF-8"), Some(ru));
+        assert_eq!(lang_from_tag("ru-RU"), Some(ru));
+        for (n, form) in [(1, 0), (21, 0), (101, 0), (11, 2), (2, 1), (4, 1), (22, 1), (12, 2), (14, 2), (0, 2), (5, 2), (25, 2), (111, 2)] {
+            assert_eq!(plural_ru(n), form, "plural_ru({n})");
+        }
+        assert_eq!(trn(ru, 3, "{n} page", "{n} pages"), "3 страницы");
+        assert_eq!(trn(ru, 5, "{n} page", "{n} pages"), "5 страниц");
+        // The calendar header uses the nominative, a date in a sentence the genitive.
+        assert_eq!(tr(ru, "January"), "Январь");
+        assert_eq!(tr_ctx(ru, "date", "January"), "января");
     }
 
     #[test]

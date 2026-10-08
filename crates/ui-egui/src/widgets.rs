@@ -56,6 +56,15 @@ pub fn ghost_button(ui: &mut egui::Ui, icon: &str, label: &str) -> Response {
 }
 
 /// A search-field lookalike that opens the command palette.
+/// `text` laid out in at most `max_rows` lines of `width`, ending in "…" when cut short, so a
+/// translation longer than the English can't spill out of a fixed-size box.
+pub fn elided(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32, width: f32, max_rows: usize) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple(text.to_owned(), font, color, width.max(1.0));
+    job.wrap.max_rows = max_rows;
+    job.wrap.overflow_character = Some('…');
+    ui.fonts_mut(|f| f.layout_job(job))
+}
+
 pub fn search_box(ui: &mut egui::Ui, placeholder: &str, width: f32) -> Response {
     let t = Tokens::get(ui.ctx());
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 32.0), Sense::click());
@@ -63,8 +72,10 @@ pub fn search_box(ui: &mut egui::Ui, placeholder: &str, width: f32) -> Response 
     let fill = if resp.hovered() { t.hover } else { t.field };
     ui.painter().rect(rect, CornerRadius::same(16), fill, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     icons::paint(ui, Rect::from_min_size(rect.min + vec2(10.0, 8.0), vec2(16.0, 16.0)), "search", 15.0, t.text_muted);
-    ui.painter().text(rect.left_center() + vec2(34.0, 0.0), Align2::LEFT_CENTER, placeholder, theme::regular(13.0), t.text_faint);
-    ui.painter().text(rect.right_center() - vec2(12.0, 0.0), Align2::RIGHT_CENTER, "⌘K", theme::regular(11.5), t.text_faint);
+    let hint = ui.painter().text(rect.right_center() - vec2(12.0, 0.0), Align2::RIGHT_CENTER, "⌘K", theme::regular(11.5), t.text_faint);
+    // The placeholder stops short of the ⌘K hint.
+    let galley = elided(ui, placeholder, theme::regular(13.0), t.text_faint, hint.left() - rect.left() - 34.0 - 8.0, 1);
+    ui.painter().galley(rect.left_center() + vec2(34.0, -galley.size().y / 2.0), galley, t.text_faint);
     resp.on_hover_cursor(egui::CursorIcon::Text)
 }
 

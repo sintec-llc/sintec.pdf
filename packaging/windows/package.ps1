@@ -88,6 +88,17 @@ Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 Copy-Item (Join-Path $Bin 'pdfcraft.exe'), (Join-Path $Bin 'pdfcraft-cli.exe') $Stage
 
+# OCR models: models\ beside pdfcraft.exe is where pdfcraft_ocr::Models::find looks, so Scan & OCR
+# works straight after install with nothing to download. Fetched (SHA-256 verified) if missing.
+$ModelsSrc = Join-Path $Root 'assets\models'
+Invoke-Native 'cargo xtask models' { cargo xtask models $ModelsSrc }
+$ModelsStage = Join-Path $Stage 'models'
+New-Item -ItemType Directory -Force -Path $ModelsStage | Out-Null
+# Latin (ocrs) and Cyrillic (PP-OCRv5) models, each with its licence text.
+foreach ($m in 'text-detection.rten', 'text-recognition.rten', 'pp-ocrv5_mobile_det.onnx', 'eslav_pp-ocrv5_mobile_rec.onnx', 'ppocrv5_eslav_dict.txt') {
+  Copy-Item (Join-Path $ModelsSrc $m), (Join-Path $ModelsSrc "$m.LICENCE.txt") $ModelsStage
+}
+
 & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'pdfcraft.exe') (Join-Path $Stage 'pdfcraft-cli.exe')
 
 # ---- MSI ---------------------------------------------------------------------------------------
@@ -110,6 +121,7 @@ $Portable = Join-Path $TargetDir "windows-package\pdfcraft-$Version-windows-$Arc
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
+Copy-Item -Recurse $ModelsStage $Portable
 foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE') {
   $p = Join-Path $Root $f
   if (Test-Path $p) { Copy-Item $p $Portable }

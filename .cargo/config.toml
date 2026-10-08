@@ -1,2 +1,9 @@
 [alias]
 xtask = "run -p xtask --"
+
+[env]
+# The UI tests find widgets by their English labels, but Auto follows the system display language,
+# so on a Japanese or Russian machine they would see translated text. `C` means English (see
+# `i18n::lang_from_tag`); it covers `cargo run` too, where Preferences ▸ Interface language still
+# switches. Installed builds aren't affected. An LC_ALL already set in the environment wins.
+LC_ALL = "C"
