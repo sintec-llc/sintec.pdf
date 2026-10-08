@@ -1888,3 +1888,8 @@
 	Extract and delete from file…	擷取並從檔案中刪除…
 	Insert blank page before	在前面插入空白頁
 	Insert blank page after	在後面插入空白頁
+	A photo or scan of your {what} on white paper, or a PNG with transparency: the paper becomes transparent.	白紙上的{what}照片或掃描檔，或具透明度的 PNG：紙張會變成透明。
+	No picture chosen	未選擇圖片
+	Choose picture…	選擇圖片…
+	Choose a picture of your signature	選擇簽名圖片
+	{file} is too large for a signature (at most {n} MB)	{file} 作為簽名太大（最多 {n} MB）

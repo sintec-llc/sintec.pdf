@@ -1895,3 +1895,8 @@
 	Extract and delete from file…	抽出してファイルから削除…
 	Insert blank page before	前に空白ページを挿入
 	Insert blank page after	後に空白ページを挿入
+	A photo or scan of your {what} on white paper, or a PNG with transparency: the paper becomes transparent.	白い紙に書いた{what}の写真またはスキャン、または透過 PNG。紙の部分は透明になります。
+	No picture chosen	画像が選択されていません
+	Choose picture…	画像を選択…
+	Choose a picture of your signature	署名の画像を選択
+	{file} is too large for a signature (at most {n} MB)	{file} は署名には大きすぎます（最大 {n} MB）

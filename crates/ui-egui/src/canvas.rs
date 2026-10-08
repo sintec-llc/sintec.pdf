@@ -1290,6 +1290,31 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         QuickTool::CustomStamp(i) => app.custom_stamps.get(i).cloned(),
         _ => None,
     };
+    // The picture shown under the cursor while placing an image signature or custom stamp.
+    let ghost_picture = {
+        let bytes = match app.quick_tool {
+            QuickTool::CustomStamp(_) => custom_stamp.as_ref().map(|s| s.data.clone()),
+            QuickTool::Fill(crate::fill_sign::FillTool::Signature) => match &app.signature {
+                Some(crate::fill_sign::SavedSig::Image(png)) => Some(png.clone()),
+                _ => None,
+            },
+            QuickTool::Fill(crate::fill_sign::FillTool::Initials) => match &app.initials {
+                Some(crate::fill_sign::SavedSig::Image(png)) => Some(png.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        match bytes {
+            Some(b) => {
+                let key = crate::fill_sign::picture_key(&b);
+                if app.ghost_picture.as_ref().is_none_or(|(k, _)| *k != key) {
+                    app.ghost_picture = crate::fill_sign::picture_texture(ui.ctx(), "ghost-picture", &b, 600).map(|t| (key, t));
+                }
+                app.ghost_picture.as_ref().map(|(_, t)| t.clone())
+            }
+            None => None,
+        }
+    };
     let mut open_signature = false;
     let mut hover_text: Option<(Pos2, String)> = None;
     let mut clicked_link: Option<LinkTarget> = None;
@@ -1457,23 +1482,27 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 && let Some(p) = ui.input(|inp| inp.pointer.hover_pos()).filter(|p| xf.rect.contains(*p))
             {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                // Centred on the pointer, upright as the page is shown: drawn faintly while
+                // hovering, placed on a click.
+                let (vx, vy) = xf.screen_to_view(p);
+                let (w, h) = kind.size();
+                let corners = [(vx as f64 - w / 2.0, vy as f64 - h / 2.0), (vx as f64 + w / 2.0, vy as f64 + h / 2.0)];
+                let u: Vec<[f32; 2]> = corners.iter().map(|(x, y)| info.pages[i].view_to_user(*x as f32, *y as f32)).collect();
+                let rect = [u[0][0].min(u[1][0]) as f64, u[0][1].min(u[1][1]) as f64, u[0][0].max(u[1][0]) as f64, u[0][1].max(u[1][1]) as f64];
+                let by = (kind.group() == pdfcraft_engine::StampGroup::Dynamic).then(|| by_line.clone());
+                let shape = pdfcraft_engine::Shape::Stamp { rect, stamp: kind, by };
+                let edit = pdfcraft_engine::Edit::AddAnnotation(pdfcraft_engine::NewAnnotation {
+                    page: i,
+                    style: pdfcraft_engine::Style::default_for(&shape),
+                    shape,
+                    contents: String::new(),
+                    author: author.clone(),
+                });
                 if resp.clicked() {
-                    // Centred on the click, upright as the page is shown.
-                    let (vx, vy) = xf.screen_to_view(p);
-                    let (w, h) = kind.size();
-                    let corners = [(vx as f64 - w / 2.0, vy as f64 - h / 2.0), (vx as f64 + w / 2.0, vy as f64 + h / 2.0)];
-                    let u: Vec<[f32; 2]> = corners.iter().map(|(x, y)| info.pages[i].view_to_user(*x as f32, *y as f32)).collect();
-                    let rect = [u[0][0].min(u[1][0]) as f64, u[0][1].min(u[1][1]) as f64, u[0][0].max(u[1][0]) as f64, u[0][1].max(u[1][1]) as f64];
-                    let by = (kind.group() == pdfcraft_engine::StampGroup::Dynamic).then(|| by_line.clone());
-                    let shape = pdfcraft_engine::Shape::Stamp { rect, stamp: kind, by };
-                    view.pending_edit = Some(pdfcraft_engine::Edit::AddAnnotation(pdfcraft_engine::NewAnnotation {
-                        page: i,
-                        style: pdfcraft_engine::Style::default_for(&shape),
-                        shape,
-                        contents: String::new(),
-                        author: author.clone(),
-                    }));
+                    view.pending_edit = Some(edit);
                     stamp_placed = true;
+                } else {
+                    crate::fill_sign::paint_ghost(ui, &xf, info, i, &edit, None);
                 }
             }
             if let Some(cs) = custom_stamp.as_ref()
@@ -1481,25 +1510,64 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 && let Some(p) = ui.input(|inp| inp.pointer.hover_pos()).filter(|p| xf.rect.contains(*p))
             {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                // Centred on the pointer. A picture at its size (at 72 dpi, at most 200 pt), so
+                // the preview is what is placed; a PDF page at its natural size (the engine
+                // sizes it; the preview is an outline).
+                let (vx, vy) = xf.screen_to_view(p);
+                let u = info.pages[i].view_to_user(vx, vy);
+                let (x, y) = (u[0] as f64, u[1] as f64);
+                let rect = match &ghost_picture {
+                    Some(tex) => {
+                        // The preview is the picture's own size up to 600 pixels; larger ones
+                        // end up 200 pt on their longer side either way.
+                        let [sw, sh] = tex.size().map(|v| v.max(1) as f64);
+                        let k = (200.0 / sw.max(sh)).min(1.0);
+                        let (w, h) = (sw * k, sh * k);
+                        [x - w / 2.0, y - h / 2.0, x + w / 2.0, y + h / 2.0]
+                    }
+                    None => [x, y, x, y],
+                };
+                let edit = pdfcraft_engine::Edit::AddCustomStamp {
+                    page: i,
+                    rect,
+                    name: cs.name.clone(),
+                    file: pdfcraft_engine::MarkFile { name: cs.file.clone(), bytes: cs.data.clone(), page: cs.page },
+                    author: author.clone(),
+                };
                 if resp.clicked() {
-                    // Centred on the click at its natural size (the engine sizes it).
-                    let (vx, vy) = xf.screen_to_view(p);
-                    let u = info.pages[i].view_to_user(vx, vy);
-                    let (x, y) = (u[0] as f64, u[1] as f64);
-                    view.pending_edit = Some(pdfcraft_engine::Edit::AddCustomStamp {
-                        page: i,
-                        rect: [x, y, x, y],
-                        name: cs.name.clone(),
-                        file: pdfcraft_engine::MarkFile { name: cs.file.clone(), bytes: cs.data.clone(), page: cs.page },
-                        author: author.clone(),
-                    });
+                    view.pending_edit = Some(edit);
                     stamp_placed = true;
+                } else if ghost_picture.is_some() {
+                    crate::fill_sign::paint_ghost(ui, &xf, info, i, &edit, ghost_picture.as_ref());
+                } else {
+                    // A PDF page: its outline, 150 × 60 pt, until it is placed.
+                    let outline = pdfcraft_engine::Edit::AddCustomStamp {
+                        page: i,
+                        rect: [x - 75.0, y - 30.0, x + 75.0, y + 30.0],
+                        name: cs.name.clone(),
+                        file: pdfcraft_engine::MarkFile { name: String::new(), bytes: Default::default(), page: 0 },
+                        author: String::new(),
+                    };
+                    crate::fill_sign::paint_ghost(ui, &xf, info, i, &outline, None);
                 }
             }
             if let QuickTool::Fill(ft) = tool
                 && allowed
             {
-                match crate::fill_sign::page_input(ui, &resp, &xf, i, info, ft, view, signature.as_ref(), initials.as_ref(), &author, today) {
+                match crate::fill_sign::page_input(
+                    ui,
+                    &resp,
+                    &xf,
+                    i,
+                    info,
+                    ft,
+                    view,
+                    signature.as_ref(),
+                    initials.as_ref(),
+                    &author,
+                    today,
+                    ghost_picture.as_ref(),
+                ) {
                     Some(crate::fill_sign::FillAction::Edit(e)) => view.pending_edit = Some(*e),
                     Some(crate::fill_sign::FillAction::CreateSignature) => open_signature = true,
                     Some(crate::fill_sign::FillAction::CreateInitials) => open_initials = true,

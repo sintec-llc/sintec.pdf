@@ -1,7 +1,9 @@
 //! Fill & Sign (Acrobat's Fill & Sign tool, execution plan M5.7): type text onto the page, place
 //! ✓ ✕ ● ─ marks and today's date, and sign with a drawn signature. Everything is an annotation
 //! (typewriter text, PdfCraft-drawn stamps, ink), so it can be moved, deleted and undone like
-//! any comment.
+//! any comment. A signature can also be a picture (a photo or scan of it), placed as a stamp.
+
+use std::sync::Arc;
 
 use egui::{Color32, CornerRadius, Pos2, Sense, Stroke, pos2, vec2};
 use pdfcraft_engine::{Edit, FillMark, NewAnnotation, Shape, Style};
@@ -25,12 +27,33 @@ pub enum FillTool {
 pub const FILL_TOOLS: [FillTool; 8] =
     [FillTool::Text, FillTool::Cross, FillTool::Check, FillTool::Dot, FillTool::Line, FillTool::Date, FillTool::Signature, FillTool::Initials];
 
-/// A saved signature or initials: drawn strokes (normalised to the pad width, y up) or typed
-/// text (drawn in the script font).
+/// A saved signature or initials: drawn strokes (normalised to the pad width, y up), typed
+/// text (drawn in the script font), or a picture (a PNG prepared by
+/// [`pdfcraft_engine::signature_png`]: ink on transparency).
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SavedSig {
     Drawn(Vec<Vec<[f32; 2]>>),
     Typed(String),
+    Image(#[serde(with = "crate::stamps_ui::b64")] Arc<Vec<u8>>),
+}
+
+/// The largest picture file read for a signature.
+pub const MAX_SIGNATURE_FILE: usize = 30 << 20;
+
+/// A saved value read back from the settings file is usable: a picture is a PNG of sane size.
+pub(crate) fn saved_is_sound(s: &SavedSig) -> bool {
+    match s {
+        SavedSig::Image(png) => png.len() <= MAX_SIGNATURE_FILE && png_size(png).is_some(),
+        SavedSig::Drawn(strokes) => strokes.iter().all(|st| st.iter().all(|p| p.iter().all(|x| x.is_finite()))),
+        SavedSig::Typed(t) => !t.trim().is_empty(),
+    }
+}
+
+/// A prepared signature picture's size in pixels (its PNG header).
+pub(crate) fn png_size(png: &[u8]) -> Option<(u32, u32)> {
+    let w = u32::from_be_bytes(png.get(16..20)?.try_into().ok()?);
+    let h = u32::from_be_bytes(png.get(20..24)?.try_into().ok()?);
+    (png.starts_with(b"\x89PNG") && w > 0 && h > 0).then_some((w, h))
 }
 
 /// The Create signature / initials dialog.
@@ -38,8 +61,13 @@ pub enum SavedSig {
 pub struct SigDraft {
     pub strokes: Vec<Vec<[f32; 2]>>,
     pub text: String,
-    /// The Draw tab (otherwise Type).
+    /// The Draw tab (otherwise Type, or Image when `picture`).
     pub drawing: bool,
+    /// The Image tab, and its prepared picture.
+    pub picture: bool,
+    pub image: Option<Arc<Vec<u8>>>,
+    /// Choose picture… was clicked: the app opens a file picker.
+    pub pick: bool,
     /// Creating initials (otherwise the signature).
     pub initials: bool,
     /// Replacing an existing saved value.
@@ -49,7 +77,7 @@ pub struct SigDraft {
 impl SigDraft {
     pub fn new(initials: bool, name: &str) -> Self {
         let text = if initials { name.split_whitespace().filter_map(|w| w.chars().next()).collect() } else { name.trim().to_string() };
-        Self { strokes: Vec::new(), text, drawing: false, initials, editing: false }
+        Self { text, initials, ..Default::default() }
     }
 
     /// Edit a copy of the saved value; Cancel must leave the original untouched.
@@ -57,11 +85,14 @@ impl SigDraft {
         match saved {
             SavedSig::Drawn(strokes) => Self { strokes: strokes.clone(), drawing: true, initials, editing: true, ..Default::default() },
             SavedSig::Typed(text) => Self { text: text.clone(), initials, editing: true, ..Default::default() },
+            SavedSig::Image(png) => Self { image: Some(png.clone()), picture: true, initials, editing: true, ..Default::default() },
         }
     }
 
     fn ready(&self) -> bool {
-        if self.drawing {
+        if self.picture {
+            self.image.is_some()
+        } else if self.drawing {
             self.strokes.iter().any(|s| s.len() > 1)
         } else {
             !self.text.trim().is_empty()
@@ -70,7 +101,11 @@ impl SigDraft {
     }
 
     pub fn saved(&self) -> SavedSig {
-        if self.drawing { SavedSig::Drawn(self.strokes.clone()) } else { SavedSig::Typed(self.text.trim().to_string()) }
+        match &self.image {
+            Some(png) if self.picture => SavedSig::Image(png.clone()),
+            _ if self.drawing => SavedSig::Drawn(self.strokes.clone()),
+            _ => SavedSig::Typed(self.text.trim().to_string()),
+        }
     }
 }
 
@@ -179,10 +214,31 @@ pub fn typed_signature_at(page: usize, at: [f64; 2], text: &str, height: f64, au
     pdfcraft_engine::typed_signature_shape(at, text, height).map(|shape| new(page, shape, String::new(), author))
 }
 
+/// Place a signature picture with its left edge at `at`: 150 pt wide (initials 70 pt), at
+/// most 60 pt tall (initials 40 pt).
+pub fn picture_signature_at(page: usize, at: [f64; 2], png: &Arc<Vec<u8>>, initials: bool, author: &str) -> Option<Edit> {
+    let (pw, ph) = png_size(png)?;
+    let (mut w, max_h) = if initials { (70.0, 40.0) } else { (150.0, 60.0) };
+    let mut h = w * f64::from(ph) / f64::from(pw);
+    if h > max_h {
+        w *= max_h / h;
+        h = max_h;
+    }
+    let what = if initials { "Initials" } else { "Signature" };
+    Some(Edit::AddCustomStamp {
+        page,
+        rect: [at[0], at[1] - h / 2.0, at[0] + w, at[1] + h / 2.0],
+        name: what.to_string(),
+        file: pdfcraft_engine::MarkFile { name: format!("{}.png", what.to_lowercase()), bytes: png.clone(), page: 0 },
+        author: author.to_string(),
+    })
+}
+
 /// Place a saved signature or initials.
 pub fn place(page: usize, at: [f64; 2], sig: &SavedSig, initials: bool, author: &str) -> Option<Edit> {
     match sig {
         SavedSig::Drawn(strokes) => signature_at(page, at, strokes, author),
+        SavedSig::Image(png) => picture_signature_at(page, at, png, initials, author),
         SavedSig::Typed(text) => {
             let [left, bottom, right, top] = pdfcraft_engine::script_outline(text).bounds();
             let height = if initials { 24.0_f64 } else { 32.0_f64 };
@@ -283,6 +339,18 @@ pub(crate) fn signature_entries(ui: &mut egui::Ui, app: &mut crate::PdfCraftApp,
                         );
                     }
                 }
+                SavedSig::Image(png) => {
+                    let cache = &mut app.saved_signature_previews[i];
+                    let key = picture_key(png);
+                    if cache.as_ref().is_none_or(|(s, _)| *s != key)
+                        && let Some(tex) = picture_texture(ui.ctx(), &format!("saved-{what}"), png, 480)
+                    {
+                        *cache = Some((key, tex));
+                    }
+                    if let Some((_, tex)) = cache {
+                        paint_fitted(&painter, tex, preview_rect);
+                    }
+                }
                 SavedSig::Drawn(strokes) => {
                     let bounds = strokes
                         .iter()
@@ -331,12 +399,25 @@ pub(crate) fn page_input(
     initials: Option<&SavedSig>,
     author: &str,
     today: (i64, u32, u32),
+    picture: Option<&egui::TextureHandle>,
 ) -> Option<FillAction> {
     let pointer = ui.input(|i| i.pointer.hover_pos())?;
     if !xf.rect.contains(pointer) {
         return None;
     }
     ui.ctx().set_cursor_icon(if tool == FillTool::Text { egui::CursorIcon::Text } else { egui::CursorIcon::Crosshair });
+    // The signature or initials as they will be placed, under the cursor.
+    let saved = match tool {
+        FillTool::Signature => signature.map(|s| (s, false)),
+        FillTool::Initials => initials.map(|s| (s, true)),
+        _ => None,
+    };
+    if let Some((s, init)) = saved
+        && !resp.clicked()
+        && let Some(edit) = place(page, to_user(xf, info, page, pointer), s, init, author)
+    {
+        paint_ghost(ui, xf, info, page, &edit, picture);
+    }
     if !resp.clicked() {
         return None;
     }
@@ -427,14 +508,52 @@ pub(crate) fn signature_pad(ui: &mut egui::Ui, t: &Tokens, d: &mut SigDraft, pre
     let title = if d.editing { tl!("Change {what}") } else { tl!("Create {what}") };
     ui.label(egui::RichText::new(crate::i18n::fmt(title, &[("what", what)])).font(crate::theme::semibold(18.0)));
     ui.horizontal(|ui| {
-        if crate::widgets::pill_button(ui, tl!("Type"), !d.drawing).clicked() {
-            d.drawing = false;
+        if crate::widgets::pill_button(ui, tl!("Type"), !d.drawing && !d.picture).clicked() {
+            (d.drawing, d.picture) = (false, false);
         }
-        if crate::widgets::pill_button(ui, tl!("Draw"), d.drawing).clicked() {
-            d.drawing = true;
+        if crate::widgets::pill_button(ui, tl!("Draw"), d.drawing && !d.picture).clicked() {
+            (d.drawing, d.picture) = (true, false);
+        }
+        if crate::widgets::pill_button(ui, tl!("Image"), d.picture).clicked() {
+            d.picture = true;
         }
     });
     ui.add_space(6.0);
+    if d.picture {
+        ui.label(
+            egui::RichText::new(crate::i18n::fmt(
+                tl!("A photo or scan of your {what} on white paper, or a PNG with transparency: the paper becomes transparent."),
+                &[("what", what)],
+            ))
+            .color(t.text_muted),
+        );
+        let (rect, _) = ui.allocate_exact_size(vec2(460.0, 150.0), Sense::hover());
+        let painter = ui.painter_at(rect);
+        // A light check pattern shows what is transparent.
+        painter.rect_filled(rect, CornerRadius::same(6), Color32::WHITE);
+        painter.rect_stroke(rect, CornerRadius::same(6), Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+        match &d.image {
+            Some(png) => {
+                let key = picture_key(png);
+                if preview.as_ref().is_none_or(|(s, _)| *s != key)
+                    && let Some(tex) = picture_texture(ui.ctx(), "picture-signature", png, 920)
+                {
+                    *preview = Some((key, tex));
+                }
+                if let Some((_, tex)) = preview {
+                    paint_fitted(&painter, tex, rect.shrink(10.0));
+                }
+            }
+            None => {
+                painter.text(rect.center(), egui::Align2::CENTER_CENTER, tl!("No picture chosen"), crate::theme::regular(13.0), t.text_faint);
+            }
+        }
+        ui.add_space(6.0);
+        if ui.button(tl!("Choose picture…")).clicked() {
+            d.pick = true;
+        }
+        return pad_buttons(ui, d);
+    }
     if !d.drawing {
         let l = ui.label(egui::RichText::new(crate::i18n::fmt(tl!("Type your {what}."), &[("what", what)])).color(t.text_muted));
         ui.add(
@@ -484,6 +603,88 @@ pub(crate) fn signature_pad(ui: &mut egui::Ui, t: &Tokens, d: &mut SigDraft, pre
     pad_buttons(ui, d)
 }
 
+/// A key for a picture's preview cache.
+pub(crate) fn picture_key(bytes: &[u8]) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut h);
+    format!("picture-{}-{:x}", bytes.len(), h.finish())
+}
+
+/// A picture as a texture at most `side` pixels on its longer side.
+pub(crate) fn picture_texture(ctx: &egui::Context, name: &str, bytes: &[u8], side: u32) -> Option<egui::TextureHandle> {
+    let (w, h, rgba) = pdfcraft_engine::preview_rgba(bytes, side)?;
+    let img = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+    Some(ctx.load_texture(name, img, egui::TextureOptions::LINEAR))
+}
+
+/// Draw `tex` as large as fits in `rect`, centred, keeping its proportions.
+pub(crate) fn paint_fitted(painter: &egui::Painter, tex: &egui::TextureHandle, rect: egui::Rect) {
+    let [w, h] = tex.size();
+    let k = (rect.width() / (w.max(1) as f32)).min(rect.height() / (h.max(1) as f32));
+    let size = vec2(w as f32, h as f32) * k;
+    painter.image(
+        tex.id(),
+        egui::Rect::from_center_size(rect.center(), size),
+        egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+        Color32::WHITE,
+    );
+}
+
+/// How an edit that places a signature, initials or stamp will look, drawn faintly where it
+/// will go (under the cursor while a placing tool is chosen). `picture` is the picture of an
+/// image signature or custom stamp.
+pub(crate) fn paint_ghost(ui: &egui::Ui, xf: &PageXform, info: &DocInfo, page: usize, edit: &Edit, picture: Option<&egui::TextureHandle>) {
+    let fade = 0.6;
+    let painter = ui.painter_at(xf.rect);
+    let rect_of = |r: [f64; 4]| xf.user_rect(info, page, [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]);
+    let point = |p: [f64; 2]| rect_of([p[0], p[1], p[0], p[1]]).min;
+    match edit {
+        Edit::AddAnnotation(a) => match &a.shape {
+            Shape::Signature { strokes } => {
+                let k = rect_of([0.0, 0.0, 1.0, 1.0]).width().max(0.5);
+                for s in strokes {
+                    painter.add(egui::Shape::line(
+                        s.iter().map(|p| point(*p)).collect(),
+                        Stroke::new((1.5 * k).max(1.0), Color32::BLACK.gamma_multiply(fade)),
+                    ));
+                }
+            }
+            Shape::TypedSignature { rect, contours } => {
+                let r = rect_of(*rect);
+                for c in contours {
+                    let pts: Vec<Pos2> = c.iter().map(|p| pos2(r.left() + p[0] as f32 * r.width(), r.bottom() - p[1] as f32 * r.height())).collect();
+                    painter.add(egui::Shape::closed_line(pts, Stroke::new(1.2, Color32::BLACK.gamma_multiply(fade))));
+                }
+            }
+            Shape::Stamp { rect, stamp, .. } => {
+                let r = rect_of(*rect);
+                let [cr, cg, cb] = stamp.color();
+                let c = Color32::from_rgb((cr * 255.0) as u8, (cg * 255.0) as u8, (cb * 255.0) as u8).gamma_multiply(fade);
+                painter.rect_filled(r, CornerRadius::same(4), Color32::WHITE.gamma_multiply(0.35));
+                painter.rect_stroke(r, CornerRadius::same(4), Stroke::new(2.0, c), egui::StrokeKind::Inside);
+                let size = (r.height() * 0.45).clamp(6.0, 64.0);
+                painter.text(r.center(), egui::Align2::CENTER_CENTER, stamp.label(), egui::FontId::proportional(size), c);
+            }
+            _ => {}
+        },
+        Edit::AddCustomStamp { rect, name, .. } => {
+            let r = rect_of(*rect);
+            match picture {
+                Some(tex) => {
+                    painter.image(tex.id(), r, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE.gamma_multiply(fade));
+                }
+                None => {
+                    let c = Color32::from_rgb(0x1a, 0x4d, 0xb3).gamma_multiply(fade);
+                    painter.rect_stroke(r, CornerRadius::same(4), Stroke::new(1.5, c), egui::StrokeKind::Inside);
+                    painter.text(r.center(), egui::Align2::CENTER_CENTER, name, egui::FontId::proportional(13.0), c);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 fn pad_buttons(ui: &mut egui::Ui, d: &mut SigDraft) -> (bool, bool) {
     ui.add_space(10.0);
     let (mut apply, mut cancel) = (false, false);
@@ -491,6 +692,7 @@ fn pad_buttons(ui: &mut egui::Ui, d: &mut SigDraft) -> (bool, bool) {
         if ui.button(tl!("Clear")).clicked() {
             d.strokes.clear();
             d.text.clear();
+            d.image = None;
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let ready = d.ready();
