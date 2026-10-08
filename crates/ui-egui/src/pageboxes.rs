@@ -193,7 +193,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
             ui.painter().text(
                 page.center_bottom() + vec2(0.0, 6.0),
                 egui::Align2::CENTER_TOP,
-                format!("Page {}", current + 1),
+                crate::i18n::fmt(tl!("Page {label}"), &[("label", &(current + 1).to_string())]),
                 theme::regular(11.0),
                 t.text_faint,
             );

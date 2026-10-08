@@ -214,15 +214,22 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
         w.fg_stroke.color = t.text;
     }
     v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, t.divider);
+    // Fields, check boxes, radio buttons, drop-downs and buttons keep a visible outline: on the
+    // white panels a borderless field or check box was invisible and a button read as text.
+    // (Menus, selectable rows and PdfCraft's own icon buttons draw no frame while idle.)
     v.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
-    v.widgets.inactive.bg_fill = t.field;
-    v.widgets.inactive.bg_stroke = Stroke::NONE;
+    // Check boxes, radio buttons and slider tracks: a light fill, so they show on white.
+    v.widgets.inactive.bg_fill = t.hover;
+    v.widgets.inactive.bg_stroke = Stroke::new(1.0, t.border);
+    v.slider_trailing_fill = true;
     v.widgets.hovered.weak_bg_fill = t.hover;
     v.widgets.hovered.bg_fill = t.hover;
-    v.widgets.hovered.bg_stroke = Stroke::NONE;
+    v.widgets.hovered.bg_stroke = Stroke::new(1.0, t.text_faint);
     v.widgets.active.weak_bg_fill = t.pressed;
     v.widgets.active.bg_fill = t.pressed;
+    v.widgets.active.bg_stroke = Stroke::new(1.0, t.accent);
     v.widgets.open.weak_bg_fill = t.hover;
+    v.widgets.open.bg_stroke = Stroke::new(1.0, t.border);
     // Crisper text at 100–150 % scaling (#76): glyphs sit on whole pixels instead of being
     // rendered at quarter-pixel offsets, which egui notes blurs them. In the light theme, a mild
     // gamma darkens the antialiased edges of dark text (egui's default is linear, which reads thin

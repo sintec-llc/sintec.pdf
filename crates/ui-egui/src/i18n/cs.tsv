@@ -140,3 +140,16 @@
 	Choose picture…	Vybrat obrázek…
 	Choose a picture of your signature	Vyberte obrázek podpisu
 	{file} is too large for a signature (at most {n} MB)	{file} je pro podpis příliš velký (nejvýše {n} MB)
+	Add {what}	Přidat: {what}
+	Use {what}	Použít: {what}
+	Remove saved {what}	Odstranit uložené: {what}
+	Place saved {what}	Umístit: {what}
+	By name at time, date	Jméno, čas, datum
+	Soon	Brzy
+	not available yet	zatím není k dispozici
+	some of its tools aren't available yet	některé nástroje zatím nejsou k dispozici
+	Tools marked Soon aren't available yet; the others work today.	Nástroje označené „Brzy“ zatím nejsou k dispozici, ostatní už fungují.
+signature	Type	Napsat
+	Save (⌘S)	Uložit (⌘S)
+	This link's action ({s}) isn't supported yet	Akce tohoto odkazu ({s}) zatím není podporována
+	Has JavaScript actions	Obsahuje akce JavaScriptu

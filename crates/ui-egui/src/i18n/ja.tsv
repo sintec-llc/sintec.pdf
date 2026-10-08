@@ -1900,3 +1900,16 @@
 	Choose picture…	画像を選択…
 	Choose a picture of your signature	署名の画像を選択
 	{file} is too large for a signature (at most {n} MB)	{file} は署名には大きすぎます（最大 {n} MB）
+	Add {what}	{what}を追加
+	Use {what}	{what}を使用
+	Remove saved {what}	保存した{what}を削除
+	Place saved {what}	保存した{what}を配置
+	By name at time, date	名前・時刻・日付
+	Soon	近日
+	not available yet	まだ使用できません
+	some of its tools aren't available yet	一部のツールはまだ使用できません
+	Tools marked Soon aren't available yet; the others work today.	「近日」と表示されたツールはまだ使用できません。その他は使用できます。
+signature	Type	入力
+	Save (⌘S)	保存 (⌘S)
+	This link's action ({s}) isn't supported yet	このリンクの動作（{s}）にはまだ対応していません
+	Has JavaScript actions	JavaScript の動作があります

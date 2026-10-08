@@ -39,7 +39,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     app.request_close_tab(i);
                 }
                 ui.add_space(4.0);
-                if widgets::ghost_button(ui, "plus", tl!("Open")).on_hover_text(tl!("Open a PDF (⌘O)")).clicked() {
+                if widgets::ghost_button(ui, "plus", tl!("Open")).on_hover_text(crate::i18n::keys(tl!("Open a PDF (⌘O)"))).clicked() {
                     app.open_dialog();
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -146,7 +146,7 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         if icons::button(ui, "printer", 32.0, false, tl!("Print (⌘P)")).clicked() {
                             app.run_command("print.dialog");
                         }
-                        if icons::button(ui, "save", 32.0, false, tl!("Save (M4)")).clicked() {
+                        if icons::button(ui, "save", 32.0, false, tl!("Save (⌘S)")).clicked() {
                             app.run_command("file.save");
                         }
                         if icons::button(ui, "info", 32.0, false, tl!("Document properties (⌘D)")).clicked() {
@@ -154,7 +154,9 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         }
                     });
                     ui.add_space(8.0);
-                    if widgets::search_box(ui, tl!("Find tools and commands"), 260.0).clicked() {
+                    // Narrower in a narrow window, so it never covers the mode tabs.
+                    let width = (ui.available_width() - 12.0).clamp(140.0, 260.0);
+                    if widgets::search_box(ui, tl!("Find tools and commands"), width).clicked() {
                         app.palette_open = true;
                     }
                 });
@@ -206,10 +208,10 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 }
                 ui.separator();
                 ui.label(egui::RichText::new(tl!("Page navigation")).color(t.text_faint).small());
-                if ui.add_enabled(!v.back.is_empty(), egui::Button::new(tl!("Previous view")).shortcut_text("⌘[")).clicked() {
+                if ui.add_enabled(!v.back.is_empty(), egui::Button::new(tl!("Previous view")).shortcut_text(crate::i18n::keys("⌘["))).clicked() {
                     v.view_history(false);
                 }
-                if ui.add_enabled(!v.forward.is_empty(), egui::Button::new(tl!("Next view")).shortcut_text("⌘]")).clicked() {
+                if ui.add_enabled(!v.forward.is_empty(), egui::Button::new(tl!("Next view")).shortcut_text(crate::i18n::keys("⌘]"))).clicked() {
                     v.view_history(true);
                 }
                 ui.separator();

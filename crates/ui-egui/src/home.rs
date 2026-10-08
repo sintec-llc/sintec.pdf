@@ -8,6 +8,9 @@ use crate::{LeftPanel, PdfCraftApp, icons, panels::human_size, widgets};
 
 const RECOMMENDED: [&str; 5] = ["organize", "comment", "form", "edit", "protect"];
 
+/// The height of the home screen's tool cards.
+const CARD_H: f32 = 120.0;
+
 pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -34,11 +37,17 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     ui.add_space(10.0);
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = vec2(14.0, 14.0);
+                        // One size for every card: wide enough for the longest (possibly
+                        // translated) title beside its icon, tall enough for three lines.
+                        let card_w = RECOMMENDED
+                            .iter()
+                            .filter_map(|id| catalog::group(id))
+                            .map(|g| ui.fonts_mut(|f| f.layout_no_wrap(tl!(g.label).to_owned(), theme::semibold(13.5), t.text)).size().x + 58.0)
+                            .fold(220.0_f32, f32::max)
+                            .min(300.0);
                         for id in RECOMMENDED {
                             let Some(g) = catalog::group(id) else { continue };
-                            // Wide enough for the (possibly translated) title beside its icon.
-                            let title = ui.fonts_mut(|f| f.layout_no_wrap(tl!(g.label).to_owned(), theme::semibold(13.5), t.text));
-                            let (rect, resp) = ui.allocate_exact_size(vec2((title.size().x + 58.0).clamp(190.0, 280.0), 104.0), Sense::click());
+                            let (rect, resp) = ui.allocate_exact_size(vec2(card_w, CARD_H), Sense::click());
                             resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!(g.label)));
                             let fill = if resp.hovered() { t.hover } else { t.card };
                             ui.painter().rect(rect, CornerRadius::same(10), fill, Stroke::new(1.0, t.divider), egui::StrokeKind::Inside);
@@ -50,8 +59,8 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                 .first()
                                 .map(|s| s.items.iter().take(3).map(|i| tl!(i.label)).collect::<Vec<_>>().join(" · "))
                                 .unwrap_or_default();
-                            // Two lines at most, so it never runs into "Use now".
-                            let galley = widgets::elided(ui, &blurb, theme::regular(11.5), t.text_muted, rect.width() - 28.0, 2);
+                            // Three lines at most, so it never runs into "Use now".
+                            let galley = widgets::elided(ui, &blurb, theme::regular(11.5), t.text_muted, rect.width() - 28.0, 3);
                             ui.painter().galley(rect.min + vec2(14.0, 46.0), galley, t.text_muted);
                             ui.painter().text(
                                 rect.left_bottom() + vec2(14.0, -14.0),
@@ -65,7 +74,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                 app.left_open = true;
                             }
                         }
-                        let (rect, resp) = ui.allocate_exact_size(vec2(170.0, 104.0), Sense::click());
+                        let (rect, resp) = ui.allocate_exact_size(vec2(card_w, CARD_H), Sense::click());
                         resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Open file")));
                         ui.painter().rect(
                             rect,

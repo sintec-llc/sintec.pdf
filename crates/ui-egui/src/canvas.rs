@@ -1986,7 +1986,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     match clicked_link {
         Some(LinkTarget::Page(p)) => view.go_to_page(p),
         Some(LinkTarget::Uri(u)) => app.request_document_url(&u, crate::LinkOrigin::Link),
-        Some(LinkTarget::Other(s)) => app.notify_fmt("{s} actions run in the JavaScript engine (M6)", &[("s", &s)]),
+        Some(LinkTarget::Other(s)) => app.notify_fmt("This link's action ({s}) isn't supported yet", &[("s", &s)]),
         None => {}
     }
     if tool == QuickTool::Crop && cropped {

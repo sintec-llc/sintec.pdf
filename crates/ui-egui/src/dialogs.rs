@@ -1037,7 +1037,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     ("Delete", tl!("Delete selected pages (Organize)")),
                     ("⌘A", tl!("Select all pages (Organize)")),
                 ] {
-                    rows.push((tl!(k).to_string(), tl!(v).to_string()));
+                    rows.push((crate::i18n::keys(tl!(k)).into_owned(), crate::i18n::keys(tl!(v)).into_owned()));
                 }
                 egui::ScrollArea::vertical().max_height(460.0).show(ui, |ui| {
                     egui::Grid::new("keys").num_columns(2).spacing([24.0, 6.0]).show(ui, |ui| {

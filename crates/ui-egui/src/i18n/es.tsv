@@ -1923,3 +1923,16 @@
 	Choose picture…	Elegir imagen…
 	Choose a picture of your signature	Elige una imagen de tu firma
 	{file} is too large for a signature (at most {n} MB)	{file} es demasiado grande para una firma (como máximo {n} MB)
+	Add {what}	Añadir {what}
+	Use {what}	Usar {what}
+	Remove saved {what}	Quitar {what} guardada
+	Place saved {what}	Colocar {what} guardada
+	By name at time, date	Nombre, hora, fecha
+	Soon	Pronto
+	not available yet	aún no disponible
+	some of its tools aren't available yet	algunas herramientas aún no están disponibles
+	Tools marked Soon aren't available yet; the others work today.	Las herramientas marcadas como Pronto aún no están disponibles; las demás ya funcionan.
+signature	Type	Escribir
+	Save (⌘S)	Guardar (⌘S)
+	This link's action ({s}) isn't supported yet	La acción de este enlace ({s}) aún no es compatible
+	Has JavaScript actions	Tiene acciones de JavaScript

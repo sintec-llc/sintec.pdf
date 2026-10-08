@@ -80,7 +80,7 @@ impl Default for MeasureView {
             real_distance: 1.0,
             unit: "in".into(),
             precision: 2,
-            name: "Drawing scale".into(),
+            name: tl!("Drawing scale").into(),
             whole_page: true,
             rect: [0.0, 0.0, 100.0, 100.0],
             label: String::new(),
@@ -283,7 +283,7 @@ fn panel_body(app: &mut PdfCraftApp, ui: &mut egui::Ui, _t: &Tokens) {
         return;
     };
     let mut tool = None;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         for (label, value) in [("Distance", Tool::Distance), ("Perimeter", Tool::Perimeter), ("Area", Tool::Area)] {
             if ui.selectable_label(app.quick_tool == QuickTool::Measure(value), tl!(label)).clicked() {
                 tool = Some(value);
@@ -323,22 +323,20 @@ fn panel_body(app: &mut PdfCraftApp, ui: &mut egui::Ui, _t: &Tokens) {
     } else {
         ui.label(tl!("Click the first point to begin."));
     }
-    ui.horizontal(|ui| {
-        ui.label(tl!("Label"));
-        ui.add(egui::TextEdit::singleline(&mut state.label).desired_width(130.0).char_limit(128));
-    });
+    ui.label(tl!("Label"));
+    ui.add(egui::TextEdit::singleline(&mut state.label).desired_width(f32::INFINITY).char_limit(128));
     ui.separator();
     ui.checkbox(&mut state.snap_enabled, tl!("Snap to drawing"));
     if state.snap_enabled {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.checkbox(&mut state.snaps.endpoints, tl!("Endpoints"));
             ui.checkbox(&mut state.snaps.midpoints, tl!("Midpoints"));
-        });
-        ui.horizontal(|ui| {
             ui.checkbox(&mut state.snaps.intersections, tl!("Intersections"));
             ui.checkbox(&mut state.snaps.paths, tl!("Paths"));
         });
-        ui.add(egui::Slider::new(&mut state.sensitivity, 1.0..=20.0).text(tl!("Sensitivity")));
+        ui.label(tl!("Sensitivity"));
+        ui.spacing_mut().slider_width = (ui.available_width() - 64.0).max(60.0);
+        ui.add(egui::Slider::new(&mut state.sensitivity, 1.0..=20.0));
     }
     ui.separator();
     ui.label(tl!("Drawing scale"));
@@ -350,7 +348,10 @@ fn panel_body(app: &mut PdfCraftApp, ui: &mut egui::Ui, _t: &Tokens) {
     ui.horizontal(|ui| {
         ui.label(tl!("Unit"));
         ui.add(egui::TextEdit::singleline(&mut state.unit).desired_width(64.0).char_limit(12));
-        ui.add(egui::DragValue::new(&mut state.precision).range(0..=6).prefix(format!("{} ", tl!("Decimals"))));
+    });
+    ui.horizontal(|ui| {
+        ui.label(tl!("Decimals"));
+        ui.add(egui::DragValue::new(&mut state.precision).range(0..=6));
     });
     if ui.button(tl!("Calibrate from two points")).clicked() {
         tool = Some(Tool::Calibrate);
@@ -364,10 +365,8 @@ fn panel_body(app: &mut PdfCraftApp, ui: &mut egui::Ui, _t: &Tokens) {
             }
         }
     }
-    ui.horizontal(|ui| {
-        ui.label(tl!("Viewport"));
-        ui.add(egui::TextEdit::singleline(&mut state.name).desired_width(130.0).char_limit(128));
-    });
+    ui.label(tl!("Viewport"));
+    ui.add(egui::TextEdit::singleline(&mut state.name).desired_width(f32::INFINITY).char_limit(128));
     let apply = ui.add_enabled(doc.allows_annotation(), egui::Button::new(tl!("Apply scale"))).clicked();
     if let Some(error) = &state.error {
         ui.colored_label(Color32::from_rgb(190, 50, 50), error);

@@ -12,6 +12,10 @@ const CONTEXT: usize = 36;
 
 pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, view: &mut DocView, pages: usize) {
     let searched = view.texts.len() + view.text_failed.len();
+    // Opened from the side rail before any search: start one here, ready to type.
+    if view.find.is_none() {
+        view.open_find();
+    }
     let Some(find) = view.find.as_mut() else { return };
     find.in_panel = true;
     let l = ui.label(egui::RichText::new(tl!("What word or phrase would you like to search for?")).color(t.text_muted));
