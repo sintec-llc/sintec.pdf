@@ -359,6 +359,10 @@ pub struct PdfCraftApp {
     /// A print job running in the background (Windows renders the sheets first): the printer's
     /// name and the result once it is done.
     pub print_run: Option<print_ui::PrintRun>,
+    /// A «Преобразовать в PDF» conversion running in the background: the saved PDF's path and
+    /// the skipped files, or the error.
+    #[allow(clippy::type_complexity)]
+    pub convert_run: Option<std::sync::Arc<std::sync::Mutex<Option<Result<(String, Vec<(String, String)>), String>>>>>,
     /// Document Properties ▸ Description fields being edited: (document, Title/Author/Subject/Keywords).
     pub props_draft: Option<(DocId, [String; 4])>,
     /// Document Properties ▸ Initial View (and reading options) being edited.
@@ -572,6 +576,7 @@ impl PdfCraftApp {
             save_override: None,
             print_file_override: None,
             print_run: None,
+            convert_run: None,
             props_draft: None,
             view_draft: None,
             requests: Default::default(),
@@ -1394,6 +1399,8 @@ impl eframe::App for PdfCraftApp {
         self.poll_export();
         self.poll_ocr();
         self.poll_print();
+        #[cfg(not(target_arch = "wasm32"))]
+        self.poll_convert();
         self.poll_action();
         self.process_file_requests();
         #[cfg(not(target_arch = "wasm32"))]

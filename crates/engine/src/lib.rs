@@ -21,6 +21,7 @@ pub mod export;
 pub mod js;
 pub mod links;
 pub mod ocr;
+pub mod office;
 pub mod xfa;
 
 pub use pdfcraft_organize::{BoxSpec, PageBox, SplitBy, split_ranges};

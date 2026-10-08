@@ -111,24 +111,51 @@ impl PdfCraftApp {
             return;
         }
         let Some(out) = convert::output_path(&paths) else { return };
-        let done = match convert::convert_files(&self.session, &paths) {
-            Ok(d) => d,
-            Err(e) => {
-                self.notify_fmt("Could not convert to PDF: {e}", &[("e", &e)]);
-                return;
+        // Office documents take seconds each: convert on a worker thread (in a session of its
+        // own) and open the result when it is done.
+        let result = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let slot = result.clone();
+        let work = move || {
+            let session = pdfcraft_engine::Session::new();
+            let target = out.to_string_lossy().into_owned();
+            let done = convert::convert_files(&session, &paths)
+                .and_then(|d| crate::editing::write_atomically(&target, &d.bytes).map(|()| (target, d.skipped)).map_err(|e| e.to_string()));
+            if let Ok(mut s) = slot.lock() {
+                *s = Some(done);
             }
         };
-        let target = out.to_string_lossy().into_owned();
-        if let Err(e) = crate::editing::write_atomically(&target, &done.bytes) {
-            self.notify_fmt("Could not save: {e}", &[("e", &e.to_string())]);
-            return;
-        }
-        self.open_path(&target);
-        if done.skipped.is_empty() {
-            self.notify_fmt("Saved the PDF to {path}", &[("path", &target)]);
+        if self.run_inline {
+            work();
         } else {
-            let list = done.skipped.iter().map(|(n, e)| format!("{n} ({e})")).collect::<Vec<_>>().join("; ");
-            self.notify_fmt("Saved the PDF to {path}; skipped: {list}", &[("path", &target), ("list", &list)]);
+            std::thread::Builder::new().name("sintec-convert".into()).spawn(work).ok();
+        }
+        self.notify_tr("Converting to PDF…");
+        self.convert_run = Some(result);
+        self.poll_convert();
+    }
+
+    /// Open the converted PDF once the worker is done.
+    pub(crate) fn poll_convert(&mut self) {
+        let Some(run) = self.convert_run.as_ref() else { return };
+        let done = run.lock().ok().and_then(|mut r| r.take());
+        let Some(done) = done else {
+            if let Some(ctx) = &self.ctx {
+                ctx.request_repaint_after(std::time::Duration::from_millis(200));
+            }
+            return;
+        };
+        self.convert_run = None;
+        match done {
+            Ok((target, skipped)) => {
+                self.open_path(&target);
+                if skipped.is_empty() {
+                    self.notify_fmt("Saved the PDF to {path}", &[("path", &target)]);
+                } else {
+                    let list = skipped.iter().map(|(n, e)| format!("{n} ({e})")).collect::<Vec<_>>().join("; ");
+                    self.notify_fmt("Saved the PDF to {path}; skipped: {list}", &[("path", &target), ("list", &list)]);
+                }
+            }
+            Err(e) => self.notify_fmt("Could not convert to PDF: {e}", &[("e", &e)]),
         }
     }
     /// Convert a non-PDF file (image, text) into a new tab. Returns `None` when `bytes` is not

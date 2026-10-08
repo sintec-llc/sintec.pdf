@@ -75,10 +75,11 @@
         <RegistryValue Root="HKLM" Key="Software\Sintec.PDF\Capabilities\FileAssociations" Name=".pdf" Value="SintecPDF.Document" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\RegisteredApplications" Name="Sintec.PDF" Value="Software\Sintec.PDF\Capabilities" Type="string" />
 
-        <!-- Explorer context menu «Преобразовать в PDF» on PDFs, images and text files: the
-             selected files become one PDF next to them (the app's convert-to-pdf option). Player
-             lets it work on any number of files; Windows starts one process per file and the
-             app pools them. No file type's default is changed. -->
+        <!-- Explorer context menu «Преобразовать в PDF» on PDFs, images, text files and Office
+             documents: the selected files become one PDF next to them (the app's convert-to-pdf
+             option; Office documents go through the installed Office). Player lets it work on
+             any number of files; Windows starts one process per file and the app pools them. No
+             file type's default is changed. -->
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
@@ -167,6 +168,78 @@
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.yaml\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.yaml\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.yaml\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.doc\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.doc\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.doc\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.doc\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.docx\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.docx\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.docx\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.docx\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.docm\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.docm\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.docm\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.docm\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.dot\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.dot\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.dot\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.dot\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.dotx\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.dotx\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.dotx\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.dotx\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.rtf\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.rtf\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.rtf\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.rtf\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.odt\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.odt\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.odt\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.odt\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xls\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xls\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xls\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xls\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsx\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsx\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsx\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsx\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsm\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsm\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsm\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsm\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsb\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsb\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsb\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.xlsb\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ods\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ods\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ods\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ods\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ppt\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ppt\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ppt\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ppt\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pptx\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pptx\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pptx\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pptx\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pptm\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pptm\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pptm\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pptm\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pps\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pps\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pps\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pps\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ppsx\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ppsx\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ppsx\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.ppsx\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.odp\shell\SintecPDF.ConvertToPdf" Value="Преобразовать в PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.odp\shell\SintecPDF.ConvertToPdf" Name="MultiSelectModel" Value="Player" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.odp\shell\SintecPDF.ConvertToPdf" Name="Icon" Value="[#PdfcraftExe],0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.odp\shell\SintecPDF.ConvertToPdf\command" Value="&quot;[#PdfcraftExe]&quot; --convert-to-pdf &quot;%1&quot;" Type="string" />
       </Component>
 
       <!-- Shortcuts (#143) are plain links to sintec-pdf.exe, not advertised MSI shortcuts: advertised

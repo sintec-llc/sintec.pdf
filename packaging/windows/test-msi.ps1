@@ -54,9 +54,9 @@ Assert-Equal $app[0] 'PdfcraftExe' 'Shortcut executable key path'
 $scope = Read-Row 'SELECT `Value` FROM `Property` WHERE `Property` = ''ALLUSERS''' 1
 Assert-Equal $scope[0] '1' 'Per-machine shortcut scope'
 
-# Explorer «Преобразовать в PDF» on PDFs, images and text files, for any number of files; the app
+# Explorer «Преобразовать в PDF» on PDFs, images, text files and Office documents, for any number of files; the app
 # component owns every registry row so uninstall removes it. No default association is changed.
-foreach ($ext in @('pdf', 'png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'jp2', 'j2k', 'jpx', 'txt', 'text', 'md', 'csv', 'log', 'ini', 'cfg', 'json', 'xml', 'yml', 'yaml')) {
+foreach ($ext in @('pdf', 'png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'jp2', 'j2k', 'jpx', 'txt', 'text', 'md', 'csv', 'log', 'ini', 'cfg', 'json', 'xml', 'yml', 'yaml', 'doc', 'docx', 'docm', 'dot', 'dotx', 'rtf', 'odt', 'xls', 'xlsx', 'xlsm', 'xlsb', 'ods', 'ppt', 'pptx', 'pptm', 'pps', 'ppsx', 'odp')) {
   $key = 'Software\Classes\SystemFileAssociations\.' + $ext + '\shell\SintecPDF.ConvertToPdf'
   $menu = Read-Row ('SELECT `Value`, `Component_`, `Root` FROM `Registry` WHERE `Key` = ''' + $key + ''' AND `Name` IS NULL') 3
   Assert-Equal $menu[0] 'Преобразовать в PDF' "$ext context menu label"

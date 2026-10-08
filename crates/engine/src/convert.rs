@@ -1,5 +1,6 @@
 //! Convert to PDF (Windows Explorer ▸ «Преобразовать в PDF»): turn a selection of files (images,
-//! text files, PDFs) into one PDF, in natural name order, saved next to them. Files that can't be
+//! text files, Office documents, PDFs) into one PDF, in natural name order, saved next to them.
+//! Office documents go through the installed office suite ([`crate::office`]). Files that can't be
 //! converted are skipped and reported, not fatal.
 
 use std::path::{Path, PathBuf};
@@ -13,7 +14,7 @@ pub const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "tif", "tiff", "gif", "b
 pub const TEXT_EXTS: &[&str] = &["txt", "text", "md", "csv", "log", "ini", "cfg", "json", "xml", "yml", "yaml"];
 /// Every type the context-menu entry is offered for.
 pub fn supported_exts() -> impl Iterator<Item = &'static str> {
-    std::iter::once("pdf").chain(IMAGE_EXTS.iter().copied()).chain(TEXT_EXTS.iter().copied())
+    std::iter::once("pdf").chain(IMAGE_EXTS.iter().copied()).chain(TEXT_EXTS.iter().copied()).chain(crate::office::exts())
 }
 
 /// The result of a conversion.
@@ -96,9 +97,22 @@ pub fn convert_files(session: &Session, paths: &[PathBuf]) -> Result<Converted, 
     let mut sorted: Vec<&PathBuf> = paths.iter().collect();
     sorted.sort_by(|a, b| natural_cmp(&name(a), &name(b)));
     sorted.dedup();
+    // Office documents first, in one batch (each Office application starts once).
+    let office_inputs: Vec<(crate::office::Kind, PathBuf)> =
+        sorted.iter().filter_map(|p| crate::office::kind_for(&ext(p)).map(|k| (k, (*p).clone()))).collect();
+    let mut office_done = crate::office::convert(&office_inputs);
     let mut sources: Vec<(String, Arc<Vec<u8>>)> = Vec::new();
     let mut skipped = Vec::new();
     for p in sorted {
+        if crate::office::kind_for(&ext(p)).is_some() {
+            let n = name(p);
+            match office_done.iter().position(|(q, _)| q == p).map(|i| office_done.swap_remove(i).1) {
+                Some(Ok(b)) => sources.push((n, Arc::new(b))),
+                Some(Err(e)) => skipped.push((n, e)),
+                None => skipped.push((n, "not converted".to_string())),
+            }
+            continue;
+        }
         let n = name(p);
         let bytes = match std::fs::read(p) {
             Ok(b) => b,
@@ -116,7 +130,7 @@ pub fn convert_files(session: &Session, paths: &[PathBuf]) -> Result<Converted, 
             let title = p.file_stem().map_or_else(|| n.clone(), |s| s.to_string_lossy().into_owned());
             session.create_from_text_file(&title, &bytes).map_err(|e| e.to_string())
         } else {
-            Err("this file type can't be converted to PDF yet".to_string())
+            Err("this file type can't be converted to PDF".to_string())
         };
         match one {
             Ok(b) => sources.push((n, b)),
@@ -152,6 +166,21 @@ pub fn convert_files(session: &Session, paths: &[PathBuf]) -> Result<Converted, 
 mod tests {
     use super::*;
 
+    /// The installer offers «Преобразовать в PDF» for exactly the types the converter handles.
+    #[test]
+    fn the_installer_menu_matches_the_supported_types() {
+        let wxs = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../packaging/windows/pdfcraft.wxs")).unwrap();
+        let mut menu: Vec<String> = wxs
+            .lines()
+            .filter(|l| l.contains("SintecPDF.ConvertToPdf\\command"))
+            .filter_map(|l| l.split("SystemFileAssociations\\.").nth(1)?.split('\\').next().map(str::to_string))
+            .collect();
+        let mut supported: Vec<String> = supported_exts().map(str::to_string).collect();
+        menu.sort();
+        supported.sort();
+        assert_eq!(menu, supported);
+    }
+
     #[test]
     fn names_sort_like_people_number_them() {
         let mut v = vec!["scan10.jpg", "Scan2.jpg", "scan1.jpg", "notes.txt", "scan02.jpg"];
@@ -180,7 +209,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let s = Session::new();
-        // A Russian text file in Windows-1251, an image, a two-page PDF and a file that can't be converted.
+        // A Russian text file in Windows-1251, an image, a two-page PDF and a broken Word file.
         let cp1251: Vec<u8> = "Привет, мир".chars().map(|c| if c.is_ascii() { c as u8 } else { (c as u32 - 0x410 + 0xC0) as u8 }).collect();
         std::fs::write(dir.join("1 заметка.txt"), &cp1251).unwrap();
         let png = crate::export::encode_png(2, 2, &[255; 16]).unwrap();
