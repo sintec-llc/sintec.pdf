@@ -49,6 +49,20 @@ fn small_pages_next_to_large_sheets_get_sharp_thumbnails() {
 }
 
 #[test]
+fn the_page_grid_renders_each_page_as_large_as_its_cell_draws_it() {
+    // The page grid (Organize pages, and the review after Convert to PDF): a small page next to
+    // a large sheet is drawn 146 pt wide in its cell, and must be rendered for that.
+    let mut h = mixed_sizes();
+    h.state_mut().set_option("panel", "none").unwrap();
+    assert!(h.state_mut().execute("page.organize"));
+    settle(&mut h);
+    let ppp = h.ctx.pixels_per_point();
+    let small = h.state().views[0].thumb(0).expect("rendered");
+    assert!(small.size()[0] as f32 >= (190.0 - 44.0) * ppp * 0.95, "grid thumbnail is {:?} pixels", small.size());
+    assert!(h.state().views[0].thumb(1).is_some());
+}
+
+#[test]
 fn the_page_menu_rotates_and_inserts_blank_pages() {
     let mut h = mixed_sizes();
     let id = h.state().views[0].id;
