@@ -1899,3 +1899,6 @@ date	December	декабря
 	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	Форма XFA: её поля и данные XFA синхронизированы, поэтому другие программы просмотра показывают то, что вы заполнили.
 @plural	{n} page|{n} pages	{n} страница|{n} страницы|{n} страниц
 @plural	{n} field|{n} fields	{n} поле|{n} поля|{n} полей
+	Printing to {printer}…	Печать на {printer}…
+	A print job is already being prepared	Задание печати уже готовится
+	Check updates	Получить обновления

@@ -95,3 +95,12 @@ fn nothing_is_asked_until_the_user_checks() {
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     h.get_by_label_contains("Sintec.PDF 99.0.0 is available");
 }
+
+#[test]
+fn the_top_bar_button_checks_for_updates() {
+    let mut h = harness(Ok("v99.0.0"));
+    h.run_steps(3);
+    h.get_by_label("Check updates").click();
+    settle(&mut h);
+    h.get_by_label_contains("99.0.0");
+}

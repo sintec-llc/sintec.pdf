@@ -1864,3 +1864,6 @@
 	{n} measurements use an unsupported format and are left out.	{n} 件の測定は未対応の形式のため除外されました。
 	This area has too many overlapping paths; intersection snapping is limited.	この領域は重なるパスが多すぎるため、交点へのスナップを制限します。
 	This measurement needs at least {n} points.	この測定には少なくとも{n}点が必要です。
+	Printing to {printer}…	{printer} で印刷中…
+	A print job is already being prepared	印刷ジョブを準備しています
+	Check updates	アップデートを確認

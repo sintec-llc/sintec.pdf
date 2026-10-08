@@ -54,10 +54,13 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     if icons::button(ui, "circle-help", 28.0, false, tl!("Keyboard shortcuts")).clicked() {
                         app.dialog = Some(Dialog::Shortcuts);
                     }
-                    // One click to the community, from anywhere in the app.
-                    if widgets::ghost_button(ui, "code-xml", "GitHub").on_hover_text(pdfcraft_engine::links::GITHUB).clicked() {
-                        app.execute("help.github");
+                    // Updates are one click away from anywhere in the app (Help ▸ Check for updates),
+                    // with the running version beside the button.
+                    if widgets::ghost_button(ui, "", tl!("Check updates")).on_hover_text(pdfcraft_engine::links::APP_PAGE).clicked() {
+                        app.execute("help.check_updates");
                     }
+                    let t = theme::Tokens::get(ui.ctx());
+                    ui.label(egui::RichText::new(concat!("v", env!("CARGO_PKG_VERSION"))).color(t.text_muted).font(theme::regular(12.5)));
                 });
             });
         });

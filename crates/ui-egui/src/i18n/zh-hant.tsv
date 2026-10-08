@@ -1857,3 +1857,6 @@
 	{n} measurements use an unsupported format and are left out.	{n} 個測量使用了不支援的格式，已被排除。
 	This area has too many overlapping paths; intersection snapping is limited.	此區域有太多重疊路徑；交點吸附受到限制。
 	This measurement needs at least {n} points.	此測量至少需要 {n} 個點。
+	Printing to {printer}…	正在列印到 {printer}…
+	A print job is already being prepared	已有列印工作正在準備
+	Check updates	檢查更新
