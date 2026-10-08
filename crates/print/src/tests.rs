@@ -193,6 +193,47 @@ fn spooler_arguments_and_printer_list() {
 }
 
 #[test]
+fn windows_printer_list_and_job_description() {
+    let out = "0\tMicrosoft Print to PDF\r\n1\tKyocera ECOSYS M4132idn\r\n0\tПринтер бухгалтерии\r\n\r\n0\t\r\n";
+    assert_eq!(
+        spool::parse_win_printers(out),
+        [
+            spool::Printer { name: "Microsoft Print to PDF".into(), default: false },
+            spool::Printer { name: "Kyocera ECOSYS M4132idn".into(), default: true },
+            spool::Printer { name: "Принтер бухгалтерии".into(), default: false },
+        ]
+    );
+    let job = Job {
+        printer: Some("Office \"Laser\"".into()),
+        copies: 2,
+        collate: true,
+        duplex: Duplex::ShortEdge,
+        grayscale: true,
+        title: "Счёт.pdf".into(),
+    };
+    let json = spool::win_job_json(&job, &[("C:\\tmp\\sheet-00000.png".into(), 595.0, 842.0)], None);
+    assert_eq!(
+        json,
+        r#"{"printer":"Office \"Laser\"","title":"Счёт.pdf","copies":2,"collate":true,"duplex":"Horizontal","color":false,"file":null,"pages":[{"file":"C:\\tmp\\sheet-00000.png","w":595,"h":842}]}"#
+    );
+    let default = spool::win_job_json(&Job::default(), &[], Some("C:\\out.pdf"));
+    assert!(
+        default.starts_with(r#"{"printer":null,"#) && default.contains(r#""duplex":"Simplex""#) && default.contains(r#""file":"C:\\out.pdf""#),
+        "{default}"
+    );
+}
+
+#[test]
+fn powershell_scripts_are_base64_utf16() {
+    // The value PowerShell's own docs give for `dir "c:\program files"`.
+    assert_eq!(spool::powershell_encoded("dir \"c:\\program files\" "), "ZABpAHIAIAAiAGMAOgBcAHAAcgBvAGcAcgBhAG0AIABmAGkAbABlAHMAIgAgAA==");
+    for s in ["", "a", "ab", "abc"] {
+        assert_eq!(spool::powershell_encoded(s).len() % 4, 0, "{s:?}");
+    }
+    assert!(spool::WIN_PRINT_SCRIPT.contains("SINTEC_PRINT_JOB") && spool::WIN_PRINT_SCRIPT.contains("StandardPrintController"));
+}
+
+#[test]
 fn lpstat_output_is_untranslated() {
     // A localized lpstat (here Polish) is unreadable to parse_lpstat...
     assert!(parse_lpstat("drukarka Office_Laser jest bezczynna.\ndomyślny cel systemowy: Office_Laser\n").is_empty());

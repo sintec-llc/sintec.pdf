@@ -2,12 +2,37 @@
 //! pages to print (all, current, range with labels; odd/even, reverse); page sizing & handling
 //! (Size, Poster, Multiple, Booklet); orientation; comments & forms; and a live preview of the
 //! sheets. Printing sends the print-ready PDF to the system spooler; "Save as PDF" writes it.
+//! On Windows the sheets are rendered to images in the background and printed through the .NET
+//! print system (`spool::submit_sheets`).
 
 use egui::{Color32, Pos2, Rect, Stroke, pos2, vec2};
 use pdfcraft_engine::print::{self, Binding, BookletSubset, Content, Layout, Orientation, PAPERS, PageOrder, SizeMode, Subset, spool};
 
 use crate::theme::{self, Tokens};
 use crate::{PdfCraftApp, widgets};
+
+/// A print job running in the background: the printer's name and the result once it is done.
+pub struct PrintRun {
+    pub printer: String,
+    pub result: std::sync::Arc<std::sync::Mutex<Option<Result<String, String>>>>,
+}
+
+/// Render every sheet of a print-ready PDF at [`spool::RASTER_DPI`] for an image spooler.
+pub fn raster_sheets(bytes: Vec<u8>) -> Result<Vec<spool::RasterSheet>, String> {
+    let bytes = std::sync::Arc::new(bytes);
+    let info = pdfcraft_render::inspect(bytes.clone(), None).map_err(|e| e.to_string())?;
+    let mut r = pdfcraft_render::PageRenderer::new(bytes, pdfcraft_render::RenderConfig::default());
+    let mut sheets = Vec::with_capacity(info.pages.len());
+    for (page, p) in info.pages.iter().enumerate() {
+        let shot = r.render(pdfcraft_render::RenderRequest { page, scale: spool::RASTER_DPI / 72.0, ..Default::default() });
+        if let Some(e) = shot.error {
+            return Err(e);
+        }
+        let png = pdfcraft_engine::export::encode_png(shot.width, shot.height, &shot.rgba)?;
+        sheets.push(spool::RasterSheet { png, width_pt: p.width, height_pt: p.height });
+    }
+    Ok(sheets)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Which {
@@ -84,7 +109,8 @@ impl Default for PrintDraft {
             cut_marks: true,
             orientation: Orientation::Auto,
             content: Content::DocumentAndMarkups,
-            paper: 0,
+            // A4: the standard paper outside North America (US Letter stays one click away).
+            paper: PAPERS.iter().position(|p| p.0 == "A4").unwrap_or(0),
             sheet: 0,
             current_page: 0,
         }
@@ -133,6 +159,24 @@ impl PrintDraft {
 }
 
 impl PdfCraftApp {
+    /// Report a background print job once it is done.
+    pub(crate) fn poll_print(&mut self) {
+        let Some(run) = self.print_run.as_ref() else { return };
+        let done = run.result.lock().ok().and_then(|mut r| r.take());
+        let Some(done) = done else {
+            if let Some(ctx) = &self.ctx {
+                ctx.request_repaint_after(std::time::Duration::from_millis(200));
+            }
+            return;
+        };
+        let printer = run.printer.clone();
+        self.print_run = None;
+        match done {
+            Ok(_) => self.notify(crate::i18n::fmt(tl!("Sent to {printer}"), &[("printer", &printer)])),
+            Err(e) => self.notify_error(e),
+        }
+    }
+
     pub fn open_print(&mut self) {
         let Some((i, _)) = self.active_ids() else { return };
         let printers = spool::printers();
@@ -164,6 +208,35 @@ impl PdfCraftApp {
             }
         };
         match self.print_draft.printer.clone() {
+            Some(printer) if spool::NEEDS_RASTER => {
+                if self.print_run.is_some() {
+                    self.notify_tr("A print job is already being prepared");
+                    return false;
+                }
+                let job = self.print_draft.job(&name);
+                let to_file = self.print_file_override.clone().map(std::path::PathBuf::from);
+                let result = std::sync::Arc::new(std::sync::Mutex::new(None));
+                let slot = result.clone();
+                let work = move || {
+                    let out =
+                        raster_sheets(bytes).and_then(|sheets| spool::submit_sheets_to(&sheets, &job, to_file.as_deref()).map_err(|e| e.to_string()));
+                    if let Ok(mut s) = slot.lock() {
+                        *s = Some(out);
+                    }
+                };
+                #[cfg(not(target_arch = "wasm32"))]
+                if self.run_inline {
+                    work();
+                } else {
+                    std::thread::Builder::new().name("sintec-print".into()).spawn(work).ok();
+                }
+                #[cfg(target_arch = "wasm32")]
+                work();
+                self.notify(crate::i18n::fmt(tl!("Printing to {printer}…"), &[("printer", &printer)]));
+                self.print_run = Some(PrintRun { printer, result });
+                self.poll_print();
+                true
+            }
             Some(printer) => match spool::submit(&bytes, &self.print_draft.job(&name)) {
                 Ok(msg) => {
                     self.notify(if msg.is_empty() {

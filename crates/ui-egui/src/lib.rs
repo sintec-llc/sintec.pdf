@@ -353,6 +353,12 @@ pub struct PdfCraftApp {
     pub close_request: Option<CloseRequest>,
     /// Save to this path instead of asking (tests and automation).
     pub save_override: Option<String>,
+    /// Print through the driver into this file instead of paper (tests, with a file-writing
+    /// printer such as Microsoft Print to PDF).
+    pub print_file_override: Option<String>,
+    /// A print job running in the background (Windows renders the sheets first): the printer's
+    /// name and the result once it is done.
+    pub print_run: Option<print_ui::PrintRun>,
     /// Document Properties ▸ Description fields being edited: (document, Title/Author/Subject/Keywords).
     pub props_draft: Option<(DocId, [String; 4])>,
     /// Document Properties ▸ Initial View (and reading options) being edited.
@@ -564,6 +570,8 @@ impl PdfCraftApp {
             os_events: None,
             close_request: None,
             save_override: None,
+            print_file_override: None,
+            print_run: None,
             props_draft: None,
             view_draft: None,
             requests: Default::default(),
@@ -1385,6 +1393,7 @@ impl eframe::App for PdfCraftApp {
         self.process_pending_edits();
         self.poll_export();
         self.poll_ocr();
+        self.poll_print();
         self.poll_action();
         self.process_file_requests();
         #[cfg(not(target_arch = "wasm32"))]

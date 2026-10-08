@@ -1,5 +1,4 @@
-//! Project links: the GitHub button is one click away everywhere; Help menu, About dialog and
-//! home screen open the Sintec.PDF repository and its releases. No ArtCraft marks are shown (the
+//! Project links: Help menu, About dialog and home screen open the Sintec.PDF repository and its releases. No ArtCraft marks are shown (the
 //! upstream brand licence requires forks to drop them).
 
 use egui_kittest::Harness;
@@ -18,11 +17,10 @@ fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, P
 }
 
 #[test]
-fn github_button_in_the_top_bar_opens_the_repository() {
-    let mut h = harness(|_| {});
-    h.get_by_label("GitHub").click();
-    h.run_steps(2);
-    assert_eq!(h.state().last_opened_url.as_deref(), Some(links::GITHUB));
+fn the_top_bar_checks_for_updates_instead_of_linking_to_github() {
+    let h = harness(|_| {});
+    h.get_by_label("Check updates");
+    assert!(h.query_by_label("GitHub").is_none(), "no GitHub button in the top bar");
     assert_eq!(links::GITHUB, "https://github.com/sintec-llc/sintec.pdf");
 }
 

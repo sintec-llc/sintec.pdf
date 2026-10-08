@@ -1887,3 +1887,6 @@
 	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA 表单：字段与 XFA 数据保持同步，以便其他阅读器显示您填写的内容。
 @plural	{n} page|{n} pages	{n} 页
 @plural	{n} field|{n} fields	{n} 个字段
+	Printing to {printer}…	正在打印到 {printer}…
+	A print job is already being prepared	已有打印任务正在准备
+	Check updates	检查更新
