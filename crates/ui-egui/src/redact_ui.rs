@@ -31,11 +31,42 @@ impl Default for RedactPrefs {
 }
 
 impl RedactPrefs {
+    /// «Маска»: a white box and no overlay text. Applied like any redaction: what is under the
+    /// area is removed from the file and the white box is drawn into the page.
+    pub fn white_mask() -> Self {
+        Self { fill: Some([1.0, 1.0, 1.0]), ..Self::default() }
+    }
+}
+
+/// Redaction box colours: white (a mask) first, then the comment colours.
+const REDACT_SWATCHES: [(&str, Rgb); 11] = [
+    ("White", [1.0, 1.0, 1.0]),
+    ("Black", [0.0, 0.0, 0.0]),
+    ("Gray", [0.5, 0.5, 0.5]),
+    ("Red", [0.89, 0.13, 0.13]),
+    ("Orange", [1.0, 0.54, 0.0]),
+    ("Yellow", [1.0, 0.94, 0.0]),
+    ("Green", [0.18, 0.62, 0.36]),
+    ("Blue", [0.0, 0.47, 0.84]),
+    ("Light blue", [0.36, 0.75, 0.98]),
+    ("Purple", [0.54, 0.25, 0.82]),
+    ("Pink", [1.0, 0.37, 0.64]),
+];
+
+impl RedactPrefs {
     pub fn mark(&self, page: usize, quads: Vec<[f64; 8]>, author: &str) -> Edit {
         let shape = Shape::Redact { quads, overlay: if self.use_overlay { self.overlay.clone() } else { String::new() }, look: self.look };
         let mut style = Style::default_for(&shape);
         style.fill = self.fill;
         Edit::AddAnnotation(NewAnnotation { page, shape, style, contents: String::new(), author: author.to_string() })
+    }
+}
+
+impl crate::PdfCraftApp {
+    /// How the redaction tool marks areas now: a white mask in «Маска» mode, else the
+    /// redaction properties.
+    pub fn mark_prefs(&self) -> RedactPrefs {
+        if self.mask_mode { RedactPrefs::white_mask() } else { self.redact_prefs.clone() }
     }
 }
 
@@ -268,7 +299,7 @@ pub(crate) fn props_body(ui: &mut egui::Ui, d: &mut RedactPrefs, _t: &Tokens) ->
         });
         ui.end_row();
         ui.label("");
-        if let Some(c) = crate::comments::swatch_grid(ui, d.fill) {
+        if let Some(c) = crate::comments::swatch_grid_of(ui, d.fill, &REDACT_SWATCHES) {
             d.fill = Some(c);
         }
         ui.end_row();

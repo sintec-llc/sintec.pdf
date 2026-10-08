@@ -290,6 +290,7 @@ pub static TOOL_GROUPS: &[ToolGroup] = &[
             title: "Redact",
             items: &[
                 item("Redact text and images", "rectangle-horizontal", "redact.mark", Ready),
+                item("Mask areas with white", "square", "redact.mask", Ready),
                 item("Redact pages", "file-x", "redact.pages", Ready),
                 item("Find text and redact", "file-search", "redact.search", Ready),
                 item("Set properties", "settings-2", "redact.properties", Ready),

@@ -1241,9 +1241,14 @@ pub enum CanvasAction {
 
 /// A grid of colour swatches; returns the one clicked.
 pub fn swatch_grid(ui: &mut egui::Ui, current: Option<Rgb>) -> Option<Rgb> {
+    swatch_grid_of(ui, current, &SWATCHES)
+}
+
+/// [`swatch_grid`] with its own colours.
+pub fn swatch_grid_of(ui: &mut egui::Ui, current: Option<Rgb>, swatches: &[(&str, Rgb)]) -> Option<Rgb> {
     let mut picked = None;
     egui::Grid::new(ui.id().with("swatches")).spacing(vec2(6.0, 6.0)).show(ui, |ui| {
-        for (i, (name, c)) in SWATCHES.iter().enumerate() {
+        for (i, (name, c)) in swatches.iter().enumerate() {
             let (r, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
             let on = current.is_some_and(|cur| cur.iter().zip(c).all(|(a, b)| (a - b).abs() < 0.02));
             ui.painter().circle_filled(r.center(), 9.0, color32(*c));

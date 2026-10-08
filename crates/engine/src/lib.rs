@@ -2471,7 +2471,9 @@ impl Session {
     /// A new document from plain text: US Letter, 11 pt Helvetica when Helvetica can show it,
     /// otherwise (Cyrillic and other scripts) A4 in the embedded monospaced font.
     pub fn create_from_text(&self, title: &str, text: &str) -> Result<Arc<Vec<u8>>, EditError> {
-        if pdfcraft_fonts::is_win_ansi(text) {
+        // Line breaks, tabs and form feeds are layout, not characters to encode.
+        let layout_free: String = text.chars().map(|c| if matches!(c, '\n' | '\r' | '\t' | '\u{c}') { ' ' } else { c }).collect();
+        if pdfcraft_fonts::is_win_ansi(&layout_free) {
             self.write_new(&pdfcraft_create::from_text(title, text, pdfcraft_create::LETTER, 11.0)?)
         } else {
             self.write_new(&pdfcraft_create::from_text_unicode(title, text, pdfcraft_create::A4, 10.0)?)

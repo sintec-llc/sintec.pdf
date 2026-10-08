@@ -1888,3 +1888,6 @@
 	Page display: {layout}	ページ表示：{layout}
 	Fit to width scrolling	幅に合わせてスクロール
 	Fit one full page	1ページずつ全体を表示
+	Mask areas with white	白で領域をマスク
+	White	白
+	Drag over the areas to cover with white, then Apply redactions: what is under them is removed for good.	白で覆う領域をドラッグして選び、墨消しを適用してください。その下の内容は完全に削除されます。
