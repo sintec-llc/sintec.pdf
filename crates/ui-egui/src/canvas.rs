@@ -23,6 +23,10 @@ const MARGIN: f32 = 28.0;
 const SIDE: f32 = 70.0;
 const THUMB_TAG: u64 = 1 << 63;
 const TEXT_TAG: u64 = 1 << 62;
+/// The page grid's large preview of the current page.
+const PREVIEW_TAG: u64 = 1 << 61;
+/// The page grid's zoom range (1 = the standard thumbnail size).
+pub const GRID_ZOOM: std::ops::RangeInclusive<f32> = 0.6..=3.0;
 /// The tag of a raster that is out of date (shown until its replacement arrives).
 const STALE_TAG: u64 = u64::MAX;
 /// Pages whose raster would exceed this many device pixels on a side are drawn in tiles.
@@ -94,6 +98,15 @@ pub struct DocView {
     /// A freshly converted document under review: the page grid shows a banner with Continue,
     /// which goes on to the reader.
     pub review: bool,
+    /// The page grid's zoom (see [`GRID_ZOOM`]) and the zoom its thumbnails were rendered at.
+    pub grid_zoom: f32,
+    thumbs_zoom: f32,
+    /// The page grid shows a large preview of the current page on the right (on by default for
+    /// a converted document under review; the toolbar button toggles it).
+    pub preview_open: bool,
+    /// That preview: the page and its raster, and the scale it was asked for.
+    preview: Option<(usize, TextureHandle)>,
+    preview_scale: f32,
     /// Where Save suggests putting an untitled document (the folder its files came from).
     pub save_dir: Option<std::path::PathBuf>,
     pub highlight_fields: bool,
@@ -230,6 +243,11 @@ impl DocView {
             current: 0,
             organize: false,
             review: false,
+            grid_zoom: 1.0,
+            thumbs_zoom: 1.0,
+            preview_open: false,
+            preview: None,
+            preview_scale: 0.0,
             save_dir: None,
             highlight_fields: false,
             page_input: "1".into(),
@@ -329,6 +347,7 @@ impl DocView {
             p.tag = STALE_TAG;
         }
         self.stale_thumbs.extend(self.thumbs.keys().copied());
+        self.preview = None;
         self.tiles.clear();
         self.texts.clear();
         self.text_failed.clear();
@@ -350,6 +369,9 @@ impl DocView {
         }
         if self.thumbs.contains_key(&page) {
             self.stale_thumbs.insert(page);
+        }
+        if self.preview.as_ref().is_some_and(|(p, _)| *p == page) {
+            self.preview = None;
         }
         self.tiles.retain(|(p, _, _), _| *p != page);
         self.texts.remove(&page);
@@ -681,6 +703,11 @@ impl DocView {
             if let Some(t) = r.request.tile {
                 let tex = ctx.load_texture(format!("tile-{:?}-{page}-{}-{}", self.id, t.x, t.y), img, TextureOptions::LINEAR);
                 self.tiles.insert((page, t.x / TILE, t.y / TILE), (r.request.tag, tex));
+                continue;
+            }
+            if r.request.tag & PREVIEW_TAG != 0 {
+                let tex = ctx.load_texture(format!("preview-{:?}-{page}", self.id), img, TextureOptions::LINEAR);
+                self.preview = Some((page, tex));
                 continue;
             }
             if r.request.tag & THUMB_TAG != 0 {
@@ -2250,6 +2277,28 @@ fn organize_toolbar(view: &mut DocView, info: &DocInfo, editable: bool, ui: &mut
                 if widgets::ghost_button(ui, "x", tl!("Close")).on_hover_text(tl!("Back to the document")).clicked() {
                     view.organize = false;
                 }
+                ui.add_space(8.0);
+                let preview_tip = if view.preview_open { tl!("Hide the page preview") } else { tl!("Show the page preview") };
+                if icons::button(ui, "panel-right", 30.0, view.preview_open, preview_tip).clicked() {
+                    view.preview_open = !view.preview_open;
+                }
+                ui.add_space(8.0);
+                let (lo, hi) = (*GRID_ZOOM.start(), *GRID_ZOOM.end());
+                if ui.add_enabled_ui(view.grid_zoom < hi - 0.001, |ui| icons::button(ui, "zoom-in", 30.0, false, tl!("Larger pages"))).inner.clicked()
+                {
+                    view.grid_zoom = (view.grid_zoom * 1.25).min(hi);
+                }
+                ui.add_sized(
+                    [46.0, 30.0],
+                    egui::Label::new(egui::RichText::new(format!("{:.0}%", view.grid_zoom * 100.0)).font(theme::medium(12.5)).color(t.text_muted)),
+                );
+                if ui
+                    .add_enabled_ui(view.grid_zoom > lo + 0.001, |ui| icons::button(ui, "zoom-out", 30.0, false, tl!("Smaller pages")))
+                    .inner
+                    .clicked()
+                {
+                    view.grid_zoom = (view.grid_zoom / 1.25).max(lo);
+                }
             });
         });
     });
@@ -2316,11 +2365,52 @@ fn review_banner(view: &mut DocView, ui: &mut egui::Ui, t: &Tokens) {
     });
 }
 
+/// The page grid's preview: the current page as large as the panel allows, so its content can
+/// be read. Returns the render scale (device pixels per point) the panel wants.
+fn page_preview(view: &DocView, info: &DocInfo, ui: &mut egui::Ui, t: &Tokens, ppp: f32) -> f32 {
+    let Some(p) = info.pages.get(view.current) else { return 0.0 };
+    ui.label(egui::RichText::new(crate::i18n::fmt(tl!("Page {label}"), &[("label", &p.label)])).font(theme::semibold(13.0)).color(t.text_muted));
+    ui.add_space(6.0);
+    let room = ui.available_size();
+    let fit = (room.x / p.width.max(1.0)).min(room.y / p.height.max(1.0)).max(0.05);
+    let size = vec2(p.width * fit, p.height * fit);
+    let (rect, _) = ui.allocate_exact_size(room, Sense::hover());
+    let page = Rect::from_center_size(pos2(rect.center().x, rect.top() + size.y / 2.0), size);
+    ui.painter().rect_filled(page.translate(vec2(0.0, 2.0)), CornerRadius::same(1), t.page_shadow);
+    ui.painter().rect_filled(page, CornerRadius::ZERO, Color32::WHITE);
+    match view.preview.as_ref().filter(|(i, _)| *i == view.current).map(|(_, tex)| tex).or_else(|| view.thumbs.get(&view.current)) {
+        Some(tex) => {
+            ui.painter().image(tex.id(), page, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+        }
+        None => {
+            ui.put(Rect::from_center_size(page.center(), vec2(24.0, 24.0)), egui::Spinner::new());
+        }
+    }
+    ui.painter().rect_stroke(page, CornerRadius::ZERO, Stroke::new(1.0, t.border), egui::StrokeKind::Outside);
+    // Sharp on this screen, within the renderer's own limits.
+    (fit * ppp).min(8.0)
+}
+
 fn organize_grid(view: &mut DocView, info: &DocInfo, pool: &RenderPool, editable: bool, auto_scroll_enabled: bool, ui: &mut egui::Ui, t: &Tokens) {
     let ppp = ui.ctx().pixels_per_point();
-    let cell = vec2(190.0, 250.0);
     let mut open_page = None;
     organize_toolbar(view, info, editable, ui, t);
+    // Ctrl + mouse wheel (or a pinch) zooms the grid.
+    let pinch = ui.input(|i| i.zoom_delta());
+    if (pinch - 1.0).abs() > f32::EPSILON && ui.rect_contains_pointer(ui.available_rect_before_wrap()) {
+        view.grid_zoom = (view.grid_zoom * pinch).clamp(*GRID_ZOOM.start(), *GRID_ZOOM.end());
+    }
+    let cell = vec2(190.0, 250.0) * view.grid_zoom;
+    let mut preview_scale = 0.0;
+    if view.preview_open && !info.pages.is_empty() {
+        let width = ui.available_width();
+        egui::Panel::right(ui.id().with("page-preview"))
+            .resizable(true)
+            .default_size((width * 0.42).clamp(320.0, 900.0))
+            .size_range(260.0..=(width * 0.75).max(300.0))
+            .frame(egui::Frame::NONE.fill(t.pasteboard).inner_margin(egui::Margin::same(12)))
+            .show(ui, |ui| preview_scale = page_preview(view, info, ui, t, ppp));
+    }
     let viewport = ui.available_rect_before_wrap();
     view.viewport_screen = viewport;
     let auto_delta = if auto_scroll_enabled {
@@ -2460,11 +2550,29 @@ fn organize_grid(view: &mut DocView, info: &DocInfo, pool: &RenderPool, editable
         }
     });
     view.auto_scroll.paint(ui, viewport);
-    let s = THUMB_W * ppp / info.pages.iter().map(|p| p.width).fold(1.0, f32::max);
-    let queue: Vec<RenderRequest> = (0..info.pages.len())
-        .filter(|p| (!view.thumbs.contains_key(p) || view.stale_thumbs.contains(p)) && !view.errors.contains_key(p))
-        .map(|page| RenderRequest { page, kind: RequestKind::Pixels, tile: None, scale: s, tag: THUMB_TAG })
-        .collect();
+    // Zoomed past what the thumbnails were drawn for: draw them again, sharper.
+    if view.grid_zoom > view.thumbs_zoom * 1.1 || view.grid_zoom < view.thumbs_zoom / 1.6 {
+        view.thumbs_zoom = view.grid_zoom;
+        view.stale_thumbs.extend(view.thumbs.keys().copied());
+    }
+    let s = THUMB_W * view.thumbs_zoom.max(1.0) * ppp / info.pages.iter().map(|p| p.width).fold(1.0, f32::max);
+    let mut queue: Vec<RenderRequest> = Vec::new();
+    // The preview first: it is what the user is looking at.
+    let want_preview = view.preview_open && preview_scale > 0.0;
+    if want_preview
+        && (view.preview.as_ref().is_none_or(|(p, _)| *p != view.current) || (preview_scale - view.preview_scale).abs() > view.preview_scale * 0.15)
+        && !view.errors.contains_key(&view.current)
+    {
+        queue.push(RenderRequest { page: view.current, kind: RequestKind::Pixels, tile: None, scale: preview_scale, tag: PREVIEW_TAG });
+    }
+    queue.extend(
+        (0..info.pages.len())
+            .filter(|p| (!view.thumbs.contains_key(p) || view.stale_thumbs.contains(p)) && !view.errors.contains_key(p))
+            .map(|page| RenderRequest { page, kind: RequestKind::Pixels, tile: None, scale: s, tag: THUMB_TAG }),
+    );
+    if want_preview && queue.first().is_some_and(|r| r.tag == PREVIEW_TAG) {
+        view.preview_scale = preview_scale;
+    }
     if queue != view.last_queue {
         pool.set_queue(queue.clone());
         view.last_queue = queue;

@@ -1880,3 +1880,7 @@
 	Drag pages to reorder them; delete, rotate or add pages from other files with the buttons below. Nothing is saved until you save.	ページをドラッグして並べ替えます。下のボタンで削除・回転したり、他のファイルからページを追加したりできます。保存するまで何も書き込まれません。
 	Skipped: {list}	スキップ: {list}
 	PDFs, images, text and Office documents	PDF、画像、テキスト、Office 文書
+	Hide the page preview	ページのプレビューを隠す
+	Show the page preview	ページのプレビューを表示
+	Larger pages	ページを大きく
+	Smaller pages	ページを小さく

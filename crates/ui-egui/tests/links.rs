@@ -24,18 +24,17 @@ fn the_top_bar_checks_for_updates_instead_of_linking_to_github() {
     assert_eq!(links::GITHUB, "https://github.com/sintec-llc/sintec.pdf");
 }
 
+/// The home screen is tools and recent files only: no support card, links or privacy note
+/// (the links stay in About and the Help menu; updates in the top bar).
 #[test]
-fn home_screen_links() {
-    for (label, url) in [
-        ("Sintec.PDF on GitHub", "https://github.com/sintec-llc/sintec.pdf"),
-        ("Sintec.PDF releases", "https://github.com/sintec-llc/sintec.pdf/releases"),
-    ] {
-        let mut h = harness(|_| {});
-        h.get_by_label("Updates and support");
-        h.get_by_label(label).click();
-        h.run_steps(2);
-        assert_eq!(h.state().last_opened_url.as_deref(), Some(url), "{label}");
+fn the_home_screen_has_no_support_card_or_privacy_note() {
+    let h = harness(|_| {});
+    h.get_by_label("Welcome to Sintec.PDF");
+    h.get_by_label("Recommended tools");
+    for gone in ["Updates and support", "Sintec.PDF on GitHub", "Sintec.PDF releases", "Privacy"] {
+        assert!(h.query_by_label(gone).is_none(), "{gone} is not on the home screen");
     }
+    assert!(h.query_by_label_contains("works offline").is_none());
 }
 
 #[test]

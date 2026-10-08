@@ -176,6 +176,7 @@ impl PdfCraftApp {
         if let Some(view) = self.active.and_then(|i| self.views.get_mut(i)) {
             view.organize = true;
             view.review = true;
+            view.preview_open = true;
             view.save_dir = done.folder;
         }
         if !done.skipped.is_empty() {
