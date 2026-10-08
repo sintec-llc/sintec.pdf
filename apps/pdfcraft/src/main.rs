@@ -275,13 +275,17 @@ fn configure_gpu(native: &mut eframe::NativeOptions) {
     }
 }
 
-/// Whether a DX12 adapter is available (a throwaway instance, dropped before the window opens).
+/// Whether a real DX12 GPU is available (a throwaway instance, dropped before the window opens).
+/// Windows always lists its software adapter (Microsoft Basic Render Driver): with only that,
+/// a broken or missing GPU driver, OpenGL may still reach the GPU, so it stays as the fallback.
 #[cfg(target_os = "windows")]
 fn dx12_adapter_available() -> bool {
     let mut desc = eframe::wgpu::InstanceDescriptor::new_without_display_handle();
     desc.backends = eframe::wgpu::Backends::DX12;
     let instance = eframe::wgpu::Instance::new(desc);
-    !pollster::block_on(instance.enumerate_adapters(eframe::wgpu::Backends::DX12)).is_empty()
+    pollster::block_on(instance.enumerate_adapters(eframe::wgpu::Backends::DX12))
+        .iter()
+        .any(|a| a.get_info().device_type != eframe::wgpu::DeviceType::Cpu)
 }
 
 /// PCI `(vendor, device)` ids of the GPUs with a connected monitor, read from the DRM connectors
