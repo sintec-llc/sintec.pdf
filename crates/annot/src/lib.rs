@@ -613,6 +613,20 @@ pub fn page_refs(doc: &Document) -> Result<Vec<ObjRef>, AnnotError> {
     Ok(out)
 }
 
+/// A page's `/Rotate` (inherited through `/Parent`): 0, 90, 180 or 270.
+fn page_rotation(doc: &Document, page: ObjRef) -> i64 {
+    let mut node = doc.get(page).as_dict().cloned();
+    // A page tree deeper than this is malformed; the default applies.
+    for _ in 0..64 {
+        let Some(d) = node else { break };
+        if let Some(r) = d.get(b"Rotate").and_then(|o| doc.resolve(o).as_int()) {
+            return r.rem_euclid(360) / 90 * 90;
+        }
+        node = d.get(b"Parent").and_then(|p| doc.resolve(p).as_dict().cloned());
+    }
+    0
+}
+
 fn page_ref(doc: &Document, page: usize) -> Result<ObjRef, AnnotError> {
     page_refs(doc)?.get(page).copied().ok_or(AnnotError::NoSuchPage(page))
 }
@@ -856,6 +870,14 @@ pub fn add_annotation(doc: &mut Document, new: &NewAnnotation, meta: &Meta) -> R
     }
     let rect = rect_for(&new.shape, style)?;
     let mut d = base_dict(new.shape.subtype(), rect, page, &new.contents, &new.author, meta);
+    // Stamps and signatures read upright as the page is shown: on a page with /Rotate, their
+    // appearance is turned by the same angle (see appearance::build).
+    if matches!(new.shape, Shape::Stamp { .. } | Shape::CustomStamp { .. } | Shape::TypedSignature { .. }) {
+        let rot = page_rotation(doc, page);
+        if rot != 0 {
+            d.set(b"Rotate".to_vec(), Object::Int(rot));
+        }
+    }
     d.set(b"Subj".to_vec(), PdfString::text(subject(&new.shape)));
     let opacity = style.opacity.clamp(0.0, 1.0);
     if opacity < 1.0 {
