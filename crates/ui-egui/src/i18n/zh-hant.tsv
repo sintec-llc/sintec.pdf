@@ -1884,3 +1884,7 @@
 	Mask areas with white	用白色遮蓋區域
 	White	白色
 	Drag over the areas to cover with white, then Apply redactions: what is under them is removed for good.	拖曳選取要用白色遮蓋的區域，然後套用遮蔽：其下的內容將被永久刪除。
+	Extract page…	擷取頁面…
+	Extract and delete from file…	擷取並從檔案中刪除…
+	Insert blank page before	在前面插入空白頁
+	Insert blank page after	在後面插入空白頁

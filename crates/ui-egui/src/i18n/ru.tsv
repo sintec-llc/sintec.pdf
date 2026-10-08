@@ -1929,3 +1929,7 @@ date	December	декабря
 	Mask areas with white	Закрыть белым
 	White	Белый
 	Drag over the areas to cover with white, then Apply redactions: what is under them is removed for good.	Выделите области, которые нужно закрыть белым, затем нажмите «Применить скрытие»: всё под ними будет удалено безвозвратно.
+	Extract page…	Извлечь страницу…
+	Extract and delete from file…	Извлечь и удалить из файла…
+	Insert blank page before	Вставить пустую страницу перед
+	Insert blank page after	Вставить пустую страницу после

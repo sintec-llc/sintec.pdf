@@ -1131,7 +1131,8 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         ui.centered_and_justified(|ui| ui.label(tl!("This document has no pages.")));
         return;
     }
-    let want_thumbs = app.right == Some(RightPanel::Pages) || app.views[index].organize || app.dialog == Some(crate::Dialog::Print);
+    let panel_thumbs = app.right == Some(RightPanel::Pages);
+    let want_thumbs = panel_thumbs || app.views[index].organize || app.dialog == Some(crate::Dialog::Print);
     // The Prepare a form panel is open (or a field tool is picked): fields are edited, not filled.
     let preparing = app.is_preparing();
     // Edit a PDF: added text and images can be selected, moved and edited.
@@ -1817,9 +1818,24 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
     queue.extend(text_pages.into_iter().map(|page| RenderRequest { page, kind: RequestKind::Text, tile: None, scale: 1.0, tag: TEXT_TAG }));
     if want_thumbs {
-        let s = THUMB_W * ppp / info.pages.iter().map(|p| p.width).fold(1.0, f32::max);
-        for page in 0..info.pages.len() {
-            if (!view.thumbs.contains_key(&page) || view.stale_thumbs.contains(&page)) && !view.errors.contains_key(&page) {
+        // Each page as sharp as it is drawn: the Pages panel draws every page at its full width
+        // (a document mixing A4 with large drawing sheets would otherwise get A4 thumbnails a
+        // few dozen pixels wide); the print preview scales them all by the widest page.
+        let widest = info.pages.iter().map(|p| p.width).fold(1.0, f32::max);
+        let n = info.pages.len();
+        // The pages near the one being read first.
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by_key(|p| p.abs_diff(cur));
+        for page in order {
+            let pw = info.pages.get(page).map_or(1.0, |p| p.width.max(1.0));
+            let mut s = THUMB_W * ppp / widest;
+            if panel_thumbs {
+                s = s.max(crate::panels::PANEL_THUMB_W * ppp / pw);
+            }
+            // At most 1024 pixels wide.
+            let s = s.min(1024.0 / pw);
+            let too_small = view.thumbs.get(&page).is_some_and(|t| (t.size()[0] as f32) < pw * s * 0.85);
+            if (!view.thumbs.contains_key(&page) || too_small || view.stale_thumbs.contains(&page)) && !view.errors.contains_key(&page) {
                 queue.push(RenderRequest { page, kind: RequestKind::Pixels, tile: None, scale: s, tag: THUMB_TAG });
             }
         }
