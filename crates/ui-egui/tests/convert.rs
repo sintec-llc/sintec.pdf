@@ -52,6 +52,26 @@ fn converted_files_open_unsaved_for_review_then_continue_to_the_reader() {
     assert_eq!(view.save_dir.as_deref(), Some(dir.as_path()), "Save suggests the files' folder");
     h.get_by_label("Arrange the pages");
 
+    // The preview on the right shows the current page; clicking another page shows that one.
+    assert_eq!(h.query_all_by_label("Page 1").count(), 2, "the thumbnail and the preview's title");
+    h.get_by_label("Page 2").click();
+    h.run_steps(3);
+    assert_eq!(h.state().views[0].current, 1);
+    assert!(h.query_all_by_label("Page 2").count() >= 2, "the thumbnail and the preview's title");
+    // Zoom: larger and smaller pages, within its range.
+    let zoom = h.state().views[0].grid_zoom;
+    h.get_by_label("Larger pages").click();
+    h.run_steps(2);
+    assert!(h.state().views[0].grid_zoom > zoom);
+    h.get_by_label("Smaller pages").click();
+    h.get_by_label("Smaller pages").click();
+    h.run_steps(2);
+    assert!(h.state().views[0].grid_zoom < zoom);
+    // The preview can be hidden.
+    h.get_by_label("Hide the page preview").click();
+    h.run_steps(2);
+    assert!(!h.state().views[0].preview_open);
+
     h.get_by_label("Continue").click();
     h.run_steps(3);
     let view = &h.state().views[0];
