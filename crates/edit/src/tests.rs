@@ -832,3 +832,36 @@ fn the_graphics_state_carries_over_between_content_streams() {
     let l = &text::text_lines(&doc, 0).unwrap()[0];
     assert!(close(l.rect[0], 100.0) && close(l.size, 10.0), "{l:?}");
 }
+
+#[test]
+fn table_rows_written_as_one_tj_read_and_edit_cell_by_cell() {
+    // Spreadsheet exports write each table row as one TJ, jumping from cell to cell with large
+    // adjustments. Each cell is its own line; editing one leaves the others where they were.
+    let mut doc = text_page(
+        "BT /F1 10 Tf 40 700 Td [(Name) -16000 (Domain) -12000 (Login)] TJ ET \
+         BT /F1 10 Tf 40 680 Td [(Ivanov I.) -14000 (corp) -13000 (ivanov.i)] TJ ET \
+         BT /F1 10 Tf 40 600 Td [(Wo) 120 (rd) -300 (spacing) -1500 (stays)] TJ ET",
+    );
+    let lines = text::text_lines(&doc, 0).unwrap();
+    let texts: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
+    assert_eq!(texts, ["Name", "Domain", "Login", "Ivanov I.", "corp", "ivanov.i", "Word spacing stays"]);
+    // The cells' boxes don't reach across the gaps.
+    assert!(lines[0].rect[2] < lines[1].rect[0] - 100.0, "{:?} {:?}", lines[0].rect, lines[1].rect);
+    let blocks = text::text_blocks(&doc, 0).unwrap();
+    assert!(blocks.iter().all(|b| !b.text.contains("Name Domain") && !b.text.contains("corp ivanov")), "{blocks:?}");
+    let (login, ivanov) = (lines[5].rect, lines[3].rect);
+    // Edit one cell (by line, then by paragraph): the other cells keep their places.
+    text::replace_line(&mut doc, 0, 4, "sintec").unwrap();
+    let doc2 = reopen(&doc);
+    let after = text::text_lines(&doc2, 0).unwrap();
+    let texts: Vec<&str> = after.iter().map(|l| l.text.as_str()).collect();
+    assert!(texts.contains(&"sintec") && texts.contains(&"ivanov.i") && texts.contains(&"Ivanov I."), "{texts:?}");
+    let stayed = |t: &str, r: [f64; 4]| after.iter().find(|l| l.text == t).is_some_and(|l| (l.rect[0] - r[0]).abs() < 0.01);
+    assert!(stayed("ivanov.i", login) && stayed("Ivanov I.", ivanov), "cells stayed put: {after:?}");
+    let mut doc3 = reopen(&doc2);
+    let b = text::text_blocks(&doc3, 0).unwrap().iter().position(|b| b.text == "Login").unwrap();
+    text::replace_block(&mut doc3, 0, b, "User").unwrap();
+    let doc3 = reopen(&doc3);
+    let texts: Vec<String> = text::text_lines(&doc3, 0).unwrap().into_iter().map(|l| l.text).collect();
+    assert!(texts.iter().any(|t| t == "User") && texts.iter().any(|t| t == "Name") && texts.iter().any(|t| t == "Domain"), "{texts:?}");
+}
