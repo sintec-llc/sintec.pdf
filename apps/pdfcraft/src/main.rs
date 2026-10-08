@@ -140,6 +140,7 @@ fn main() -> eframe::Result {
             }
             app.integrated_titlebar = integrated;
             app.update_source = Some(std::sync::Arc::new(updates::latest_release));
+            app.update_installer = Some(std::sync::Arc::new(updates::install_update));
             app.keychain_ids = cfg!(target_os = "macos");
             #[cfg(target_os = "macos")]
             {

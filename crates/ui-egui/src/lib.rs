@@ -335,6 +335,10 @@ pub struct PdfCraftApp {
     pub dialog: Option<Dialog>,
     /// How to ask for the latest release (the desktop app sets it; see `updates`).
     pub update_source: Option<updates::UpdateSource>,
+    /// How to download, check and start a release's installer (the desktop app sets it).
+    pub update_installer: Option<updates::UpdateInstaller>,
+    /// An update's installer has started: the app is closing so it can install.
+    pub update_started: bool,
     pub(crate) updates: updates::Updates,
     pub palette_open: bool,
     pub palette_query: String,
@@ -561,6 +565,8 @@ impl PdfCraftApp {
             language: i18n::AUTO.to_string(),
             dialog: None,
             update_source: None,
+            update_installer: None,
+            update_started: false,
             updates: updates::Updates::default(),
             palette_open: false,
             palette_query: String::new(),

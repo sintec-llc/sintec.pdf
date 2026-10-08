@@ -1863,3 +1863,9 @@
 	Could not convert to PDF: {e}	無法轉換為 PDF：{e}
 	Saved the PDF to {path}	PDF 已儲存到 {path}
 	Saved the PDF to {path}; skipped: {list}	PDF 已儲存到 {path}；已略過：{list}
+	Save your documents first: Sintec.PDF closes to install the new version.	請先儲存文件：Sintec.PDF 需要關閉以安裝新版本。
+	You have version {c}.	目前版本為 {c}。
+	Downloading and checking the update…	正在下載並驗證更新…
+	Couldn't update: {e}	無法更新：{e}
+	Update downloads the new installer, checks it and restarts Sintec.PDF on the new version. Download opens the release page.	「更新」會下載新的安裝程式、驗證後以新版本重新啟動 Sintec.PDF。「下載」會開啟發佈頁面。
+	Asks GitHub for the latest release. Nothing is downloaded or installed until you choose.	向 GitHub 查詢最新版本。在您選擇之前不會下載或安裝任何內容。

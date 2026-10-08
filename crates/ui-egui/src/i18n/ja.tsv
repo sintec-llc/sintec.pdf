@@ -1870,3 +1870,9 @@
 	Could not convert to PDF: {e}	PDF に変換できませんでした: {e}
 	Saved the PDF to {path}	PDF を {path} に保存しました
 	Saved the PDF to {path}; skipped: {list}	PDF を {path} に保存しました。スキップ: {list}
+	Save your documents first: Sintec.PDF closes to install the new version.	先に文書を保存してください。新しいバージョンをインストールするため Sintec.PDF を終了します。
+	You have version {c}.	現在のバージョンは {c} です。
+	Downloading and checking the update…	更新をダウンロードして確認しています…
+	Couldn't update: {e}	更新できませんでした: {e}
+	Update downloads the new installer, checks it and restarts Sintec.PDF on the new version. Download opens the release page.	「更新」は新しいインストーラーをダウンロードして確認し、新しいバージョンで Sintec.PDF を再起動します。「ダウンロード」はリリースページを開きます。
+	Asks GitHub for the latest release. Nothing is downloaded or installed until you choose.	GitHub に最新リリースを問い合わせます。選択するまで何もダウンロード・インストールされません。

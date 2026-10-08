@@ -7,9 +7,94 @@ use egui_kittest::kittest::Queryable;
 use pdfcraft_ui_egui::PdfCraftApp;
 use pdfcraft_ui_egui::updates::{Release, UpdateSource, is_newer};
 
+/// A source whose newer release carries an installer, and an installer that records the call.
+fn installable(result: Result<(), &'static str>) -> (Harness<'static, PdfCraftApp>, Arc<std::sync::atomic::AtomicBool>) {
+    let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let seen = called.clone();
+    let h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        let base = "https://github.com/sintec-llc/sintec.pdf/releases";
+        app.update_source = Some(Arc::new(move || {
+            Ok(Release {
+                version: "v99.0.0".into(),
+                url: format!("{base}/tag/v99.0.0"),
+                installer: Some(format!("{base}/download/v99.0.0/sintec-pdf-99.0.0-windows-x64.msi")),
+                checksums: Some(format!("{base}/download/v99.0.0/SHA256SUMS.txt")),
+            })
+        }));
+        let seen = seen.clone();
+        app.update_installer = Some(Arc::new(move |r: &Release| {
+            assert!(r.installer.is_some());
+            seen.store(true, std::sync::atomic::Ordering::SeqCst);
+            result.map_err(str::to_string)
+        }));
+        app
+    });
+    (h, called)
+}
+
+fn settle_install(h: &mut Harness<'static, PdfCraftApp>) {
+    for _ in 0..200 {
+        h.run_steps(2);
+        if h.query_by_label_contains("Downloading and checking the update").is_none() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    h.run_steps(2);
+}
+
+#[test]
+fn update_installs_the_new_version_and_closes() {
+    let (mut h, called) = installable(Ok(()));
+    h.state_mut().execute("help.check_updates");
+    settle(&mut h);
+    h.get_by_label("Download");
+    h.get_by_label("Update").click();
+    settle_install(&mut h);
+    assert!(called.load(std::sync::atomic::Ordering::SeqCst), "the installer ran");
+    assert!(h.state().update_started, "the app closes so the installer can replace it");
+}
+
+#[test]
+fn a_failed_update_is_explained_and_the_app_stays_open() {
+    let (mut h, _) = installable(Err("the downloaded installer doesn't match the release's checksum; nothing was installed"));
+    h.state_mut().execute("help.check_updates");
+    settle(&mut h);
+    h.get_by_label("Update").click();
+    settle_install(&mut h);
+    h.get_by_label_contains("Couldn't update: the downloaded installer doesn't match");
+    assert!(!h.state().update_started);
+    h.get_by_label("Download");
+}
+
+#[test]
+fn update_waits_for_unsaved_documents() {
+    let (mut h, called) = installable(Ok(()));
+    let bytes = h.state().session.create_blank(200.0, 200.0, 2).unwrap();
+    h.state_mut().open_bytes("draft.pdf", None, bytes.as_ref().clone()).unwrap();
+    let id = h.state().views[0].id;
+    h.state_mut().session.apply(id, pdfcraft_engine::Edit::DeletePages { pages: vec![1] }).unwrap();
+    h.run_steps(2);
+    assert!(h.state().session.get(id).unwrap().dirty, "an unsaved change");
+    h.state_mut().execute("help.check_updates");
+    settle(&mut h);
+    h.get_by_label("Update").click();
+    settle_install(&mut h);
+    h.get_by_label_contains("Save your documents first");
+    assert!(!called.load(std::sync::atomic::Ordering::SeqCst), "nothing was downloaded");
+    assert!(!h.state().update_started);
+}
+
 fn source(answer: Result<&str, &str>) -> UpdateSource {
     let answer = answer.map(str::to_string).map_err(str::to_string);
-    Arc::new(move || answer.clone().map(|v| Release { url: format!("https://github.com/sintec-llc/sintec.pdf/releases/tag/{v}"), version: v }))
+    Arc::new(move || {
+        answer.clone().map(|v| Release {
+            url: format!("https://github.com/sintec-llc/sintec.pdf/releases/tag/{v}"),
+            version: v,
+            ..Default::default()
+        })
+    })
 }
 
 fn harness(answer: Result<&str, &str>) -> Harness<'static, PdfCraftApp> {
@@ -83,7 +168,11 @@ fn nothing_is_asked_until_the_user_checks() {
         let counted = counted.clone();
         app.update_source = Some(Arc::new(move || {
             counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Ok(Release { version: "v99.0.0".into(), url: "https://github.com/sintec-llc/sintec.pdf/releases/tag/v99.0.0".into() })
+            Ok(Release {
+                version: "v99.0.0".into(),
+                url: "https://github.com/sintec-llc/sintec.pdf/releases/tag/v99.0.0".into(),
+                ..Default::default()
+            })
         }));
         app
     });

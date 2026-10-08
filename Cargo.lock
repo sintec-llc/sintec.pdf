@@ -3452,9 +3452,11 @@ dependencies = [
  "eframe",
  "egui",
  "fmv-macos-events",
+ "pdfcraft-print",
  "pdfcraft-ui-egui",
  "rustls-native-certs",
  "serde_json",
+ "sha2",
  "ureq",
  "winresource",
 ]

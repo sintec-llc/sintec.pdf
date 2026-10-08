@@ -99,3 +99,10 @@
 	Could not convert to PDF: {e}	Převod do PDF se nezdařil: {e}
 	Saved the PDF to {path}	PDF uloženo do {path}
 	Saved the PDF to {path}; skipped: {list}	PDF uloženo do {path}; přeskočeno: {list}
+	Update	Aktualizovat
+	Save your documents first: Sintec.PDF closes to install the new version.	Nejprve uložte dokumenty: Sintec.PDF se kvůli instalaci nové verze zavře.
+	You have version {c}.	Máte verzi {c}.
+	Downloading and checking the update…	Stahování a kontrola aktualizace…
+	Couldn't update: {e}	Aktualizace se nezdařila: {e}
+	Update downloads the new installer, checks it and restarts Sintec.PDF on the new version. Download opens the release page.	„Aktualizovat“ stáhne nový instalátor, ověří ho a spustí Sintec.PDF v nové verzi. „Stáhnout“ otevře stránku vydání.
+	Asks GitHub for the latest release. Nothing is downloaded or installed until you choose.	Zjistí na GitHubu nejnovější vydání. Nic se nestáhne ani nenainstaluje, dokud nevyberete.
