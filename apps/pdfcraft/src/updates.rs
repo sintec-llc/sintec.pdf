@@ -14,12 +14,18 @@ pub fn latest_release() -> Result<Release, String> {
         .tls_config(ureq::tls::TlsConfig::builder().root_certs(os_roots()?).build())
         .build()
         .new_agent();
-    let mut response = agent
+    let mut response = match agent
         .get(LATEST)
         .header("Accept", "application/vnd.github+json")
         .header("User-Agent", concat!("Sintec.PDF/", env!("CARGO_PKG_VERSION")))
         .call()
-        .map_err(|e| format!("couldn't reach GitHub ({e})"))?;
+    {
+        Ok(r) => r,
+        // GitHub answers 404 while no release is published (drafts don't count): nothing newer
+        // than this build, so it is up to date rather than a connection problem.
+        Err(ureq::Error::StatusCode(404)) => return Ok(no_release_yet()),
+        Err(e) => return Err(format!("couldn't reach GitHub ({e})")),
+    };
     let body = response.body_mut().with_config().limit(1 << 20).read_to_string().map_err(|e| format!("unreadable answer ({e})"))?;
     parse(&body)
 }
@@ -32,6 +38,11 @@ fn os_roots() -> Result<ureq::tls::RootCerts, String> {
         return Err("no trusted certificates found on this system".into());
     }
     Ok(ureq::tls::RootCerts::new_with_certs(&certs))
+}
+
+/// What "no release published yet" means to the update check: this very version.
+fn no_release_yet() -> Release {
+    Release { version: concat!("v", env!("CARGO_PKG_VERSION")).to_string(), url: RELEASES_PAGE.to_string() }
 }
 
 fn parse(body: &str) -> Result<Release, String> {
@@ -48,6 +59,13 @@ fn parse(body: &str) -> Result<Release, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_published_release_reads_as_up_to_date() {
+        let r = no_release_yet();
+        assert!(!pdfcraft_ui_egui::updates::is_newer(&r.version, env!("CARGO_PKG_VERSION")), "{r:?}");
+        assert_eq!(r.url, RELEASES_PAGE);
+    }
 
     #[test]
     fn answers_are_read_and_only_our_release_pages_are_offered() {
