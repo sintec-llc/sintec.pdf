@@ -21,22 +21,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     .color(t.text_muted)
                     .font(theme::regular(14.0)),
             );
-            ui.add_space(14.0);
-            egui::Frame::NONE
-                .fill(t.card)
-                .stroke(Stroke::new(1.0, t.border))
-                .corner_radius(CornerRadius::same(12))
-                .inner_margin(egui::Margin::same(14))
-                .show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.label(egui::RichText::new(tl!("Updates and support")).font(theme::semibold(15.0)));
-                    ui.label(egui::RichText::new(tl!("New versions and the issue tracker are on GitHub.")).color(t.text_muted));
-                    ui.add_space(8.0);
-                    if let Some(cmd) = widgets::community_links(ui) {
-                        app.execute(cmd);
-                    }
-                });
-            ui.add_space(22.0);
+            ui.add_space(18.0);
 
             egui::Frame::NONE
                 .fill(t.card)
@@ -138,12 +123,6 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     app.open_path(&p);
                 }
             }
-            ui.add_space(20.0);
-            widgets::section_title(ui, tl!("Privacy"));
-            ui.label(
-                egui::RichText::new(tl!("Sintec.PDF works offline. No telemetry, no account, and no cloud processing unless you add a provider."))
-                    .color(t.text_muted),
-            );
         });
     });
 }
