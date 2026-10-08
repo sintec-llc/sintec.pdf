@@ -2,6 +2,8 @@
 //!
 //! Usage: `pdfcraft [options] [files…]`
 //! `--create-images [images…]` stages the images in one PDF and asks for the page DPI.
+//! `--convert-to-pdf [files…]` (Explorer ▸ «Преобразовать в PDF») turns the files, and those of
+//! the other launches Explorer started for the same selection, into one PDF next to them.
 //!
 //! View options (applied after the files open; also the seed of the UI control channel):
 //! `--page N  --zoom 150  --layout continuous|two-up|single  --panel comments|bookmarks|pages|fields|layers|attachments|none
@@ -22,6 +24,7 @@ use pdfcraft_ui_egui::PdfCraftApp;
 
 #[cfg(target_os = "macos")]
 mod apple_events;
+mod collect;
 mod updates;
 
 /// Freedesktop app id: the `.desktop` file name and the hicolor icon name.
@@ -75,6 +78,7 @@ fn main() -> eframe::Result {
     let mut options: Vec<(String, String)> = Vec::new();
     let mut control_file: Option<String> = None;
     let mut create_images = false;
+    let mut convert_to_pdf = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -84,11 +88,19 @@ fn main() -> eframe::Result {
             }
             "--control" => control_file = args.next(),
             "--create-images" => create_images = true,
+            "--convert-to-pdf" => convert_to_pdf = true,
             flag if flag.starts_with("--") => {
                 let value = args.next().unwrap_or_default();
                 options.push((flag.trim_start_matches("--").to_string(), value));
             }
             _ => files.push(a),
+        }
+    }
+    // Explorer starts one process per selected file: pool them, and let one convert them all.
+    if convert_to_pdf {
+        match collect::collect(files.iter().map(std::path::PathBuf::from).collect(), &collect::spool_dir()) {
+            collect::Role::Handled => return Ok(()),
+            collect::Role::Convert(all) => files = all.iter().map(|p| p.to_string_lossy().into_owned()).collect(),
         }
     }
     let integrated = cfg!(target_os = "macos");
@@ -128,6 +140,7 @@ fn main() -> eframe::Result {
             }
             app.integrated_titlebar = integrated;
             app.update_source = Some(std::sync::Arc::new(updates::latest_release));
+            app.update_installer = Some(std::sync::Arc::new(updates::install_update));
             app.keychain_ids = cfg!(target_os = "macos");
             #[cfg(target_os = "macos")]
             {
@@ -144,7 +157,9 @@ fn main() -> eframe::Result {
             if let Some(dir) = pdfcraft_ui_egui::RecoveryStore::default_dir() {
                 app.enable_recovery(pdfcraft_ui_egui::RecoveryStore::new(dir));
             }
-            if create_images {
+            if convert_to_pdf {
+                app.convert_to_pdf_paths(&files);
+            } else if create_images {
                 if let Err(e) = app.begin_image_import_paths(&files) {
                     app.notify(e);
                 }

@@ -1902,3 +1902,16 @@ date	December	декабря
 	Printing to {printer}…	Печать на {printer}…
 	A print job is already being prepared	Задание печати уже готовится
 	Check updates	Получить обновления
+	Could not convert to PDF: {e}	Не удалось преобразовать в PDF: {e}
+	Saved the PDF to {path}	PDF сохранён: {path}
+	Saved the PDF to {path}; skipped: {list}	PDF сохранён: {path}; пропущено: {list}
+	Save your documents first: Sintec.PDF closes to install the new version.	Сначала сохраните документы: Sintec.PDF закроется, чтобы установить новую версию.
+	You have version {c}.	У вас версия {c}.
+	Downloading and checking the update…	Загрузка и проверка обновления…
+	Couldn't update: {e}	Не удалось обновить: {e}
+	Update downloads the new installer, checks it and restarts Sintec.PDF on the new version. Download opens the release page.	«Обновить» скачает новый установщик, проверит его и перезапустит Sintec.PDF в новой версии. «Скачать» откроет страницу выпуска.
+	Asks GitHub for the latest release. Nothing is downloaded or installed until you choose.	Запрашивает у GitHub последний выпуск. Ничего не скачивается и не устанавливается, пока вы не выберете.
+	Arrange the pages	Расставьте страницы
+	Drag pages to reorder them; delete, rotate or add pages from other files with the buttons below. Nothing is saved until you save.	Перетаскивайте страницы, чтобы изменить порядок; удаляйте, поворачивайте или добавляйте страницы из других файлов кнопками ниже. Ничего не сохраняется, пока вы не сохраните.
+	Skipped: {list}	Пропущено: {list}
+	PDFs, images, text and Office documents	PDF, изображения, текст и документы Office

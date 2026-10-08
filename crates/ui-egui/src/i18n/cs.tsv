@@ -96,3 +96,19 @@
 	Printing to {printer}…	Tisk na {printer}…
 	A print job is already being prepared	Tisková úloha se už připravuje
 	Check updates	Zkontrolovat aktualizace
+	Could not convert to PDF: {e}	Převod do PDF se nezdařil: {e}
+	Saved the PDF to {path}	PDF uloženo do {path}
+	Saved the PDF to {path}; skipped: {list}	PDF uloženo do {path}; přeskočeno: {list}
+	Update	Aktualizovat
+	Save your documents first: Sintec.PDF closes to install the new version.	Nejprve uložte dokumenty: Sintec.PDF se kvůli instalaci nové verze zavře.
+	You have version {c}.	Máte verzi {c}.
+	Downloading and checking the update…	Stahování a kontrola aktualizace…
+	Couldn't update: {e}	Aktualizace se nezdařila: {e}
+	Update downloads the new installer, checks it and restarts Sintec.PDF on the new version. Download opens the release page.	„Aktualizovat“ stáhne nový instalátor, ověří ho a spustí Sintec.PDF v nové verzi. „Stáhnout“ otevře stránku vydání.
+	Asks GitHub for the latest release. Nothing is downloaded or installed until you choose.	Zjistí na GitHubu nejnovější vydání. Nic se nestáhne ani nenainstaluje, dokud nevyberete.
+	Arrange the pages	Uspořádejte stránky
+	Drag pages to reorder them; delete, rotate or add pages from other files with the buttons below. Nothing is saved until you save.	Přetažením změňte pořadí stránek; tlačítky níže je mažte, otáčejte nebo přidávejte z jiných souborů. Nic se neuloží, dokud neuložíte.
+	Continue	Pokračovat
+	Skipped: {list}	Přeskočeno: {list}
+	PDFs, images, text and Office documents	PDF, obrázky, text a dokumenty Office
+	Couldn't add {name}: {e}	Nelze přidat {name}: {e}

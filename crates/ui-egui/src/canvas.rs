@@ -91,6 +91,11 @@ pub struct DocView {
     pub rotation: u16,
     pub current: usize,
     pub organize: bool,
+    /// A freshly converted document under review: the page grid shows a banner with Continue,
+    /// which goes on to the reader.
+    pub review: bool,
+    /// Where Save suggests putting an untitled document (the folder its files came from).
+    pub save_dir: Option<std::path::PathBuf>,
     pub highlight_fields: bool,
     pub page_input: String,
     pub notice_dismissed: bool,
@@ -224,6 +229,8 @@ impl DocView {
             rotation: 0,
             current: 0,
             organize: false,
+            review: false,
+            save_dir: None,
             highlight_fields: false,
             page_input: "1".into(),
             notice_dismissed: false,
@@ -945,9 +952,14 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
     if view.organize {
         let auto_scroll_enabled = app.dialog.is_none() && app.close_request.is_none() && !app.palette_open;
+        if view.review {
+            review_banner(view, ui, &t);
+        }
         organize_grid(view, info, &doc.renderer, doc.allows_assembly(), auto_scroll_enabled, ui, &t);
         return;
     }
+    // Leaving the page grid (Continue, double-clicking a page, the toolbar) ends the review.
+    view.review = false;
 
     let avail = ui.available_rect_before_wrap();
     view.viewport_w = avail.width();
@@ -2276,6 +2288,32 @@ fn organize_toolbar(view: &mut DocView, info: &DocInfo, editable: bool, ui: &mut
 fn drop_gap(cells: &[(usize, Rect)], p: Pos2) -> Option<usize> {
     let (i, r) = cells.iter().min_by(|(_, a), (_, b)| a.distance_sq_to_pos(p).total_cmp(&b.distance_sq_to_pos(p)))?;
     Some(if p.x < r.center().x { *i } else { i + 1 })
+}
+
+/// The banner over a freshly converted document's page grid: what to do here, and Continue on
+/// to the reader and editor.
+fn review_banner(view: &mut DocView, ui: &mut egui::Ui, t: &Tokens) {
+    egui::Frame::NONE.fill(t.accent_soft).inner_margin(egui::Margin::symmetric(16, 10)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        // The text wraps in the room the button leaves, so a long translation never runs under it.
+        let text_width = (ui.available_width() - 180.0).max(200.0);
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.set_max_width(text_width);
+                ui.label(egui::RichText::new(tl!("Arrange the pages")).font(theme::semibold(14.0)).color(t.text));
+                ui.label(
+                    egui::RichText::new(tl!("Drag pages to reorder them; delete, rotate or add pages from other files with the buttons below. Nothing is saved until you save."))
+                        .color(t.text_muted),
+                );
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if crate::widgets::pill_button(ui, tl!("Continue"), true).clicked() {
+                    view.review = false;
+                    view.organize = false;
+                }
+            });
+        });
+    });
 }
 
 fn organize_grid(view: &mut DocView, info: &DocInfo, pool: &RenderPool, editable: bool, auto_scroll_enabled: bool, ui: &mut egui::Ui, t: &Tokens) {

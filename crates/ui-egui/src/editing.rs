@@ -166,6 +166,7 @@ impl PdfCraftApp {
         let Some(id) = self.views.get(index).map(|v| v.id) else { return false };
         let Some(doc) = self.session.get(id) else { return false };
         let (name, path) = (doc.name.clone(), doc.path.clone());
+        let suggest = self.views.get(index).and_then(|v| v.save_dir.clone());
         let bytes = match self.session.save_bytes(id) {
             Ok(b) => b,
             Err(e) => {
@@ -176,7 +177,7 @@ impl PdfCraftApp {
         let destination = match (target, path, &self.save_override) {
             (_, _, Some(p)) => Some(p.clone()),
             (SaveTarget::InPlace, Some(p), _) => Some(p),
-            _ => self.ask_save_path(&name),
+            _ => self.ask_save_path(&name, suggest.as_deref()),
         };
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -220,14 +221,19 @@ impl PdfCraftApp {
         }
     }
 
+    /// Ask where to save `name`, starting in `dir` when given (a converted document's folder).
     #[cfg(not(target_arch = "wasm32"))]
-    fn ask_save_path(&self, name: &str) -> Option<String> {
+    fn ask_save_path(&self, name: &str, dir: Option<&std::path::Path>) -> Option<String> {
         let name = if name.to_ascii_lowercase().ends_with(".pdf") { name.to_string() } else { format!("{name}.pdf") };
-        rfd::FileDialog::new().add_filter("PDF", &["pdf"]).set_file_name(name).save_file().map(|p| p.to_string_lossy().into_owned())
+        let mut dialog = rfd::FileDialog::new().add_filter("PDF", &["pdf"]).set_file_name(name);
+        if let Some(d) = dir.filter(|d| d.is_dir()) {
+            dialog = dialog.set_directory(d);
+        }
+        dialog.save_file().map(|p| p.to_string_lossy().into_owned())
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn ask_save_path(&self, _name: &str) -> Option<String> {
+    fn ask_save_path(&self, _name: &str, _dir: Option<&std::path::Path>) -> Option<String> {
         None // browsers download instead
     }
 

@@ -97,7 +97,92 @@ fn stem(name: &str) -> &str {
     name.rsplit_once('.').map_or(name, |(s, _)| s)
 }
 
+/// A finished «Преобразовать в PDF» conversion, not saved anywhere yet.
+pub struct ConvertDone {
+    /// The new document's name ("Счета.pdf").
+    pub name: String,
+    pub bytes: Arc<Vec<u8>>,
+    /// Files left out, with why.
+    pub skipped: Vec<(String, String)>,
+    /// The folder the files came from: where Save suggests putting the PDF.
+    pub folder: Option<std::path::PathBuf>,
+}
+
 impl PdfCraftApp {
+    /// Explorer ▸ «Преобразовать в PDF»: the files become one PDF, opened as a new, unsaved
+    /// document in the page grid so the user can arrange, add or delete pages before going on to
+    /// read and edit it. Nothing is written until the user saves. A single PDF is just opened.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn convert_to_pdf_paths(&mut self, paths: &[String]) {
+        use pdfcraft_engine::convert;
+        let paths: Vec<std::path::PathBuf> = paths.iter().map(std::path::PathBuf::from).collect();
+        if let [only] = paths.as_slice()
+            && only.extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+        {
+            self.open_path(&only.to_string_lossy());
+            return;
+        }
+        if paths.is_empty() {
+            return;
+        }
+        // Office documents take seconds each: convert on a worker thread (in a session of its
+        // own) and open the result when it is done.
+        let result = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let slot = result.clone();
+        let work = move || {
+            let session = pdfcraft_engine::Session::new();
+            let done = convert::convert_files(&session, &paths).map(|d| ConvertDone {
+                name: convert::output_name(&paths),
+                bytes: d.bytes,
+                skipped: d.skipped,
+                folder: paths.first().and_then(|p| p.parent()).map(std::path::Path::to_path_buf),
+            });
+            if let Ok(mut s) = slot.lock() {
+                *s = Some(done);
+            }
+        };
+        if self.run_inline {
+            work();
+        } else {
+            std::thread::Builder::new().name("sintec-convert".into()).spawn(work).ok();
+        }
+        self.notify_tr("Converting to PDF…");
+        self.convert_run = Some(result);
+        self.poll_convert();
+    }
+
+    /// Open the converted PDF, in the page grid for review, once the worker is done.
+    pub(crate) fn poll_convert(&mut self) {
+        let Some(run) = self.convert_run.as_ref() else { return };
+        let done = run.lock().ok().and_then(|mut r| r.take());
+        let Some(done) = done else {
+            if let Some(ctx) = &self.ctx {
+                ctx.request_repaint_after(std::time::Duration::from_millis(200));
+            }
+            return;
+        };
+        self.convert_run = None;
+        let done = match done {
+            Ok(d) => d,
+            Err(e) => {
+                self.notify_fmt("Could not convert to PDF: {e}", &[("e", &e)]);
+                return;
+            }
+        };
+        if let Err(e) = self.open_created_bytes(&done.name, Ok(done.bytes)) {
+            self.notify_fmt("Could not convert to PDF: {e}", &[("e", &e)]);
+            return;
+        }
+        if let Some(view) = self.active.and_then(|i| self.views.get_mut(i)) {
+            view.organize = true;
+            view.review = true;
+            view.save_dir = done.folder;
+        }
+        if !done.skipped.is_empty() {
+            let list = done.skipped.iter().map(|(n, e)| format!("{n} ({e})")).collect::<Vec<_>>().join("; ");
+            self.notify_fmt("Skipped: {list}", &[("list", &list)]);
+        }
+    }
     /// Convert a non-PDF file (image, text) into a new tab. Returns `None` when `bytes` is not
     /// something Create understands (the caller then tries to open it as a PDF).
     pub(crate) fn open_converted(&mut self, name: &str, bytes: &[u8]) -> Option<Result<(), String>> {

@@ -1890,3 +1890,16 @@
 	Printing to {printer}…	正在打印到 {printer}…
 	A print job is already being prepared	已有打印任务正在准备
 	Check updates	检查更新
+	Could not convert to PDF: {e}	无法转换为 PDF：{e}
+	Saved the PDF to {path}	PDF 已保存到 {path}
+	Saved the PDF to {path}; skipped: {list}	PDF 已保存到 {path}；已跳过：{list}
+	Save your documents first: Sintec.PDF closes to install the new version.	请先保存文档：Sintec.PDF 需要关闭以安装新版本。
+	You have version {c}.	当前版本为 {c}。
+	Downloading and checking the update…	正在下载并校验更新…
+	Couldn't update: {e}	无法更新：{e}
+	Update downloads the new installer, checks it and restarts Sintec.PDF on the new version. Download opens the release page.	“更新”会下载新的安装程序、校验后以新版本重新启动 Sintec.PDF。“下载”会打开发布页面。
+	Asks GitHub for the latest release. Nothing is downloaded or installed until you choose.	向 GitHub 查询最新版本。在您选择之前不会下载或安装任何内容。
+	Arrange the pages	整理页面
+	Drag pages to reorder them; delete, rotate or add pages from other files with the buttons below. Nothing is saved until you save.	拖动页面以调整顺序；使用下方按钮删除、旋转页面或从其他文件添加页面。保存前不会写入任何文件。
+	Skipped: {list}	已跳过：{list}
+	PDFs, images, text and Office documents	PDF、图像、文本和 Office 文档

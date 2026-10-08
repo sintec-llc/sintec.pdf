@@ -45,7 +45,7 @@ pub mod marks {
 }
 mod content_ui;
 mod link_ui;
-pub use create_ui::Clip;
+pub use create_ui::{Clip, ConvertDone};
 pub use link_ui::LinkDraft;
 pub use optimize_ui::{OptimizeDraft, OptimizeTab};
 pub use sign_ui::{DigitalIdEntry, SignDraft, SignStep};
@@ -335,6 +335,10 @@ pub struct PdfCraftApp {
     pub dialog: Option<Dialog>,
     /// How to ask for the latest release (the desktop app sets it; see `updates`).
     pub update_source: Option<updates::UpdateSource>,
+    /// How to download, check and start a release's installer (the desktop app sets it).
+    pub update_installer: Option<updates::UpdateInstaller>,
+    /// An update's installer has started: the app is closing so it can install.
+    pub update_started: bool,
     pub(crate) updates: updates::Updates,
     pub palette_open: bool,
     pub palette_query: String,
@@ -359,6 +363,9 @@ pub struct PdfCraftApp {
     /// A print job running in the background (Windows renders the sheets first): the printer's
     /// name and the result once it is done.
     pub print_run: Option<print_ui::PrintRun>,
+    /// A «Преобразовать в PDF» conversion running in the background.
+    #[allow(clippy::type_complexity)]
+    pub convert_run: Option<std::sync::Arc<std::sync::Mutex<Option<Result<ConvertDone, String>>>>>,
     /// Document Properties ▸ Description fields being edited: (document, Title/Author/Subject/Keywords).
     pub props_draft: Option<(DocId, [String; 4])>,
     /// Document Properties ▸ Initial View (and reading options) being edited.
@@ -557,6 +564,8 @@ impl PdfCraftApp {
             language: i18n::AUTO.to_string(),
             dialog: None,
             update_source: None,
+            update_installer: None,
+            update_started: false,
             updates: updates::Updates::default(),
             palette_open: false,
             palette_query: String::new(),
@@ -572,6 +581,7 @@ impl PdfCraftApp {
             save_override: None,
             print_file_override: None,
             print_run: None,
+            convert_run: None,
             props_draft: None,
             view_draft: None,
             requests: Default::default(),
@@ -1394,6 +1404,8 @@ impl eframe::App for PdfCraftApp {
         self.poll_export();
         self.poll_ocr();
         self.poll_print();
+        #[cfg(not(target_arch = "wasm32"))]
+        self.poll_convert();
         self.poll_action();
         self.process_file_requests();
         #[cfg(not(target_arch = "wasm32"))]
