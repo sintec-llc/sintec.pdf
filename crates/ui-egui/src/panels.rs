@@ -392,6 +392,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let mut bm_action: Option<BmAction> = None;
     let mut bm_expand: Option<usize> = None;
     let mut panel_edit: Option<pdfcraft_engine::Edit> = None;
+    let mut page_menu: Option<PageMenu> = None;
     let mut panel_command: Option<&'static str> = None;
     let mut sig_action: Option<crate::sign_ui::PanelAction> = None;
     let mut a11y_action: Option<crate::a11y_ui::PanelAction> = None;
@@ -501,7 +502,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             outline_item(ui, &t, info, item, &[i], info.outline.len(), &mut ctx);
                         }
                     }
-                    RightPanel::Pages => pages(ui, &t, info, view, &mut nav),
+                    RightPanel::Pages => pages(ui, &t, info, view, bm_editable, &mut nav, &mut page_menu),
                     RightPanel::Fields => fields(ui, &t, info, &doc.form, preparing, &mut nav, &mut panel_edit),
                     RightPanel::Layers => {
                         if info.layers.is_empty() {
@@ -581,6 +582,26 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     }
     if let Some(e) = panel_edit {
         app.apply_edit(e);
+    }
+    match page_menu {
+        Some(PageMenu::Extract { page, delete }) => {
+            app.views[index].select_pages(&[page]);
+            app.extract_draft = crate::ExtractDraft { separate: false, delete };
+            app.dialog = Some(crate::Dialog::Extract);
+        }
+        Some(PageMenu::Rotate { page, degrees }) => {
+            app.apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![page], degrees });
+        }
+        Some(PageMenu::InsertBlank { page, before }) => {
+            if let Some(p) = app.session.get(id).and_then(|d| d.info.pages.get(page)) {
+                let (w, h) = ((p.crop[2] - p.crop[0]).abs().max(1.0) as f64, (p.crop[3] - p.crop[1]).abs().max(1.0) as f64);
+                let at = if before { page } else { page + 1 };
+                if app.apply_edit(pdfcraft_engine::Edit::InsertBlankPage { at, width: w, height: h }) {
+                    app.views[index].go_to_page(at);
+                }
+            }
+        }
+        None => {}
     }
     if let Some(c) = panel_command {
         app.run_command(c);
@@ -778,8 +799,22 @@ fn outline_item(ui: &mut egui::Ui, t: &Tokens, info: &DocInfo, item: &OutlineIte
     }
 }
 
-fn pages(ui: &mut egui::Ui, t: &Tokens, info: &DocInfo, view: &crate::DocView, nav: &mut Option<Nav>) {
-    let w = (ui.available_width() - 40.0).min(150.0);
+/// The widest a page is drawn in the Pages panel (points); thumbnails are rendered for it.
+pub(crate) const PANEL_THUMB_W: f32 = 200.0;
+
+/// The Pages panel's right-click menu on a page.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum PageMenu {
+    /// Extract the page (Extract pages, with "Delete pages after extracting" set to `delete`).
+    Extract { page: usize, delete: bool },
+    /// Rotate it by `degrees` clockwise.
+    Rotate { page: usize, degrees: i64 },
+    /// A blank page of its size, before or after it.
+    InsertBlank { page: usize, before: bool },
+}
+
+fn pages(ui: &mut egui::Ui, t: &Tokens, info: &DocInfo, view: &crate::DocView, editable: bool, nav: &mut Option<Nav>, menu: &mut Option<PageMenu>) {
+    let w = (ui.available_width() - 40.0).min(PANEL_THUMB_W);
     for (i, p) in info.pages.iter().enumerate() {
         ui.vertical_centered(|ui| {
             let h = w * p.height / p.width.max(1.0);
@@ -807,6 +842,23 @@ fn pages(ui: &mut egui::Ui, t: &Tokens, info: &DocInfo, view: &crate::DocView, n
             if resp.clicked() {
                 *nav = Some(Nav::Page(i));
             }
+            // Right-click: extract, rotate, or add a blank page before or after it.
+            resp.context_menu(|ui| {
+                let mut item = |ui: &mut egui::Ui, label: &str, action: PageMenu| {
+                    if ui.add_enabled(editable, egui::Button::new(label)).clicked() {
+                        *menu = Some(action);
+                        ui.close();
+                    }
+                };
+                item(ui, tl!("Extract page…"), PageMenu::Extract { page: i, delete: false });
+                item(ui, tl!("Extract and delete from file…"), PageMenu::Extract { page: i, delete: true });
+                ui.separator();
+                item(ui, tl!("Rotate clockwise"), PageMenu::Rotate { page: i, degrees: 90 });
+                item(ui, tl!("Rotate counterclockwise"), PageMenu::Rotate { page: i, degrees: 270 });
+                ui.separator();
+                item(ui, tl!("Insert blank page before"), PageMenu::InsertBlank { page: i, before: true });
+                item(ui, tl!("Insert blank page after"), PageMenu::InsertBlank { page: i, before: false });
+            });
         });
         ui.add_space(4.0);
     }

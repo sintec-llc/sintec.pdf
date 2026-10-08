@@ -1929,3 +1929,12 @@ date	December	декабря
 	Mask areas with white	Закрыть белым
 	White	Белый
 	Drag over the areas to cover with white, then Apply redactions: what is under them is removed for good.	Выделите области, которые нужно закрыть белым, затем нажмите «Применить скрытие»: всё под ними будет удалено безвозвратно.
+	Extract page…	Извлечь страницу…
+	Extract and delete from file…	Извлечь и удалить из файла…
+	Insert blank page before	Вставить пустую страницу перед
+	Insert blank page after	Вставить пустую страницу после
+	A photo or scan of your {what} on white paper, or a PNG with transparency: the paper becomes transparent.	Фото или скан: {what} на белой бумаге, либо PNG с прозрачностью. Бумага станет прозрачной.
+	No picture chosen	Изображение не выбрано
+	Choose picture…	Выбрать изображение…
+	Choose a picture of your signature	Выберите изображение подписи
+	{file} is too large for a signature (at most {n} MB)	{file} слишком большой для подписи (не более {n} МБ)

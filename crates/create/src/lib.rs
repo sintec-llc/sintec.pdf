@@ -5,7 +5,9 @@
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString, Stream};
 
 mod extract;
+mod picture;
 pub use extract::{ExtractedImage, ImageExport, extract_images, image_file};
+pub use picture::{preview_rgba, signature_png};
 mod unicode_text;
 use pdfcraft_fonts::{literal, win_ansi, wrap};
 pub use unicode_text::{A4, decode_text, from_text_unicode};

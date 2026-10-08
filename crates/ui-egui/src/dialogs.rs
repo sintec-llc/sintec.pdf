@@ -816,6 +816,9 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
             }
             Dialog::Signature => {
                 let (apply, cancel) = crate::fill_sign::signature_pad(ui, &t, &mut app.signature_draft, &mut app.signature_preview);
+                if std::mem::take(&mut app.signature_draft.pick) {
+                    app.pick_signature_picture();
+                }
                 if apply {
                     let d = std::mem::take(&mut app.signature_draft);
                     let tool = if d.initials {

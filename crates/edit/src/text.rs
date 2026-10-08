@@ -245,11 +245,17 @@ struct Shown {
     bold: bool,
     italic: bool,
     decodable: bool,
+    /// For a TJ: where it can be split into separate runs (its wide gaps, see [`WIDE_GAP`]): the
+    /// index of the gap in the array and the pen position after it (text space, unscaled by
+    /// the text matrix); and how far the whole TJ moves the pen.
+    cuts: Vec<(usize, f64)>,
+    advance: f64,
 }
 
 /// The graphics state carried from one of a page's content streams to the next: the streams
 /// are one stream in pieces (§7.8.2), so a `cm` (AutoCAD scales the whole page in the first
 /// stream), an unbalanced `q`, the font and the colour still apply in the streams after it.
+#[derive(Clone)]
 struct Carry {
     ts: Ts,
     stack: Vec<Ts>,
@@ -362,9 +368,18 @@ fn interpret(doc: &Document, ops: &[Op], fonts_res: &Dict, cache: &mut HashMap<V
                 let mut text = String::new();
                 let mut decodable = true;
                 let mut x_text = 0.0;
-                for p in &pieces {
+                // Where the last glyph ends: a trailing TJ adjustment moves the pen, not the box.
+                let mut ink = 0.0;
+                let mut gap = false;
+                let mut cuts = Vec::new();
+                let mut text_before = false;
+                for (k, p) in pieces.iter().enumerate() {
                     match p {
                         Object::String(s) => {
+                            // A large gap inside TJ reads as a space.
+                            if std::mem::take(&mut gap) && !text.is_empty() && !text.ends_with(' ') {
+                                text.push(' ');
+                            }
                             for (code, len) in m.codes(&s.bytes) {
                                 match m.text_of(code) {
                                     Some(t) => text.push_str(t),
@@ -373,27 +388,35 @@ fn interpret(doc: &Document, ops: &[Op], fonts_res: &Dict, cache: &mut HashMap<V
                                 let w = m.width(code) * ts.size + ts.char_spacing + if m.is_space(code, len) { ts.word_spacing } else { 0.0 };
                                 x_text += w * ts.scale;
                             }
+                            ink = x_text;
+                            text_before = true;
                         }
                         other => {
                             if let Some(n) = other.as_f64() {
                                 let dx = -n / 1000.0 * ts.size * ts.scale;
-                                // A large gap inside TJ reads as a space.
-                                if dx > ts.size * 0.2 && !text.ends_with(' ') {
-                                    text.push(' ');
-                                }
+                                gap |= dx > ts.size * 0.2;
                                 x_text += dx;
+                                let text_after = pieces.get(k + 1..).unwrap_or_default().iter().any(|o| matches!(o, Object::String(_)));
+                                if -n >= WIDE_GAP && text_before && text_after {
+                                    cuts.push((k, x_text));
+                                    text_before = false;
+                                }
                             }
                         }
                     }
                 }
                 tm = Matrix([1.0, 0.0, 0.0, 1.0, x_text, 0.0]).then(&tm);
-                let end = tm.then(&ts.ctm).apply(0.0, ts.rise);
+                // Only adjustments: it moves the pen and shows nothing.
+                if !pieces.iter().any(|p| matches!(p, Object::String(_))) {
+                    continue;
+                }
+                let end = trm0.apply(ink, ts.rise);
                 // The box: from descent to ascent along the run.
                 let corners = [
                     trm0.apply(0.0, ts.rise + m.descent * ts.size),
-                    trm0.apply(x_text, ts.rise + m.descent * ts.size),
+                    trm0.apply(ink, ts.rise + m.descent * ts.size),
                     trm0.apply(0.0, ts.rise + m.ascent * ts.size),
-                    trm0.apply(x_text, ts.rise + m.ascent * ts.size),
+                    trm0.apply(ink, ts.rise + m.ascent * ts.size),
                 ];
                 let rect = corners
                     .iter()
@@ -418,6 +441,8 @@ fn interpret(doc: &Document, ops: &[Op], fonts_res: &Dict, cache: &mut HashMap<V
                     bold: m.bold,
                     italic: m.italic,
                     decodable,
+                    cuts,
+                    advance: x_text,
                 });
             }
             _ => {}
@@ -437,7 +462,10 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
     let mut lines: Vec<TextLine> = Vec::new();
     let mut carry = Carry::new();
     for (si, (_, data)) in content_streams(doc, &p.dict).into_iter().enumerate() {
-        let ops = parse(&data).ops;
+        // As editing will see them: wide TJ runs split at their gaps.
+        let raw = parse(&data).ops;
+        let mut splits = wide_run_splits(doc, &raw, &fonts_res, &mut cache, &carry);
+        let ops: Vec<Op> = raw.into_iter().enumerate().flat_map(|(i, o)| splits.remove(&i).unwrap_or_else(|| vec![o])).collect();
         let shown = interpret(doc, &ops, &fonts_res, &mut cache, &mut carry);
         let mut last: Option<(usize, f64, f64, f64)> = None; // (bt, baseline, end_x, size)
         for s in shown {
@@ -493,6 +521,99 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
     // Lines of only spaces aren't editable text.
     lines.retain(|l| !l.text.trim().is_empty());
     Ok(lines)
+}
+
+/// A TJ adjustment this wide (in thousandths of an em, i.e. 3 em) separates two runs of text,
+/// not two words: table rows exported as one TJ per row put each cell after such a jump. It
+/// matches the gap at which [`text_lines`] stops joining runs into one line.
+const WIDE_GAP: f64 = 3000.0;
+
+/// The operators that replace each TJ with wide gaps (by index in `ops`, read with the state
+/// `carry` has at their start): the TJ cut at its gaps, every piece after the first placed with
+/// its own `Tm`, then the text line matrix and pen restored (`Tm`, and a TJ of one adjustment)
+/// so what follows draws exactly as before. Each piece then stands on its own: rewriting one
+/// cell of a row doesn't move the next.
+fn wide_run_splits(
+    doc: &Document,
+    ops: &[Op],
+    fonts_res: &Dict,
+    cache: &mut HashMap<Vec<u8>, Rc<Metrics>>,
+    carry: &Carry,
+) -> HashMap<usize, Vec<Op>> {
+    let shown = interpret(doc, ops, fonts_res, cache, &mut carry.clone());
+    shown.iter().filter(|s| !s.cuts.is_empty()).filter_map(|s| Some((s.op, split_run(ops.get(s.op)?, s)?))).collect()
+}
+
+fn split_run(op: &Op, s: &Shown) -> Option<Vec<Op>> {
+    if !op.is("TJ") {
+        return None;
+    }
+    let items = op.operands.first().and_then(Object::as_array)?;
+    let [a, b, _, _, e, f] = s.tlm.0;
+    let norm = a * a + b * b;
+    let unit = s.state.size * s.state.scale;
+    if !norm.is_finite() || norm < 1e-12 || !unit.is_finite() || unit.abs() < 1e-9 {
+        return None;
+    }
+    let matrix = |m: Matrix| Op::new("Tm", m.0.iter().map(|v| pdfcraft_content::num(*v)).collect());
+    let tj = |items: &[Object]| Op::new("TJ", vec![Object::Array(items.to_vec())]);
+    let mut out = Vec::new();
+    let mut from = 0;
+    for &(cut, _) in &s.cuts {
+        out.push(tj(items.get(from..=cut)?));
+        from = cut + 1;
+    }
+    for (i, &(_, x)) in s.cuts.iter().enumerate() {
+        // Insert each later piece's Tm before it: piece i + 1 sits after TJ number i + 1 in `out`.
+        out.insert(2 * i + 1, matrix(Matrix([1.0, 0.0, 0.0, 1.0, x, 0.0]).then(&s.tm)));
+    }
+    out.push(tj(items.get(from..)?));
+    // Back to the line's matrix, and the pen where the whole TJ left it.
+    let after = Matrix([1.0, 0.0, 0.0, 1.0, s.advance, 0.0]).then(&s.tm).0;
+    let d = ((after[4] - e) * a + (after[5] - f) * b) / norm;
+    out.push(matrix(s.tlm));
+    out.push(Op::new("TJ", vec![Object::Array(vec![pdfcraft_content::num(-d * 1000.0 / unit)])]));
+    Some(out.into_iter().map(|o| Op { span: op.span.clone(), ..o }).collect())
+}
+
+/// Before an edit: split the page's wide TJ runs in its content streams (see
+/// [`wide_run_splits`]), so the operators an edit works on are the runs [`text_lines`]
+/// reports. The page draws the same.
+fn split_wide_runs(doc: &mut Document, page: usize) -> Result<(), EditError> {
+    let p = page_dict(doc, page)?;
+    let res = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
+    let fonts_res = res.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
+    let mut cache = HashMap::new();
+    let mut carry = Carry::new();
+    let streams = content_streams(doc, &p.dict);
+    let mut changed = false;
+    let mut contents = Vec::with_capacity(streams.len());
+    for (obj, data) in &streams {
+        let ops = parse(data).ops;
+        let mut splits = wide_run_splits(doc, &ops, &fonts_res, &mut cache, &carry);
+        interpret(doc, &ops, &fonts_res, &mut cache, &mut carry);
+        if splits.is_empty() {
+            contents.push(obj.clone());
+            continue;
+        }
+        let new_data = splice(data, &ops, |i| match splits.remove(&i) {
+            Some(pieces) => (pieces, false),
+            None => (Vec::new(), true),
+        });
+        let mut dict = match &*doc.resolve(obj) {
+            Object::Stream(s) => s.dict.clone(),
+            _ => Dict::new(),
+        };
+        dict.remove(b"Length");
+        contents.push(Object::Ref(doc.add(Object::Stream(Stream::flate(dict, &new_data)))));
+        changed = true;
+    }
+    if changed {
+        doc.update_dict(p.obj, |d| {
+            d.set(b"Contents".to_vec(), if contents.len() == 1 { contents[0].clone() } else { Object::Array(contents) });
+        })?;
+    }
+    Ok(())
 }
 
 /// Text → the bytes that show it in the chosen font.
@@ -642,6 +763,7 @@ fn type3_encode(fallback: &Type3Fallback, text: &str) -> Option<Vec<u8>> {
 /// Replace the text of line `line` (an index into [`text_lines`]) on `page` with `text`.
 pub fn replace_line(doc: &mut Document, page: usize, line: usize, text: &str) -> Result<LineEdit, EditError> {
     let text = text.replace(['\n', '\r'], " ");
+    split_wide_runs(doc, page)?;
     let lines = text_lines(doc, page)?;
     let target = lines.get(line).cloned().ok_or_else(|| EditError::Invalid(format!("page {} has no line {}", page + 1, line + 1)))?;
     let p = page_dict(doc, page)?;
@@ -871,6 +993,7 @@ pub struct BlockStyle {
 
 /// Rewrite paragraph `block` with new text (or its own) and formatting, rewrapped to its width.
 pub fn rewrite_block(doc: &mut Document, page: usize, block: usize, text: Option<&str>, style: &BlockStyle) -> Result<LineEdit, EditError> {
+    split_wide_runs(doc, page)?;
     let lines = text_lines(doc, page)?;
     let blocks = group_blocks(&lines);
     let b = blocks.get(block).cloned().ok_or_else(|| EditError::Invalid(format!("page {} has no paragraph {}", page + 1, block + 1)))?;

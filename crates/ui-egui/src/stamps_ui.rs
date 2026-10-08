@@ -25,7 +25,7 @@ pub struct CustomStamp {
     pub data: Arc<Vec<u8>>,
 }
 
-mod b64 {
+pub(crate) mod b64 {
     use std::sync::Arc;
 
     use base64::Engine as _;
@@ -153,6 +153,50 @@ impl PdfCraftApp {
         }
         #[cfg(target_arch = "wasm32")]
         self.notify_tr("Custom stamps arrive on the web with file pickers for images");
+    }
+
+    /// Create signature ▸ Image ▸ Choose picture…
+    pub(crate) fn pick_signature_picture(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let read = |app: &mut Self, path: std::path::PathBuf| match std::fs::read(&path) {
+                Ok(bytes) => {
+                    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    app.use_signature_picture(&name, &bytes);
+                }
+                Err(e) => app.notify_fmt("Couldn't read {name}: {e}", &[("name", &path.display().to_string()), ("e", &e.to_string())]),
+            };
+            match self.save_override.clone() {
+                Some(p) if [".png", ".jpg", ".jpeg", ".bmp", ".gif"].iter().any(|e| p.to_lowercase().ends_with(e)) => read(self, p.into()),
+                Some(_) => {}
+                None => {
+                    let dialog = rfd::AsyncFileDialog::new()
+                        .add_filter(tl!("Image"), &["png", "jpg", "jpeg", "bmp", "gif"])
+                        .set_title(tl!("Choose a picture of your signature"));
+                    self.ask_one(crate::pickers::Ask::File(dialog), None, read);
+                }
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        self.notify_tr("Custom stamps arrive on the web with file pickers for images");
+    }
+
+    /// Prepare a picture for the signature being created (paper made transparent, trimmed).
+    pub fn use_signature_picture(&mut self, name: &str, bytes: &[u8]) {
+        if bytes.len() > crate::fill_sign::MAX_SIGNATURE_FILE {
+            self.notify_fmt(
+                "{file} is too large for a signature (at most {n} MB)",
+                &[("file", name), ("n", &(crate::fill_sign::MAX_SIGNATURE_FILE >> 20).to_string())],
+            );
+            return;
+        }
+        match pdfcraft_engine::signature_png(name, bytes) {
+            Ok(png) => {
+                self.signature_draft.picture = true;
+                self.signature_draft.image = Some(Arc::new(png));
+            }
+            Err(e) => self.notify_fmt("Couldn't use {name}: {e}", &[("name", name), ("e", &e.to_string())]),
+        }
     }
 
     /// Open the Create Custom Stamp dialog for a file.

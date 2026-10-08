@@ -16,7 +16,8 @@ pdfcraft-fonts = { workspace = true }
 skrifa = "0.44"
 png = "0.18"
 tiff = "0.11"
-image = { version = "0.25", default-features = false, features = ["bmp", "gif"] }
+# PNG and JPEG decoding for signature pictures (both already in the tree).
+image = { version = "0.25", default-features = false, features = ["bmp", "gif", "png", "jpeg"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]
