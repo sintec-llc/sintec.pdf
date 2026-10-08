@@ -1,11 +1,14 @@
-PdfCraft
+Sintec.PDF
+Copyright (c) 2026 Sintec LLC.
+
+Sintec.PDF is based on PdfCraft by the ArtCraft team (https://github.com/storytold/pdfcraft):
 Copyright (c) 2026 ArtCraft Team and the PdfCraft contributors.
-Licensed under the MIT License or the Apache License, Version 2.0, at your option
+Both are licensed under the MIT License or the Apache License, Version 2.0, at your option
 (LICENSE-MIT, LICENSE-APACHE).
 
-The ArtCraft name, wordmark and logos in docs/brand/ are trademarks of the ArtCraft Team. They are
-not open source and are not covered by the license above; their terms are in
-docs/brand/LICENSE-brand.txt.
+Sintec.PDF is not made, sponsored or endorsed by the ArtCraft Team. As PdfCraft's brand terms
+require of modified versions, the ArtCraft name, wordmark and logos have been removed from it;
+the name appears only in plain-text credit like this one.
 
 Third-party material
 

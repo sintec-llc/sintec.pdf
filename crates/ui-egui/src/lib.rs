@@ -920,7 +920,7 @@ impl PdfCraftApp {
                 }
             }
             Err(e) => self.notify_fmt(
-                "{who} in this document tried to open an address PdfCraft won't open: {e}. Only web (http, https) and email (mailto) links open from documents.",
+                "{who} in this document tried to open an address Sintec.PDF won't open: {e}. Only web (http, https) and email (mailto) links open from documents.",
                 &[("who", tl!(origin.noun())), ("e", &e.to_string())],
             ),
         }
@@ -1409,7 +1409,7 @@ impl eframe::App for PdfCraftApp {
         let title = self
             .active
             .and_then(|i| self.session.get(self.views[i].id))
-            .map_or_else(|| "PdfCraft".to_owned(), |d| format!("{} — PdfCraft", d.display_name()));
+            .map_or_else(|| "Sintec.PDF".to_owned(), |d| format!("{} — Sintec.PDF", d.display_name()));
         if title != self.window_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.window_title = title;

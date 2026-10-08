@@ -381,9 +381,9 @@ date	December	декабря
 	Check for updates	Проверить обновления
 	No check has run yet.	Проверка ещё не выполнялась.
 	Checking for a newer version…	Поиск новой версии…
-	PdfCraft {v} is available.	Доступна версия PdfCraft {v}.
+	Sintec.PDF {v} is available.	Доступна версия Sintec.PDF {v}.
 	You have version {c}. Download the new version from its release page.	У вас версия {c}. Скачайте новую версию на странице выпуска.
-	PdfCraft {c} is up to date.	PdfCraft {c} — последняя версия.
+	Sintec.PDF {c} is up to date.	Sintec.PDF {c} — последняя версия.
 	Couldn't check for updates: {e}	Не удалось проверить обновления: {e}
 	You have version {c}. All releases are listed at {page}.	У вас версия {c}. Все выпуски перечислены на {page}.
 	Asks GitHub for the latest release. Nothing is downloaded or installed automatically.	Запрашивает у GitHub последний выпуск. Ничего не скачивается и не устанавливается автоматически.
@@ -489,7 +489,7 @@ date	December	декабря
 	No changes allowed	Изменения запрещены
 	Annotations, form fill-in, and digital signatures	Комментарии, заполнение форм и цифровые подписи
 	Form fill-in and digital signatures	Заполнение форм и цифровые подписи
-	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	Ключ хранится в Связке ключей macOS, которая может попросить разрешить PdfCraft его использовать.
+	The key is in the macOS Keychain, which may ask to allow Sintec.PDF to use it.	Ключ хранится в Связке ключей macOS, которая может попросить разрешить Sintec.PDF его использовать.
 	Digital ID password	Пароль цифрового удостоверения
 	Back	Назад
 	Validate all	Проверить все
@@ -1231,7 +1231,7 @@ date	December	декабря
 	Anyone opening the document will need this password. It's applied when you save.	Этот пароль понадобится всем, кто открывает документ. Он применяется при сохранении.
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	Документ открывается без пароля; этот пароль нужен для изменения ограничений. Он применяется при сохранении.
 	Recover unsaved documents?	Восстановить несохранённые документы?
-	PdfCraft didn't shut down normally. These documents had changes that were autosaved:	PdfCraft завершил работу некорректно. В этих документах были автоматически сохранённые изменения:
+	Sintec.PDF didn't shut down normally. These documents had changes that were autosaved:	Sintec.PDF завершил работу некорректно. В этих документах были автоматически сохранённые изменения:
 	just now	только что
 	{n} min ago	{n} мин назад
 	{n} h ago	{n} ч назад
@@ -1250,7 +1250,6 @@ date	December	декабря
 	Select all pages (Organize)	Выбрать все страницы (Упорядочивание)
 	Version {v}	Версия {v}
 	A clean-room, open-source PDF application written in Rust. MIT OR Apache-2.0.	Открытое PDF-приложение на Rust, созданное методом «чистой комнаты». MIT OR Apache-2.0.
-	Part of	Часть
 	Summarize Options	Параметры сводки
 	Choose a layout:	Выберите макет:
 	Comments only	Только комментарии
@@ -1397,10 +1396,10 @@ date	December	декабря
 	On the web, open or drop an image to convert it	В веб-версии откройте или перетащите изображение, чтобы преобразовать его
 	Couldn't optimize the file: {e}	Не удалось оптимизировать файл: {e}
 	Couldn't write {path}: {e}	Не удалось записать {path}: {e}
-	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	Форма требует отправки на {u}; PdfCraft не отправляет данные форм. Сохраните документ, чтобы сохранить введённое.
+	The form asks to be submitted to {u}; Sintec.PDF doesn't send form data. Save the document to keep your entries.	Форма требует отправки на {u}; Sintec.PDF не отправляет данные форм. Сохраните документ, чтобы сохранить введённое.
 	{s} actions run in the JavaScript engine (M6)	Действия {s} выполняются движком JavaScript (M6)
 	{name}: the {other} action isn't supported yet	{name}: действие {other} пока не поддерживается
-	{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.	{name} отправляет форму на {url}; PdfCraft не отправляет данные форм. Сохраните документ, чтобы сохранить введённое.
+	{name} submits the form to {url}; Sintec.PDF doesn't send form data. Save the document to keep your entries.	{name} отправляет форму на {url}; Sintec.PDF не отправляет данные форм. Сохраните документ, чтобы сохранить введённое.
 	Export stopped: {e}	Экспорт прерван: {e}
 	Exported 1 image	Экспортировано 1 изображение
 	Exported {n} images	Экспортировано изображений: {n}
@@ -1557,8 +1556,8 @@ date	December	декабря
 	Signed and all signatures are valid.	Подписано, все подписи действительны.
 	At least one signature has problems.	Как минимум у одной подписи есть проблемы.
 	This document is secured. Some changes are restricted by its security settings.	Этот документ защищён. Некоторые изменения ограничены его параметрами безопасности.
-	This is a dynamic XFA form, which PdfCraft can't display yet. What you see is the file's placeholder page.	Это динамическая форма XFA, которую PdfCraft пока не умеет показывать. Вы видите страницу-заглушку из файла.
-	This form also contains XFA data, which PdfCraft doesn't read yet. You can fill its fields, but Acrobat may show the XFA values instead.	Эта форма также содержит данные XFA, которые PdfCraft пока не читает. Поля можно заполнить, но Acrobat может показать вместо них значения XFA.
+	This is a dynamic XFA form, which Sintec.PDF can't display yet. What you see is the file's placeholder page.	Это динамическая форма XFA, которую Sintec.PDF пока не умеет показывать. Вы видите страницу-заглушку из файла.
+	This form also contains XFA data, which Sintec.PDF doesn't read yet. You can fill its fields, but Acrobat may show the XFA values instead.	Эта форма также содержит данные XFA, которые Sintec.PDF пока не читает. Поля можно заполнить, но Acrobat может показать вместо них значения XFA.
 	This document contains {n} interactive form fields.	В этом документе интерактивных полей формы: {n}.
 	This file was damaged and has been repaired. Saving keeps the repaired version.	Этот файл был повреждён и восстановлен. При сохранении остаётся восстановленная версия.
 	Dismiss	Скрыть
@@ -1597,7 +1596,7 @@ date	December	декабря
 	Read	Чтение
 	Convert	Преобразовать
 	E-Sign	Электронная подпись
-	Welcome to PdfCraft	Добро пожаловать в PdfCraft
+	Welcome to Sintec.PDF	Добро пожаловать в Sintec.PDF
 	An open-source PDF workbench — local, private, and scriptable.	Открытая рабочая среда для PDF — локальная, приватная и автоматизируемая.
 	Recommended tools	Рекомендуемые инструменты
 	Use now	Использовать
@@ -1630,15 +1629,13 @@ date	December	декабря
 	Split document…	Разделить документ…
 	Number pages…	Пронумеровать страницы…
 	Keyboard shortcuts	Сочетания клавиш
-	Join the ArtCraft Discord	Присоединиться к Discord ArtCraft
-	Join the ArtCraft community	Присоединиться к сообществу ArtCraft
-	Get help, share feedback and follow development on Discord.	Получайте помощь, делитесь отзывами и следите за разработкой в Discord.
-	Join our Discord	Присоединиться к нашему Discord
-	PdfCraft web page	Веб-страница PdfCraft
-	PdfCraft on GitHub	PdfCraft на GitHub
-	ArtCraft website	Сайт ArtCraft
+	Sintec.PDF releases	Выпуски Sintec.PDF
+	Updates and support	Обновления и поддержка
+	New versions and the issue tracker are on GitHub.	Новые версии и трекер ошибок — на GitHub.
+	Based on PdfCraft by the ArtCraft team.	Основано на PdfCraft от команды ArtCraft.
+	Sintec.PDF on GitHub	Sintec.PDF на GitHub
 	Check for updates…	Проверить обновления…
-	About PdfCraft	О программе PdfCraft
+	About Sintec.PDF	О программе Sintec.PDF
 	JavaScript console…	Консоль JavaScript…
 	Document JavaScripts…	JavaScript документа…
 	Recognize text…	Распознать текст…
@@ -1648,8 +1645,8 @@ date	December	декабря
 	Add background…	Добавить фон…
 	Prepare a form	Подготовить форму
 	Digitally sign	Подписать цифровой подписью
-	Files you open in PdfCraft appear here. Drop a PDF anywhere to open it.	Здесь появятся файлы, открытые в PdfCraft. Перетащите PDF в любое место, чтобы открыть его.
-	PdfCraft works offline. No telemetry, no account, and no cloud processing unless you add a provider.	PdfCraft работает без интернета. Без телеметрии, без учётной записи и без облачной обработки, пока вы не добавите поставщика.
+	Files you open in Sintec.PDF appear here. Drop a PDF anywhere to open it.	Здесь появятся файлы, открытые в Sintec.PDF. Перетащите PDF в любое место, чтобы открыть его.
+	Sintec.PDF works offline. No telemetry, no account, and no cloud processing unless you add a provider.	Sintec.PDF работает без интернета. Без телеметрии, без учётной записи и без облачной обработки, пока вы не добавите поставщика.
 	Measure distance	Измерить расстояние
 	Measure perimeter	Измерить периметр
 	Measure area	Измерить площадь

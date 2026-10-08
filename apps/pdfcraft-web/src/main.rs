@@ -41,7 +41,7 @@ fn main() {
                                     }
                                     ctx.request_repaint();
                                 }
-                                Err(e) => eframe::web_sys::console::error_1(&format!("PdfCraft: could not fetch {url}: {e}").into()),
+                                Err(e) => eframe::web_sys::console::error_1(&format!("Sintec.PDF: could not fetch {url}: {e}").into()),
                             }
                         });
                     }

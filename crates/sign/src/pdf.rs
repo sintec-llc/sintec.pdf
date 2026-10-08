@@ -409,7 +409,7 @@ fn validate_into(doc: &Document, bytes: &[u8], trust: &TrustStore, v: &Dict, inf
     // The signed revision's number: its cross-reference sections (1 for a reconstructed file).
     info.revision = cache.revision(bytes, covered).map_or(1, |d| d.revisions().len().max(1));
     if info.sub_filter.as_deref() == Some("adbe.x509.rsa_sha1") {
-        info.details.push("This signature uses the legacy adbe.x509.rsa_sha1 format, which PdfCraft does not validate yet.".into());
+        info.details.push("This signature uses the legacy adbe.x509.rsa_sha1 format, which Sintec.PDF does not validate yet.".into());
         return;
     }
     let sd = match SignedData::parse(&contents) {
@@ -1013,7 +1013,7 @@ fn sign_inner(
         }
     }
     let mut app = Dict::new();
-    app.set(b"Name".to_vec(), Object::name("PdfCraft"));
+    app.set(b"Name".to_vec(), Object::name("Sintec.PDF"));
     let mut build = Dict::new();
     build.set(b"App".to_vec(), Object::Dict(app));
     v.set(b"Prop_Build".to_vec(), Object::Dict(build));
@@ -1176,7 +1176,7 @@ pub fn timestamp_document(doc: &Document, tsa: &dyn crate::timestamp::TimestampA
     v.set(b"Contents".to_vec(), Object::String(PdfString { bytes: vec![0; TOKEN_RESERVE], hex: true }));
     v.set(b"M".to_vec(), PdfString::literal(date.as_bytes().to_vec()));
     let mut app = Dict::new();
-    app.set(b"Name".to_vec(), Object::name("PdfCraft"));
+    app.set(b"Name".to_vec(), Object::name("Sintec.PDF"));
     let mut build = Dict::new();
     build.set(b"App".to_vec(), Object::Dict(app));
     v.set(b"Prop_Build".to_vec(), Object::Dict(build));

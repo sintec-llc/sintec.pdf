@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-  Build, sign and package PdfCraft for Windows.
+  Build, sign and package Sintec.PDF for Windows.
 
 .DESCRIPTION
   Produces, in $env:DIST (default: dist/release):
-    pdfcraft-<version>-windows-<arch>.msi            per-machine installer (WiX v5)
-    pdfcraft-<version>-windows-<arch>-portable.zip   pdfcraft.exe + pdfcraft-cli.exe
+    sintec-pdf-<version>-windows-<arch>.msi            per-machine installer (WiX v5)
+    sintec-pdf-<version>-windows-<arch>-portable.zip   sintec-pdf.exe + sintec-pdf-cli.exe
 
   The binaries link the C runtime statically (+crt-static), so neither the MSI nor the portable
   zip needs the Visual C++ redistributable. Signing is delegated to sign.ps1 (skipped with a
@@ -53,7 +53,7 @@ New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 if (-not $env:PDFCRAFT_BUILD_SHA) { $env:PDFCRAFT_BUILD_SHA = (git -C $Root rev-parse HEAD 2>$null) }
 if (-not $env:PDFCRAFT_BUILD_DATE) { $env:PDFCRAFT_BUILD_DATE = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd') }
 
-Write-Output "PdfCraft $Version for Windows $Arch ($Target)"
+Write-Output "Sintec.PDF $Version for Windows $Arch ($Target)"
 
 if (-not $SkipBuild) {
   # Static CRT: no VC++ redistributable needed. Scoped to the target so host build scripts and
@@ -86,9 +86,11 @@ foreach ($check in @(@('pdfcraft.exe', 2), @('pdfcraft-cli.exe', 3))) {
 $Stage = Join-Path $TargetDir "windows-package\$Arch"
 Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
-Copy-Item (Join-Path $Bin 'pdfcraft.exe'), (Join-Path $Bin 'pdfcraft-cli.exe') $Stage
+# Cargo builds pdfcraft*.exe (the upstream crate names); they ship as sintec-pdf*.exe.
+Copy-Item (Join-Path $Bin 'pdfcraft.exe') (Join-Path $Stage 'sintec-pdf.exe')
+Copy-Item (Join-Path $Bin 'pdfcraft-cli.exe') (Join-Path $Stage 'sintec-pdf-cli.exe')
 
-# OCR models: models\ beside pdfcraft.exe is where pdfcraft_ocr::Models::find looks, so Scan & OCR
+# OCR models: models\ beside sintec-pdf.exe is where pdfcraft_ocr::Models::find looks, so Scan & OCR
 # works straight after install with nothing to download. Fetched (SHA-256 verified) if missing.
 $ModelsSrc = Join-Path $Root 'assets\models'
 Invoke-Native 'cargo xtask models' { cargo xtask models $ModelsSrc }
@@ -99,10 +101,10 @@ foreach ($m in 'text-detection.rten', 'text-recognition.rten', 'pp-ocrv5_mobile_
   Copy-Item (Join-Path $ModelsSrc $m), (Join-Path $ModelsSrc "$m.LICENCE.txt") $ModelsStage
 }
 
-& (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'pdfcraft.exe') (Join-Path $Stage 'pdfcraft-cli.exe')
+& (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'sintec-pdf.exe') (Join-Path $Stage 'sintec-pdf-cli.exe')
 
 # ---- MSI ---------------------------------------------------------------------------------------
-$Msi = Join-Path $Dist "pdfcraft-$Version-windows-$Arch.msi"
+$Msi = Join-Path $Dist "sintec-pdf-$Version-windows-$Arch.msi"
 Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'pdfcraft.wxs') -arch $Arch `
     (Join-Path $PSScriptRoot 'installer-ui.wxs') `
@@ -117,7 +119,7 @@ Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Ms
 & (Join-Path $PSScriptRoot 'sign.ps1') $Msi
 
 # ---- portable zip ------------------------------------------------------------------------------
-$Portable = Join-Path $TargetDir "windows-package\pdfcraft-$Version-windows-$Arch-portable"
+$Portable = Join-Path $TargetDir "windows-package\sintec-pdf-$Version-windows-$Arch-portable"
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
@@ -134,7 +136,7 @@ if ($env:CRAFT_FONTS_DIR) {
     if (Test-Path $ofl) { Copy-Item $ofl (Join-Path $Portable "OFL-$($_.Name).txt") }
   }
 }
-$Zip = Join-Path $Dist "pdfcraft-$Version-windows-$Arch-portable.zip"
+$Zip = Join-Path $Dist "sintec-pdf-$Version-windows-$Arch-portable.zip"
 Remove-Item -Force $Zip -ErrorAction SilentlyContinue
 Compress-Archive -Path $Portable -DestinationPath $Zip
 
@@ -142,8 +144,8 @@ Compress-Archive -Path $Portable -DestinationPath $Zip
 # here; .github/workflows/windows-arm64.yml installs and runs it on ARM64 instead.
 $HostArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
 if ($Arch -ne 'arm64' -or $HostArch -eq 'arm64') {
-  Invoke-Native 'pdfcraft-cli --version' { & (Join-Path $Stage 'pdfcraft-cli.exe') --version }
+  Invoke-Native 'sintec-pdf-cli --version' { & (Join-Path $Stage 'sintec-pdf-cli.exe') --version }
 } else {
-  Write-Output "skipping pdfcraft-cli --version: an $Arch build doesn't run on this $HostArch machine"
+  Write-Output "skipping sintec-pdf-cli --version: an $Arch build doesn't run on this $HostArch machine"
 }
 Get-Item $Msi, $Zip | Format-Table Name, Length
