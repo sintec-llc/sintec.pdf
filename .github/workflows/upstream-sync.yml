@@ -1,0 +1,108 @@
+name: Upstream sync
+
+# Weekly: merge the newest PdfCraft release tag (github.com/storytold/pdfcraft) into a
+# sync/upstream-<tag> branch and open a draft pull request, or open an issue when the merge
+# conflicts. See docs/upstream-sync.md for the rest of the process.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Find the newest upstream release
+        id: up
+        run: |
+          git remote add upstream https://github.com/storytold/pdfcraft.git
+          git fetch --quiet upstream --tags
+          tag="$(git tag --list 'v*' --merged upstream/main --sort=-v:refname | head -n 1)"
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+          if [ -z "$tag" ] || git merge-base --is-ancestor "$tag" HEAD; then
+            echo "state=current" >>"$GITHUB_OUTPUT"
+            echo "Up to date with upstream ${tag:-(no release)}." >>"$GITHUB_STEP_SUMMARY"
+          elif git ls-remote --exit-code --heads origin "sync/upstream-$tag" >/dev/null; then
+            echo "state=proposed" >>"$GITHUB_OUTPUT"
+            echo "sync/upstream-$tag already exists; nothing to do." >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "state=new" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge it
+        id: merge
+        if: steps.up.outputs.state == 'new'
+        env:
+          TAG: ${{ steps.up.outputs.tag }}
+        run: |
+          git config user.name "sintec-sync[bot]"
+          git config user.email "sintec-sync@users.noreply.github.com"
+          git switch -c "sync/upstream-$TAG"
+          if git merge --no-ff --no-commit "$TAG"; then
+            echo "clean=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "clean=false" >>"$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U >conflicts.txt
+            git merge --abort
+          fi
+
+      - name: Report conflicts
+        if: steps.merge.outputs.clean == 'false'
+        env:
+          TAG: ${{ steps.up.outputs.tag }}
+        run: |
+          title="Upstream sync: PdfCraft $TAG needs a manual merge"
+          if gh issue list --state open --search "in:title \"$title\"" --json number --jq 'length' | grep -qv '^0$'; then
+            echo "Issue already open." >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "Merging upstream PdfCraft **$TAG** into \`main\` conflicts in:"
+            echo
+            sed 's/^/- `/; s/$/`/' conflicts.txt
+            echo
+            echo "Follow docs/upstream-sync.md: merge on \`sync/upstream-$TAG\`, resolve, \`cargo xtask rebrand\`, translate new strings into Russian, run the tests and build the installer."
+          } >body.md
+          gh issue create --title "$title" --body-file body.md
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.merge.outputs.clean == 'true'
+
+      - name: Rebrand, commit, push and open a draft pull request
+        if: steps.merge.outputs.clean == 'true'
+        env:
+          TAG: ${{ steps.up.outputs.tag }}
+        run: |
+          # Our CI, release workflows and README stay ours; upstream's versions are not used here.
+          git checkout HEAD -- .github README.md
+          cargo xtask rebrand
+          git add -A
+          git commit --quiet -m "Sync upstream PdfCraft $TAG"
+          git push --quiet origin "sync/upstream-$TAG"
+          {
+            echo "Merges upstream PdfCraft **$TAG** (no conflicts; product name re-applied by \`cargo xtask rebrand\`)."
+            echo
+            echo "Before merging (docs/upstream-sync.md): CI green, including \`sintec_guard\` (Russian strings, branding);"
+            echo "set our next version; build and try the installer; check upstream's changes to Windows printing, OCR and Office import (M10) against ours."
+          } >body.md
+          gh pr create --draft --base main --head "sync/upstream-$TAG" --title "Sync upstream PdfCraft $TAG" --body-file body.md
+          # Pushes made with GITHUB_TOKEN don't start other workflows; a dispatch does.
+          gh workflow run ci.yml --ref "sync/upstream-$TAG"

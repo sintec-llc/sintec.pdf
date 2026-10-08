@@ -1884,3 +1884,7 @@
 	Show the page preview	ページのプレビューを表示
 	Larger pages	ページを大きく
 	Smaller pages	ページを小さく
+	Switch to two-page view first to show the cover page	表紙を表示するには、先に見開き表示に切り替えてください
+	Page display: {layout}	ページ表示：{layout}
+	Fit to width scrolling	幅に合わせてスクロール
+	Fit one full page	1ページずつ全体を表示

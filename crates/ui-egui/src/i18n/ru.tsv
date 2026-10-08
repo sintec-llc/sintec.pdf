@@ -1919,3 +1919,10 @@ date	December	декабря
 	Show the page preview	Показать предпросмотр страницы
 	Larger pages	Крупнее
 	Smaller pages	Мельче
+	Default page display	Отображение страниц по умолчанию
+	Default zoom	Масштаб по умолчанию
+	Fit one full page	Целая страница
+	Fit to width scrolling	По ширине с прокруткой
+	Page display: {layout}	Отображение страниц: {layout}
+	Switch to two-page view first to show the cover page	Чтобы показать обложку, сначала включите двухстраничный режим
+	Used when a PDF doesn't ask for a layout or zoom. Continuous scrolling never snaps between pages.	Используется, когда PDF не задаёт режим и масштаб. При непрерывной прокрутке страницы не «прищёлкиваются».
