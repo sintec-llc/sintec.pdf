@@ -16,6 +16,7 @@ pub mod actions;
 pub mod catalog;
 pub mod commands;
 pub mod compare;
+pub mod convert;
 pub mod export;
 pub mod js;
 pub mod links;
@@ -2466,9 +2467,21 @@ impl Session {
         self.write_new(&pdfcraft_create::from_images_with_resolution(images, resolution)?)
     }
 
-    /// A new document from plain text (US Letter, 11 pt Helvetica).
+    /// A new document from plain text: US Letter, 11 pt Helvetica when Helvetica can show it,
+    /// otherwise (Cyrillic and other scripts) A4 in the embedded monospaced font.
     pub fn create_from_text(&self, title: &str, text: &str) -> Result<Arc<Vec<u8>>, EditError> {
-        self.write_new(&pdfcraft_create::from_text(title, text, pdfcraft_create::LETTER, 11.0)?)
+        if pdfcraft_fonts::is_win_ansi(text) {
+            self.write_new(&pdfcraft_create::from_text(title, text, pdfcraft_create::LETTER, 11.0)?)
+        } else {
+            self.write_new(&pdfcraft_create::from_text_unicode(title, text, pdfcraft_create::A4, 10.0)?)
+        }
+    }
+
+    /// A new document from a text file's bytes (UTF-8, UTF-16 with a byte-order mark, or
+    /// Windows-1251), on A4 in the embedded monospaced font, so any script it covers shows.
+    pub fn create_from_text_file(&self, title: &str, bytes: &[u8]) -> Result<Arc<Vec<u8>>, EditError> {
+        let text = pdfcraft_create::decode_text(bytes);
+        self.write_new(&pdfcraft_create::from_text_unicode(title, &text, pdfcraft_create::A4, 10.0)?)
     }
 
     /// Reduce File Size: Acrobat's defaults (images above 225 ppi to 150 ppi, JPEG medium

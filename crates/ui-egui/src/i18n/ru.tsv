@@ -1902,3 +1902,6 @@ date	December	декабря
 	Printing to {printer}…	Печать на {printer}…
 	A print job is already being prepared	Задание печати уже готовится
 	Check updates	Получить обновления
+	Could not convert to PDF: {e}	Не удалось преобразовать в PDF: {e}
+	Saved the PDF to {path}	PDF сохранён: {path}
+	Saved the PDF to {path}; skipped: {list}	PDF сохранён: {path}; пропущено: {list}

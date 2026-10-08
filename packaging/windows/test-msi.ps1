@@ -54,18 +54,18 @@ Assert-Equal $app[0] 'PdfcraftExe' 'Shortcut executable key path'
 $scope = Read-Row 'SELECT `Value` FROM `Property` WHERE `Property` = ''ALLUSERS''' 1
 Assert-Equal $scope[0] '1' 'Per-machine shortcut scope'
 
-# Image context menu opens the DPI chooser; the app component owns every registry row so
-# uninstall removes it. No image default association is changed.
-foreach ($ext in @('png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'jp2', 'j2k', 'jpx')) {
-  $key = 'Software\Classes\SystemFileAssociations\.' + $ext + '\shell\SintecPDF.CreatePdf'
+# Explorer «Преобразовать в PDF» on PDFs, images and text files, for any number of files; the app
+# component owns every registry row so uninstall removes it. No default association is changed.
+foreach ($ext in @('pdf', 'png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'jp2', 'j2k', 'jpx', 'txt', 'text', 'md', 'csv', 'log', 'ini', 'cfg', 'json', 'xml', 'yml', 'yaml')) {
+  $key = 'Software\Classes\SystemFileAssociations\.' + $ext + '\shell\SintecPDF.ConvertToPdf'
   $menu = Read-Row ('SELECT `Value`, `Component_`, `Root` FROM `Registry` WHERE `Key` = ''' + $key + ''' AND `Name` IS NULL') 3
-  Assert-Equal $menu[0] 'Create PDF with Sintec.PDF…' "$ext context menu label"
+  Assert-Equal $menu[0] 'Преобразовать в PDF' "$ext context menu label"
   Assert-Equal $menu[1] 'PdfcraftApp' "$ext context menu component"
   Assert-Equal $menu[2] '2' "$ext context menu HKLM root"
   $command = Read-Row ('SELECT `Value` FROM `Registry` WHERE `Key` = ''' + $key + '\command''') 1
-  Assert-Equal $command[0] '"[#PdfcraftExe]" --create-images "%1"' "$ext context menu command"
+  Assert-Equal $command[0] '"[#PdfcraftExe]" --convert-to-pdf "%1"' "$ext context menu command"
   $selection = Read-Row ('SELECT `Value` FROM `Registry` WHERE `Key` = ''' + $key + ''' AND `Name` = ''MultiSelectModel''') 1
-  Assert-Equal $selection[0] 'Single' "$ext context menu selection"
+  Assert-Equal $selection[0] 'Player' "$ext context menu selection"
 }
 
 # Negative sequences are Windows Installer's success/user-exit/failure paths. Only full UI
@@ -86,4 +86,4 @@ $rm = Read-Row 'SELECT `Dialog` FROM `Dialog` WHERE `Dialog` = ''MsiRMFilesInUse
 Assert-Equal $rm[0] 'MsiRMFilesInUse' 'Files-in-use dialog'
 [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Database)
 [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Installer)
-Write-Output 'ok MSI: Start Menu shortcut, optional desktop shortcut (default on, checkbox), icon/key path, full-UI success/cancel/error and Finish controls, files-in-use dialog'
+Write-Output 'ok MSI: Start Menu shortcut, «Преобразовать в PDF» context menu, optional desktop shortcut (default on, checkbox), icon/key path, full-UI success/cancel/error and Finish controls, files-in-use dialog'

@@ -1890,3 +1890,6 @@
 	Printing to {printer}…	正在打印到 {printer}…
 	A print job is already being prepared	已有打印任务正在准备
 	Check updates	检查更新
+	Could not convert to PDF: {e}	无法转换为 PDF：{e}
+	Saved the PDF to {path}	PDF 已保存到 {path}
+	Saved the PDF to {path}; skipped: {list}	PDF 已保存到 {path}；已跳过：{list}

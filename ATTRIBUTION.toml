@@ -19,7 +19,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Simplified Chinese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "60f91cdf289e1c6c53227dded3eff2b276b5ddfb6b61cabfce287979cb0cace6"
+sha256 = "ddc1fe88b42a908e98ce5f6fb24c5073338e7e210b25768a6e465689a3f12421"
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/zh-hant.tsv"
@@ -30,7 +30,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Traditional Chinese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "4ae39c452c6b25a82bc28b274923f148f8b6ae4c23778a86cf25e760e6164dd1"
+sha256 = "281e535d329b8d54790df1ef35ec88da1c603d237c4771b35c8d1e7f98ade21f"
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/cs.tsv"
@@ -41,7 +41,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Czech UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "0cdd4a2133c14f6f986f215a201673c3ec45c6dc842cf97b8865ea38143f50d7"
+sha256 = "45e8ebeedf5ef51e708778a2b9b1cfdf1890d1e6d916ed3a9be5f648c766591c"
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/pt-br.tsv"
@@ -63,7 +63,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Russian UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "5e29c6bf226e86ebac79937b71a5bfe5da721973c46a2337b7bf29741a6ce7e1"
+sha256 = "4e3747b3c651406d33ca4adc08fa211422794985e801451ebc47454b0426af3e"
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/ja.tsv"
@@ -74,7 +74,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Japanese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "8ebf46b9cda26a369a67f2452e37658d68c360487a142c421656416a26f7fe64"
+sha256 = "5679eed9c93becab3c4be8d80baeee5e81088c28aea473d89d7b089811d80967"
 
 [[asset]]
 path = "assets/icons/accessibility.svg"
@@ -2031,7 +2031,7 @@ source = "https://github.com/JetBrains/JetBrainsMono"
 licence = "OFL-1.1"
 licence_file = "assets/fonts/OFL-JetBrainsMono.txt"
 kind = "font"
-usage = "UI monospace font; demo PDF code"
+usage = "UI monospace font; demo PDF code; embedded (whole, as the OFL allows) in PDFs converted from text files"
 sha256 = "e6fd0d7e91550b3ed2b735d4312474362c4716edc4fc0577a0f61ed782d5aed1"
 
 [[asset]]

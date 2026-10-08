@@ -98,6 +98,39 @@ fn stem(name: &str) -> &str {
 }
 
 impl PdfCraftApp {
+    /// Explorer ▸ «Преобразовать в PDF»: the files become one PDF, saved next to them (never over
+    /// an existing file) and opened. A single PDF is just opened. Skipped files are reported.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn convert_to_pdf_paths(&mut self, paths: &[String]) {
+        use pdfcraft_engine::convert;
+        let paths: Vec<std::path::PathBuf> = paths.iter().map(std::path::PathBuf::from).collect();
+        if let [only] = paths.as_slice()
+            && only.extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+        {
+            self.open_path(&only.to_string_lossy());
+            return;
+        }
+        let Some(out) = convert::output_path(&paths) else { return };
+        let done = match convert::convert_files(&self.session, &paths) {
+            Ok(d) => d,
+            Err(e) => {
+                self.notify_fmt("Could not convert to PDF: {e}", &[("e", &e)]);
+                return;
+            }
+        };
+        let target = out.to_string_lossy().into_owned();
+        if let Err(e) = crate::editing::write_atomically(&target, &done.bytes) {
+            self.notify_fmt("Could not save: {e}", &[("e", &e.to_string())]);
+            return;
+        }
+        self.open_path(&target);
+        if done.skipped.is_empty() {
+            self.notify_fmt("Saved the PDF to {path}", &[("path", &target)]);
+        } else {
+            let list = done.skipped.iter().map(|(n, e)| format!("{n} ({e})")).collect::<Vec<_>>().join("; ");
+            self.notify_fmt("Saved the PDF to {path}; skipped: {list}", &[("path", &target), ("list", &list)]);
+        }
+    }
     /// Convert a non-PDF file (image, text) into a new tab. Returns `None` when `bytes` is not
     /// something Create understands (the caller then tries to open it as a PDF).
     pub(crate) fn open_converted(&mut self, name: &str, bytes: &[u8]) -> Option<Result<(), String>> {

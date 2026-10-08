@@ -1867,3 +1867,6 @@
 	Printing to {printer}…	{printer} で印刷中…
 	A print job is already being prepared	印刷ジョブを準備しています
 	Check updates	アップデートを確認
+	Could not convert to PDF: {e}	PDF に変換できませんでした: {e}
+	Saved the PDF to {path}	PDF を {path} に保存しました
+	Saved the PDF to {path}; skipped: {list}	PDF を {path} に保存しました。スキップ: {list}

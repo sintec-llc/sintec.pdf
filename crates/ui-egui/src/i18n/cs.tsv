@@ -96,3 +96,6 @@
 	Printing to {printer}…	Tisk na {printer}…
 	A print job is already being prepared	Tisková úloha se už připravuje
 	Check updates	Zkontrolovat aktualizace
+	Could not convert to PDF: {e}	Převod do PDF se nezdařil: {e}
+	Saved the PDF to {path}	PDF uloženo do {path}
+	Saved the PDF to {path}; skipped: {list}	PDF uloženo do {path}; přeskočeno: {list}

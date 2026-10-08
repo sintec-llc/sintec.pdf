@@ -1860,3 +1860,6 @@
 	Printing to {printer}…	正在列印到 {printer}…
 	A print job is already being prepared	已有列印工作正在準備
 	Check updates	檢查更新
+	Could not convert to PDF: {e}	無法轉換為 PDF：{e}
+	Saved the PDF to {path}	PDF 已儲存到 {path}
+	Saved the PDF to {path}; skipped: {list}	PDF 已儲存到 {path}；已略過：{list}
