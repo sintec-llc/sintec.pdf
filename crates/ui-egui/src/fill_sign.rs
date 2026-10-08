@@ -234,7 +234,47 @@ pub fn picture_signature_at(page: usize, at: [f64; 2], png: &Arc<Vec<u8>>, initi
     })
 }
 
-/// Place a saved signature or initials.
+/// Place a saved signature or initials on a page shown turned by `rotation` degrees
+/// clockwise (its `/Rotate`): laid out as for an upright page, then turned about `at` so it
+/// reads upright as the page is shown (the engine turns stamp appearances to match).
+pub fn place_on(page: usize, at: [f64; 2], sig: &SavedSig, initials: bool, author: &str, rotation: u16) -> Option<Edit> {
+    let edit = place(page, at, sig, initials, author)?;
+    if rotation.is_multiple_of(360) {
+        return Some(edit);
+    }
+    // Counterclockwise by the page's angle, about `at`.
+    let (s, c) = match rotation % 360 {
+        90 => (1.0, 0.0),
+        180 => (0.0, -1.0),
+        _ => (-1.0, 0.0),
+    };
+    let turn = |p: [f64; 2]| {
+        let (dx, dy) = (p[0] - at[0], p[1] - at[1]);
+        [at[0] + c * dx - s * dy, at[1] + s * dx + c * dy]
+    };
+    let turn_rect = |r: [f64; 4]| {
+        let (a, b) = (turn([r[0], r[1]]), turn([r[2], r[3]]));
+        [a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])]
+    };
+    Some(match edit {
+        Edit::AddAnnotation(mut a) => {
+            match &mut a.shape {
+                Shape::Signature { strokes } => {
+                    for p in strokes.iter_mut().flatten() {
+                        *p = turn(*p);
+                    }
+                }
+                Shape::TypedSignature { rect, .. } => *rect = turn_rect(*rect),
+                _ => {}
+            }
+            Edit::AddAnnotation(a)
+        }
+        Edit::AddCustomStamp { page, rect, name, file, author } => Edit::AddCustomStamp { page, rect: turn_rect(rect), name, file, author },
+        other => other,
+    })
+}
+
+/// Place a saved signature or initials (on an upright page; see [`place_on`]).
 pub fn place(page: usize, at: [f64; 2], sig: &SavedSig, initials: bool, author: &str) -> Option<Edit> {
     match sig {
         SavedSig::Drawn(strokes) => signature_at(page, at, strokes, author),
@@ -414,7 +454,7 @@ pub(crate) fn page_input(
     };
     if let Some((s, init)) = saved
         && !resp.clicked()
-        && let Some(edit) = place(page, to_user(xf, info, page, pointer), s, init, author)
+        && let Some(edit) = place_on(page, to_user(xf, info, page, pointer), s, init, author, info.pages[page].rotation)
     {
         paint_ghost(ui, xf, info, page, &edit, picture);
     }
@@ -432,11 +472,11 @@ pub(crate) fn page_input(
             Some(FillAction::Edit(Box::new(typed(page, [at[0], at[1] + TEXT_SIZE * 0.6], &format!("{m}/{d}/{y}"), author))))
         }
         FillTool::Signature => match signature {
-            Some(s) => place(page, at, s, false, author).map(|e| FillAction::Edit(Box::new(e))),
+            Some(s) => place_on(page, at, s, false, author, info.pages[page].rotation).map(|e| FillAction::Edit(Box::new(e))),
             None => Some(FillAction::CreateSignature),
         },
         FillTool::Initials => match initials {
-            Some(s) => place(page, at, s, true, author).map(|e| FillAction::Edit(Box::new(e))),
+            Some(s) => place_on(page, at, s, true, author, info.pages[page].rotation).map(|e| FillAction::Edit(Box::new(e))),
             None => Some(FillAction::CreateInitials),
         },
         mark => {

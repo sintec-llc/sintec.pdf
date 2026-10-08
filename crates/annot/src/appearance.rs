@@ -406,6 +406,26 @@ pub fn build(d: &Dict) -> Option<Stream> {
             }
         }
         b"Stamp" => {
+            // Turned with the page (/Rotate 90, 180 or 270, as added on a rotated page): drawn
+            // upright in a box of the size as shown, and turned into /Rect by its /Matrix.
+            let rot = d.get(b"Rotate").and_then(Object::as_f64).map_or(0, |r| (r as i64).rem_euclid(360) / 90 * 90);
+            if rot != 0 {
+                let [x0, y0, x1, y1] = rect;
+                let (w, h) = if rot == 180 { (x1 - x0, y1 - y0) } else { (y1 - y0, x1 - x0) };
+                let mut upright = d.clone();
+                upright.remove(b"Rotate");
+                upright.set(b"Rect".to_vec(), Object::Array([0.0, 0.0, w, h].iter().map(|v| Object::Real(*v)).collect()));
+                let mut s = build(&upright)?;
+                // Counterclockwise by the page's angle, so it reads upright once the page is
+                // turned clockwise; the translation puts the turned box on /Rect.
+                let m = match rot {
+                    90 => [0.0, 1.0, -1.0, 0.0, x1, y0],
+                    180 => [-1.0, 0.0, 0.0, -1.0, x1, y1],
+                    _ => [0.0, -1.0, 1.0, 0.0, x0, y1],
+                };
+                s.dict.set(b"Matrix".to_vec(), Object::Array(m.iter().map(|v| Object::Real(*v)).collect()));
+                return Some(s);
+            }
             // A typed signature: filled outlines normalised to the rectangle.
             if let Some(outline) = d.get(b"PCOutline").and_then(|o| o.as_array()) {
                 let [x0, y0, x1, y1] = rect;

@@ -1516,14 +1516,19 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 let (vx, vy) = xf.screen_to_view(p);
                 let u = info.pages[i].view_to_user(vx, vy);
                 let (x, y) = (u[0] as f64, u[1] as f64);
+                // A box `w` × `h` as the page is shown, centred on the pointer, in user space.
+                let shown = |w: f64, h: f64| {
+                    let corners = [(vx as f64 - w / 2.0, vy as f64 - h / 2.0), (vx as f64 + w / 2.0, vy as f64 + h / 2.0)];
+                    let u: Vec<[f32; 2]> = corners.iter().map(|(cx, cy)| info.pages[i].view_to_user(*cx as f32, *cy as f32)).collect();
+                    [u[0][0].min(u[1][0]) as f64, u[0][1].min(u[1][1]) as f64, u[0][0].max(u[1][0]) as f64, u[0][1].max(u[1][1]) as f64]
+                };
                 let rect = match &ghost_picture {
                     Some(tex) => {
                         // The preview is the picture's own size up to 600 pixels; larger ones
                         // end up 200 pt on their longer side either way.
                         let [sw, sh] = tex.size().map(|v| v.max(1) as f64);
                         let k = (200.0 / sw.max(sh)).min(1.0);
-                        let (w, h) = (sw * k, sh * k);
-                        [x - w / 2.0, y - h / 2.0, x + w / 2.0, y + h / 2.0]
+                        shown(sw * k, sh * k)
                     }
                     None => [x, y, x, y],
                 };
@@ -1543,7 +1548,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     // A PDF page: its outline, 150 × 60 pt, until it is placed.
                     let outline = pdfcraft_engine::Edit::AddCustomStamp {
                         page: i,
-                        rect: [x - 75.0, y - 30.0, x + 75.0, y + 30.0],
+                        rect: shown(150.0, 60.0),
                         name: cs.name.clone(),
                         file: pdfcraft_engine::MarkFile { name: String::new(), bytes: Default::default(), page: 0 },
                         author: String::new(),
