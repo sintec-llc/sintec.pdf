@@ -184,12 +184,20 @@ pub fn fetch_installer(release: &Release) -> Result<std::path::PathBuf, String> 
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn installer_script(pid: u32, msi: &str, exe: &str) -> String {
     let q = |s: &str| s.replace('\'', "''");
+    // The installer's own log, beside the downloaded MSI, so a failed update can be traced.
+    let log = format!("{}-install.log", msi.strip_suffix(".msi").unwrap_or(msi));
+    // Never install over a running Sintec.PDF (still asking to save after two minutes, say): with
+    // its files locked, an upgrade can leave the installation half replaced until a restart. The
+    // app is started again either way.
     format!(
         "$ErrorActionPreference = 'SilentlyContinue'\n\
-         Wait-Process -Id {pid} -Timeout 60\n\
-         Start-Process msiexec.exe -Verb RunAs -Wait -ArgumentList '/i \"{msi}\" /passive /norestart'\n\
+         Wait-Process -Id {pid} -Timeout 120\n\
+         if (-not (Get-Process -Id {pid})) {{\n\
+         \x20 Start-Process msiexec.exe -Verb RunAs -Wait -ArgumentList '/i \"{msi}\" /passive /norestart /l*v \"{log}\"'\n\
+         }}\n\
          Start-Process '{exe}'\n",
         msi = q(msi),
+        log = q(&log),
         exe = q(exe)
     )
 }
@@ -296,9 +304,13 @@ mod tests {
             r"C:\Users\O'Neil\AppData\Local\Temp\sintec-pdf-update\sintec-pdf-0.1.3-windows-x64.msi",
             r"C:\Program Files\Sintec.PDF\sintec-pdf.exe",
         );
-        assert!(s.contains("Wait-Process -Id 4242"), "{s}");
+        assert!(s.contains("Wait-Process -Id 4242 -Timeout 120"), "{s}");
+        // Only once the app has closed: never over locked files.
+        assert!(s.contains("if (-not (Get-Process -Id 4242)) {"), "{s}");
         assert!(
-            s.contains(r#"'/i "C:\Users\O''Neil\AppData\Local\Temp\sintec-pdf-update\sintec-pdf-0.1.3-windows-x64.msi" /passive /norestart'"#),
+            s.contains(
+                r#"'/i "C:\Users\O''Neil\AppData\Local\Temp\sintec-pdf-update\sintec-pdf-0.1.3-windows-x64.msi" /passive /norestart /l*v "C:\Users\O''Neil\AppData\Local\Temp\sintec-pdf-update\sintec-pdf-0.1.3-windows-x64-install.log"'"#
+            ),
             "{s}"
         );
         assert!(s.contains("-Verb RunAs"), "{s}");

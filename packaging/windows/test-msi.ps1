@@ -82,6 +82,9 @@ for ($i = 0; $i -lt $names.Count; $i++) {
   $dir = Read-Row ('SELECT `Directory_` FROM `Component` WHERE `Component` = ''' + $file[1] + '''') 1
   Assert-Equal $dir[0] 'INSTALLFOLDER' "$($names[$i]) directory"
 }
+# Every install, upgrade and removal writes a verbose log to %TEMP%, however it was started.
+$logging = Read-Row 'SELECT `Value` FROM `Property` WHERE `Property` = ''MsiLogging''' 1
+Assert-Equal $logging[0] 'voicewarmup' 'Automatic installer log'
 # Never per-user: HKLM registrations must not point into one user's profile.
 $launch = Read-Row 'SELECT `Condition` FROM `LaunchCondition`' 1
 Assert-Equal $launch[0] 'ALLUSERS = 1 OR (Installed AND REMOVE = "ALL")' 'Per-machine launch condition'
