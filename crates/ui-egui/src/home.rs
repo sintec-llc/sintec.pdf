@@ -16,10 +16,8 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::NONE.inner_margin(egui::Margin { left: 36, right: 36, top: 28, bottom: 28 }).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                widgets::app_logo(ui, 34.0);
-                ui.label(egui::RichText::new(tl!("Welcome to Sintec.PDF")).font(theme::semibold(24.0)));
-            });
+            // Sintec.PDF: the heading alone, no logo before it.
+            ui.label(egui::RichText::new(tl!("Welcome to Sintec.PDF")).font(theme::semibold(24.0)));
             ui.label(
                 egui::RichText::new(tl!("An open-source PDF workbench — local, private, and scriptable."))
                     .color(t.text_muted)
