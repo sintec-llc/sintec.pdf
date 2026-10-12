@@ -485,7 +485,8 @@ pub(crate) fn body(
         // Settings.
         ui.vertical(|ui| {
             ui.set_width(470.0);
-            egui::Grid::new("print-top").num_columns(2).spacing([10.0, 8.0]).show(ui, |ui| {
+            // Rows as tall as the combo boxes, so each label sits level with its control.
+            egui::Grid::new("print-top").num_columns(2).spacing([12.0, 8.0]).min_row_height(26.0).show(ui, |ui| {
                 ui.label(tl!("Printer:"));
                 let before = d.printer.clone();
                 ui.horizontal(|ui| {
@@ -787,10 +788,9 @@ pub(crate) fn body(
             }
         });
     });
-    ui.add_space(12.0);
     let (mut go, mut cancel) = (false, false);
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        let label = if d.printer.is_some() { "Print" } else { "Save as PDF" };
+    widgets::dialog_buttons(ui, |ui| {
+        let label = if d.printer.is_some() { tl!("Print") } else { tl!("Save as PDF") };
         if ui.add_enabled_ui(settings.is_ok() && !sheets.is_empty(), |ui| widgets::pill_button(ui, label, true)).inner.clicked() {
             go = true;
         }

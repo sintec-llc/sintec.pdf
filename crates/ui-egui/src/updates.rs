@@ -190,7 +190,8 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut close = false;
     let mut download: Option<String> = None;
     let mut update: Option<Release> = None;
-    let modal = egui::Modal::new(egui::Id::new("updates")).show(ctx, |ui| {
+    let modal = crate::widgets::modal(ctx, egui::Id::new("updates")).show(ctx, |ui| {
+        crate::widgets::dialog_spacing(ui);
         ui.set_width(440.0);
         ui.label(egui::RichText::new(tl!("Check for updates")).font(theme::semibold(16.0)));
         ui.add_space(8.0);

@@ -62,7 +62,8 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let t = Tokens::get(ctx);
     let mut close = false;
     let mut next = dialog;
-    let modal = egui::Modal::new(egui::Id::new("dialog")).show(ctx, |ui| {
+    let modal = crate::widgets::modal(ctx, egui::Id::new("dialog")).show(ctx, |ui| {
+        crate::widgets::dialog_spacing(ui);
         ui.set_width(match dialog {
             Dialog::Properties(_) => 640.0,
             Dialog::Print => 820.0,
@@ -603,7 +604,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                             ui.selectable_value(&mut d.degrees, 180, tl!("180 degrees"));
                         });
                     ui.end_row();
-                    ui.label(tl!("Pages:"));
+                    widgets::group_label(ui, tl!("Pages:"));
                     ui.vertical(|ui| {
                         ui.radio_value(&mut d.which, 0, tl!("All"));
                         ui.radio_value(&mut d.which, 1, tl!("Selection"));
@@ -959,7 +960,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         .inner
                 };
                 egui::Grid::new("number_pages").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
-                    ui.label(tl!("Pages"));
+                    widgets::group_label(ui, tl!("Pages"));
                     ui.horizontal(|ui| {
                         ui.add(egui::DragValue::new(&mut d.from).range(1..=n));
                         ui.label(tl!("to"));
@@ -1109,9 +1110,9 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         ui.add_space(6.0);
                         ui.label(tl!("A clean-room, open-source PDF application written in Rust. MIT OR Apache-2.0."));
                         ui.label(
-                            egui::RichText::new(
-                                "Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)",
-                            )
+                            egui::RichText::new(tl!(
+                                "Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)"
+                            ))
                             .color(t.text_muted)
                             .small(),
                         );
@@ -1395,34 +1396,39 @@ fn save_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     // the prompt taller than the window (#236); 80 characters wrap to a few lines.
     let shown = shorten_middle(&name, 80);
     let mut choice: Option<Option<bool>> = None;
-    let modal = egui::Modal::new(egui::Id::new("save_prompt")).show(ctx, |ui| {
-        ui.set_width(420.0);
-        ui.horizontal(|ui| {
-            ui.add(crate::icons::image("save", 22.0, t.accent));
-            let title = ui.add(
-                egui::Label::new(
-                    egui::RichText::new(crate::i18n::fmt(tl!("Save changes to “{name}” before closing?"), &[("name", &shown)]))
-                        .font(theme::semibold(16.0)),
-                )
-                .wrap(),
-            );
-            if shown != name {
-                title.on_hover_text(&name);
-            }
+    let modal = crate::widgets::modal(ctx, egui::Id::new("save_prompt")).show(ctx, |ui| {
+        crate::widgets::dialog_spacing(ui);
+        ui.set_width(440.0);
+        // The icon, then the title and its explanation in one column, both starting at the same
+        // left edge.
+        ui.horizontal_top(|ui| {
+            ui.spacing_mut().item_spacing.x = 12.0;
+            ui.add(crate::icons::image("save", 24.0, t.accent));
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 6.0;
+                let title = ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(crate::i18n::fmt(tl!("Save changes to “{name}” before closing?"), &[("name", &shown)]))
+                            .font(theme::semibold(16.0)),
+                    )
+                    .wrap(),
+                );
+                if shown != name {
+                    title.on_hover_text(&name);
+                }
+                ui.add(egui::Label::new(egui::RichText::new(tl!("Your changes will be lost if you don't save them.")).color(t.text_muted)).wrap());
+            });
         });
-        ui.add_space(6.0);
-        ui.label(egui::RichText::new(tl!("Your changes will be lost if you don't save them.")).color(t.text_muted));
-        ui.add_space(14.0);
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        // Right-aligned and evenly spaced: Save (primary), then Don't save and Cancel.
+        widgets::dialog_buttons(ui, |ui| {
             if widgets::pill_button(ui, tl!("Save"), true).clicked() {
                 choice = Some(Some(true));
             }
-            if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
-                choice = Some(None);
-            }
-            ui.add_space(24.0);
             if widgets::pill_button(ui, tl!("Don't save"), false).clicked() {
                 choice = Some(Some(false));
+            }
+            if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
+                choice = Some(None);
             }
         });
     });
@@ -1456,7 +1462,8 @@ fn link_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let email = pending.url.get(..7).is_some_and(|s| s.eq_ignore_ascii_case("mailto:"));
     let (title, open) = if email { (tl!("Write this email?"), tl!("Open email app")) } else { (tl!("Open this web page?"), tl!("Open link")) };
     let mut choice: Option<bool> = None;
-    let modal = egui::Modal::new(egui::Id::new("link_prompt")).show(ctx, |ui| {
+    let modal = crate::widgets::modal(ctx, egui::Id::new("link_prompt")).show(ctx, |ui| {
+        crate::widgets::dialog_spacing(ui);
         ui.set_width(460.0);
         ui.horizontal(|ui| {
             ui.add(crate::icons::image("external-link", 22.0, t.accent));
@@ -1522,7 +1529,8 @@ fn password(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let t = Tokens::get(ctx);
     let mut submit = false;
     let mut cancel = false;
-    let modal = egui::Modal::new(egui::Id::new("password")).show(ctx, |ui| {
+    let modal = crate::widgets::modal(ctx, egui::Id::new("password")).show(ctx, |ui| {
+        crate::widgets::dialog_spacing(ui);
         ui.set_width(400.0);
         ui.horizontal(|ui| {
             ui.add(crate::icons::image("lock", 22.0, t.accent));

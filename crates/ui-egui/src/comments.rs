@@ -1373,22 +1373,27 @@ pub fn swatch_grid(ui: &mut egui::Ui, current: Option<Rgb>) -> Option<Rgb> {
 /// [`swatch_grid`] with its own colours.
 pub fn swatch_grid_of(ui: &mut egui::Ui, current: Option<Rgb>, swatches: &[(&str, Rgb)]) -> Option<Rgb> {
     let mut picked = None;
-    egui::Grid::new(ui.id().with("swatches")).spacing(vec2(6.0, 6.0)).show(ui, |ui| {
-        for (i, (name, c)) in swatches.iter().enumerate() {
-            let (r, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
-            let on = current.is_some_and(|cur| cur.iter().zip(c).all(|(a, b)| (a - b).abs() < 0.02));
-            ui.painter().circle_filled(r.center(), 9.0, color32(*c));
-            ui.painter().circle_stroke(r.center(), 9.0, Stroke::new(1.0, Color32::from_black_alpha(40)));
-            if on || resp.hovered() {
-                ui.painter().circle_stroke(r.center(), 11.0, Stroke::new(1.5, SELECT_BLUE));
+    // In a vertical layout of its own: placed straight into a grid cell (a horizontal layout), the
+    // grid's rows didn't count the swatches' second row, which ran into the row below (the
+    // redaction properties' font colour). Its own id per call, too.
+    ui.vertical(|ui| {
+        egui::Grid::new(ui.auto_id_with("swatches")).spacing(vec2(6.0, 6.0)).show(ui, |ui| {
+            for (i, (name, c)) in swatches.iter().enumerate() {
+                let (r, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
+                let on = current.is_some_and(|cur| cur.iter().zip(c).all(|(a, b)| (a - b).abs() < 0.02));
+                ui.painter().circle_filled(r.center(), 9.0, color32(*c));
+                ui.painter().circle_stroke(r.center(), 9.0, Stroke::new(1.0, Color32::from_black_alpha(40)));
+                if on || resp.hovered() {
+                    ui.painter().circle_stroke(r.center(), 11.0, Stroke::new(1.5, SELECT_BLUE));
+                }
+                if resp.on_hover_text(tl!(name)).clicked() {
+                    picked = Some(*c);
+                }
+                if i % 5 == 4 {
+                    ui.end_row();
+                }
             }
-            if resp.on_hover_text(tl!(name)).clicked() {
-                picked = Some(*c);
-            }
-            if i % 5 == 4 {
-                ui.end_row();
-            }
-        }
+        });
     });
     picked
 }

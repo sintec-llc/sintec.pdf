@@ -639,6 +639,20 @@ impl PdfCraftApp {
 }
 
 /// Render a top-level menu's registered commands (with live labels, shortcuts and enablement).
+/// One registry command as a menu item (its localized label and shortcut, disabled when it can't
+/// run); runs it and closes the menu when clicked.
+pub(crate) fn command_item(app: &mut PdfCraftApp, ui: &mut egui::Ui, id: &str) {
+    let Some(spec) = commands::command(id) else { return };
+    let label = commands::current_label(spec, &app.session, app.active_ids().map(|(_, id)| id));
+    let label = crate::i18n::menu_label(spec.id, &label);
+    let shortcut = spec.shortcut.map(|s| shortcut_label(ui.ctx(), s)).unwrap_or_default();
+    let enabled = app.command_enabled(spec);
+    if ui.add_enabled(enabled, egui::Button::new(label).shortcut_text(shortcut)).clicked() {
+        app.execute(spec.id);
+        ui.close();
+    }
+}
+
 pub(crate) fn registry_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui, menu: &str) {
     for spec in commands::menu(menu) {
         let label = commands::current_label(spec, &app.session, app.active_ids().map(|(_, id)| id));

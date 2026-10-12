@@ -285,6 +285,34 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 main_menu(app, ui);
                 ui.add_space(6.0);
                 ui.painter().vline(ui.cursor().left(), ui.max_rect().y_range().shrink(12.0), Stroke::new(1.0, t.divider));
+                ui.add_space(8.0);
+                // Sintec.PDF: the document's own actions sit at the left, next to the menu: Save
+                // (a menu: Save, Save as, Export), Print and Document properties.
+                ui.add_enabled_ui(app.active.is_some(), |ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    let save_tip = crate::commands::command_tip(ui.ctx(), tl!("Save ({key})"), "file.save");
+                    let save = icons::button(ui, "save", 32.0, false, &save_tip);
+                    egui::Popup::menu(&save).show(|ui| {
+                        ui.set_min_width(220.0);
+                        crate::commands::command_item(app, ui, "file.save");
+                        crate::commands::command_item(app, ui, "file.save_as");
+                        ui.menu_button(tl!("Export"), |ui| {
+                            for id in ["export.docx", "export.html", "export.rtf", "export.image", "export.text"] {
+                                crate::commands::command_item(app, ui, id);
+                            }
+                        });
+                    });
+                    let tip = crate::commands::command_tip(ui.ctx(), tl!("Print ({key})"), "print.dialog");
+                    if icons::button(ui, "printer", 32.0, false, &tip).clicked() {
+                        app.run_command("print.dialog");
+                    }
+                    let tip = crate::commands::command_tip(ui.ctx(), tl!("Document properties ({key})"), "file.properties");
+                    if icons::button(ui, "info", 32.0, false, &tip).clicked() {
+                        app.dialog = Some(Dialog::Properties(PropsTab::Description));
+                    }
+                });
+                ui.add_space(6.0);
+                ui.painter().vline(ui.cursor().left(), ui.max_rect().y_range().shrink(12.0), Stroke::new(1.0, t.divider));
                 ui.add_space(10.0);
                 for (mode, label) in
                     [(Mode::AllTools, "All tools"), (Mode::Read, "Read"), (Mode::Edit, "Edit"), (Mode::Convert, "Convert"), (Mode::Sign, "E-Sign")]
@@ -294,23 +322,6 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     }
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.spacing_mut().item_spacing.x = 4.0;
-                    let has_doc = app.active.is_some();
-                    ui.add_enabled_ui(has_doc, |ui| {
-                        let tip = crate::commands::command_tip(ui.ctx(), tl!("Print ({key})"), "print.dialog");
-                        if icons::button(ui, "printer", 32.0, false, &tip).clicked() {
-                            app.run_command("print.dialog");
-                        }
-                        let save_tip = crate::commands::command_tip(ui.ctx(), tl!("Save ({key})"), "file.save");
-                        if icons::button(ui, "save", 32.0, false, &save_tip).clicked() {
-                            app.run_command("file.save");
-                        }
-                        let tip = crate::commands::command_tip(ui.ctx(), tl!("Document properties ({key})"), "file.properties");
-                        if icons::button(ui, "info", 32.0, false, &tip).clicked() {
-                            app.dialog = Some(Dialog::Properties(PropsTab::Description));
-                        }
-                    });
-                    ui.add_space(8.0);
                     // Narrower in a narrow window, so it never covers the mode tabs.
                     let width = (ui.available_width() - 12.0).clamp(140.0, 260.0);
                     if widgets::search_box(ui, tl!("Find tools and commands"), width).clicked() {

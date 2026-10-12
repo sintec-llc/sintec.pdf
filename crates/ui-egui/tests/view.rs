@@ -348,7 +348,11 @@ fn preferences_set_the_default_zoom() {
     use egui_kittest::kittest::Queryable;
     let mut h = harness(&[]);
     assert!(h.state_mut().execute("app.preferences"));
-    h.run_steps(3);
+    // Dialogs settle over a few frames (grid rows are sized from the previous one).
+    h.run_steps(6);
+    h.get_by_label("Zoom to page level").scroll_to_me();
+    // Scrolling animates over several frames.
+    h.run_steps(10);
     h.get_by_label("Zoom to page level").click();
     h.run_steps(2);
     assert!(h.state_mut().execute("create.blank"));

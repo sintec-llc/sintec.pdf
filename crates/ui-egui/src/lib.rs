@@ -879,17 +879,12 @@ impl PdfCraftApp {
     /// Open a document the way it asks to be opened: navigation panel, layout, magnification,
     /// page (Document Properties ▸ Initial View).
     fn apply_initial_view(&mut self, index: usize, v: &pdfcraft_engine::InitialView) {
-        use pdfcraft_engine::{InitialLayout as L, Magnification as M, Navigation as N};
+        use pdfcraft_engine::{InitialLayout as L, Magnification as M};
         let pages = self.session.get(self.views[index].id).map_or(0, |d| d.info.pages.len());
-        if self.active == Some(index) {
-            match v.navigation {
-                N::PageOnly => {}
-                N::Bookmarks => self.right = Some(RightPanel::Bookmarks),
-                N::Pages => self.right = Some(RightPanel::Pages),
-                N::Attachments => self.right = Some(RightPanel::Attachments),
-                N::Layers => self.right = Some(RightPanel::Layers),
-            }
-        }
+        // Sintec.PDF: a document never opens a side panel by itself (bookmarks, pages,
+        // attachments, layers): the app starts with only All tools on the left, whatever the PDF
+        // asks for. The panels are a click away on the right rail. Layout, magnification and page
+        // still follow the document.
         let view = &mut self.views[index];
         match v.layout {
             // The view opened in Default page display already.
@@ -957,16 +952,9 @@ impl PdfCraftApp {
         self.password_prompt = None;
         let doc = self.session.get(id).ok_or("the document could not be opened")?;
         let pages = doc.info.pages.len();
-        // Acrobat opens straight to the Comments panel when a document has comments.
-        if activate && self.right.is_none() {
-            self.right = if !doc.info.annotations.is_empty() {
-                Some(RightPanel::Comments)
-            } else if !doc.info.outline.is_empty() {
-                Some(RightPanel::Bookmarks)
-            } else {
-                None
-            };
-        }
+        // Sintec.PDF: opening a document never opens a side panel (Acrobat opens Comments or
+        // Bookmarks when a file has them): the app starts with only All tools on the left. The
+        // panels are one click away on the right rail.
         let initial = doc.initial_view();
         self.views.push(DocView::new(id, &doc.info, self.view_defaults));
         if activate {
