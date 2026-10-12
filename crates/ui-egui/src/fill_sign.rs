@@ -525,7 +525,14 @@ pub(crate) fn signature_pad(
     });
     ui.add_space(6.0);
     if d.image_mode {
-        ui.label(egui::RichText::new(tl!("Choose a PNG or JPEG image (up to 4 MiB). Transparency is preserved.")).color(t.text_muted));
+        // Sintec.PDF prepares the picture (paper made transparent, trimmed, scaled down).
+        ui.label(
+            egui::RichText::new(crate::i18n::fmt(
+                tl!("A photo or scan of your {what} on white paper, or a PNG with transparency: the paper becomes transparent."),
+                &[("what", what)],
+            ))
+            .color(t.text_muted),
+        );
         let browse = crate::widgets::ghost_button(ui, "folder", tl!("Browse…")).clicked();
         let (rect, _) = ui.allocate_exact_size(vec2(460.0, 150.0), Sense::hover());
         ui.painter().rect_filled(rect, CornerRadius::same(6), Color32::WHITE);
