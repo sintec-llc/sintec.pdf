@@ -621,15 +621,17 @@ fn image_preview(ui: &egui::Ui, rect: egui::Rect, image: &SignatureImage, cache:
 }
 
 fn pad_buttons(ui: &mut egui::Ui, d: &mut SigDraft) -> (bool, bool) {
-    ui.add_space(10.0);
+    ui.add_space(crate::widgets::DIALOG_BUTTONS_GAP);
     let (mut apply, mut cancel) = (false, false);
     ui.horizontal(|ui| {
-        if ui.button(tl!("Clear")).clicked() {
+        // Clearing the pad is a secondary action, on the left, in the dialog's button style.
+        if crate::widgets::pill_button(ui, tl!("Clear"), false).clicked() {
             d.strokes.clear();
             d.text.clear();
             d.image = None;
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
             let ready = d.ready();
             if ui.add_enabled_ui(ready, |ui| crate::widgets::pill_button(ui, tl!("Apply"), true)).inner.clicked() {
                 apply = true;

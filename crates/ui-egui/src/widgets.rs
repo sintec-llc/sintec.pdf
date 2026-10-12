@@ -227,6 +227,48 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
     cancel
 }
 
+/// Sintec.PDF: the padding inside every dialog window (menus keep the theme's tighter margin).
+pub const DIALOG_MARGIN: i8 = 20;
+/// Space between a dialog's content and its row of buttons.
+pub const DIALOG_BUTTONS_GAP: f32 = 18.0;
+
+/// A modal dialog window with the dialog padding (egui's default is the 6 pt menu margin, which
+/// put text against the window's edge).
+pub fn modal(ctx: &egui::Context, id: egui::Id) -> egui::Modal {
+    let frame = egui::Frame::popup(&ctx.global_style()).inner_margin(egui::Margin::same(DIALOG_MARGIN)).corner_radius(10);
+    egui::Modal::new(id).frame(frame)
+}
+
+/// Dialog spacing, set first thing in every dialog: rows start at the controls' height, so a
+/// label placed before a text field or combo box sits level with it (egui centres each widget on
+/// the row height as it is when the widget is placed, 18 pt by default, so labels rode high).
+pub fn dialog_spacing(ui: &mut egui::Ui) {
+    ui.spacing_mut().interact_size.y = FIELD_HEIGHT;
+}
+
+/// A grid label for a group of options stacked under each other ("Pages:" beside All /
+/// Selection / From…): level with the first option instead of centred on the whole group.
+pub fn group_label(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) -> Response {
+    ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+        ui.allocate_ui_with_layout(vec2(0.0, FIELD_HEIGHT), egui::Layout::left_to_right(egui::Align::Center), |ui| ui.label(text)).inner
+    })
+    .inner
+}
+
+/// A dialog's buttons: right-aligned on one row, evenly spaced, after the dialog gap. `add` adds
+/// them right to left, so the primary button comes first.
+pub fn dialog_buttons<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    ui.add_space(DIALOG_BUTTONS_GAP);
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        add(ui)
+    })
+    .inner
+}
+
+/// Height of a dialog's controls (combo boxes, text fields); dialog rows start at it.
+pub const FIELD_HEIGHT: f32 = 26.0;
+
 /// The Sintec.PDF logo (the app icon at 512 px, decoded once), `size` points square.
 pub fn app_logo(ui: &mut egui::Ui, size: f32) -> Response {
     const LOGO_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/512x512/apps/ai.storyteller.pdfcraft.png");

@@ -93,7 +93,12 @@ fn document_scripts_and_preferences() {
     let id = h.state().active_ids().unwrap().1;
     assert_eq!(h.state().session.get(id).unwrap().document_scripts()[0].0, "init");
     h.state_mut().dialog = Some(Dialog::Preferences);
-    h.run_steps(2);
+    // Dialogs settle over a few frames (grid rows are sized from the previous one).
+    h.run_steps(6);
+    // Preferences scroll in a short window.
+    h.get_by_label("Enable Acrobat JavaScript").scroll_to_me();
+    // Scrolling animates over several frames.
+    h.run_steps(10);
     h.get_by_label("Enable Acrobat JavaScript").click();
     h.run_steps(2);
     assert!(!h.state().session.javascript());

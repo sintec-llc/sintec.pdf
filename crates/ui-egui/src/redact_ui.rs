@@ -389,6 +389,8 @@ pub(crate) fn props_body(ui: &mut egui::Ui, d: &mut RedactPrefs, _t: &Tokens) ->
         for row in d.code_set.codes.chunks(4) {
             ui.label("");
             ui.add_enabled_ui(codes_on, |ui| {
+                // The code check boxes stay a compact table (dialog rows are as tall as a field).
+                ui.spacing_mut().interact_size.y = 18.0;
                 ui.horizontal(|ui| {
                     for &code in row {
                         let mut picked = d.codes.contains(&code);

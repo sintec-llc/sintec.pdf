@@ -280,7 +280,8 @@ fn initial_view_is_edited_and_honoured_on_open() {
         v.page = 1;
         v.language = Some("de-DE".into());
     }
-    h.run_steps(2);
+    // Dialogs settle over a few frames (grid rows are sized from the previous one).
+    h.run_steps(6);
     h.get_by_label("OK").click();
     h.run_steps(3);
     let s = h.state();
@@ -294,7 +295,8 @@ fn initial_view_is_edited_and_honoured_on_open() {
     app.set_option("language", "en").unwrap();
     app.open_bytes("again.pdf", None, bytes.to_vec()).unwrap();
     let view = &app.views[0];
-    assert_eq!((view.current, view.cover, app.right), (1, true, Some(pdfcraft_ui_egui::RightPanel::Bookmarks)));
+    // Sintec.PDF: layout and page follow the file, but no side panel opens by itself.
+    assert_eq!((view.current, view.cover, app.right), (1, true, None));
 }
 
 fn drag(h: &mut Harness<'static, PdfCraftApp>, a: egui::Pos2, b: egui::Pos2) {
@@ -402,8 +404,11 @@ fn an_earlier_revision_opens_from_document_properties() {
     }
     h.run_steps(2);
     h.state_mut().dialog = Some(Dialog::Properties(pdfcraft_ui_egui::PropsTab::Advanced));
-    h.run_steps(2);
-    h.run_steps(2);
+    // Dialogs settle over a few frames (grid rows are sized from the previous one).
+    h.run_steps(6);
+    h.get_by_label("View revision 1").scroll_to_me();
+    // Scrolling animates over several frames.
+    h.run_steps(10);
     h.get_by_label("View revision 1").click();
     h.run_steps(3);
     let s = h.state();

@@ -177,12 +177,13 @@ fn certifying_without_a_visible_signature() {
         d.new_id.file = p12.into();
         d.new_id.file_password = "test".into();
     }
-    h.run_steps(1);
+    // Dialogs settle over a few frames (grid rows are sized from the previous one).
+    h.run_steps(6);
     h.get_by_label("Continue").click();
-    h.run_steps(2);
+    h.run_steps(6);
     assert_eq!(h.state().digital_ids.len(), 1);
     h.get_by_label("Continue").click();
-    h.run_steps(2);
+    h.run_steps(6);
     h.get_by_label("Certify as \"Test Signer EC\"");
     h.get_by_label("Permitted actions after certifying");
     h.state_mut().sign_draft.as_mut().unwrap().password = "test".into();

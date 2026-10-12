@@ -2166,3 +2166,6 @@ key	Space	Пробел
 	Remove {n} pages	Удалить страницы: {n}
 	The picture is too large for a signature (at most {n} MB)	Изображение слишком большое для подписи (не более {n} МБ)
 	Save ({key})	Сохранить ({key})
+	About	О программе
+	Contributors	Участники
+	Models	Модели

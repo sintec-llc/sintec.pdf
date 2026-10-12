@@ -124,8 +124,10 @@ impl PdfCraftApp {
 
 fn buttons(ui: &mut egui::Ui, primary: &str, others: &[&str]) -> Option<String> {
     let mut clicked = None;
+    ui.add_space(widgets::DIALOG_BUTTONS_GAP);
     ui.horizontal(|ui| {
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
             // Stable ids: the console's output above changes how many widgets come first.
             // Labels are translated for display; the returned id stays English.
             if ui.push_id(primary, |ui| widgets::pill_button(ui, tl!(primary), true)).inner.clicked() {
@@ -233,6 +235,10 @@ pub(crate) fn document_js_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
 /// Preferences: interface language, identity and JavaScript. Returns `true` to close.
 pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     ui.label(egui::RichText::new(tl!("Preferences")).font(theme::semibold(18.0)));
+    ui.add_space(8.0);
+    // Scrolls in a short window, so the title and OK always show.
+    let max_height = (ui.ctx().content_rect().height() - 200.0).max(240.0);
+    egui::ScrollArea::vertical().max_height(max_height).auto_shrink([false, true]).show(ui, |ui| {
     ui.horizontal(|ui| {
         ui.label(tl!("Interface language"));
         let selected = crate::i18n::Lang::from_code(&app.language).map_or(tl!("Auto"), crate::i18n::Lang::name);
@@ -352,7 +358,7 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
                 .color(t.text_muted),
         );
     });
-    ui.add_space(10.0);
+    });
     buttons(ui, tl!("OK"), &[]).is_some()
 }
 

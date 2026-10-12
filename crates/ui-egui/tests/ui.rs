@@ -104,9 +104,14 @@ fn every_catalog_tool_is_listed_after_view_more() {
 }
 
 #[test]
-fn opening_a_pdf_shows_comments_and_bookmarks() {
+fn opening_a_pdf_keeps_side_panels_closed() {
     let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
-    // Documents with comments open on the Comments panel, like Acrobat.
+    // Sintec.PDF: a document with comments and bookmarks opens with no side panel (only All
+    // tools on the left); both panels are one click away on the right rail.
+    assert_eq!(h.state().right, None);
+    assert!(h.query_by_label_contains("Check the numbers").is_none());
+    h.get_by_label("Comments").click();
+    h.run_steps(3);
     h.get_by_label_contains("Check the numbers");
     h.get_by_label("Bookmarks").click();
     h.run_steps(3);
@@ -620,7 +625,8 @@ fn newly_opened_pdfs_use_the_default_workspace() {
     app.open_bytes("initial-view.pdf", None, pdf.into_bytes()).unwrap();
     assert_eq!(app.mode, Mode::Read);
     assert_eq!(app.views.last().unwrap().layout, pdfcraft_ui_egui::canvas::PageLayout::TwoUp);
-    assert_eq!(app.right, Some(pdfcraft_ui_egui::RightPanel::Bookmarks));
+    // Sintec.PDF: no side panel opens by itself, whatever the file asks for.
+    assert_eq!(app.right, None);
 }
 
 #[test]
@@ -653,7 +659,12 @@ fn preferences_selects_default_workspace_for_next_open() {
     use egui::accesskit::Role;
     use pdfcraft_ui_egui::Mode;
     let mut h = harness(|app| app.set_option("dialog", "preferences").unwrap());
+    // Dialogs settle over a few frames (grid rows are sized from the previous one).
+    h.run_steps(6);
     h.get_by_label("Default workspace mode");
+    h.get_by_role_and_label(Role::RadioButton, "Read").scroll_to_me();
+    // Scrolling animates over several frames.
+    h.run_steps(10);
     h.get_by_role_and_label(Role::RadioButton, "Read").click();
     h.run_steps(2);
     assert_eq!(h.state().default_mode, Mode::Read);
