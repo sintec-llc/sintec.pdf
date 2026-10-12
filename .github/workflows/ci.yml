@@ -80,8 +80,9 @@ jobs:
       - name: OCR models
         run: cargo xtask models
 
+      # Every test binary runs, so one failure doesn't hide the rest.
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast
 
       # An ad-hoc signed DMG for this processor, to try before a release (Gatekeeper asks for
       # right-click > Open on other Macs; the release job signs and notarizes when it can).

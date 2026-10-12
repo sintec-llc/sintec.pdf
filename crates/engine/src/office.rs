@@ -235,8 +235,11 @@ mod tests {
         assert_eq!(kind_for("xlsx"), Some(Kind::Excel));
         assert_eq!(kind_for("pptx"), Some(Kind::PowerPoint));
         assert_eq!(kind_for("pdf"), None);
-        let lines = job_lines(&[(Kind::Word, PathBuf::from("C:\\Документы\\отчёт.docx"), PathBuf::from("C:\\tmp\\doc-00000.pdf"))]);
-        assert_eq!(lines, "word\tC:\\Документы\\отчёт.docx\tC:\\tmp\\doc-00000.pdf\n");
+        // Windows paths: Office conversion runs only on Windows (elsewhere `C:\…` isn't absolute).
+        if cfg!(windows) {
+            let lines = job_lines(&[(Kind::Word, PathBuf::from("C:\\Документы\\отчёт.docx"), PathBuf::from("C:\\tmp\\doc-00000.pdf"))]);
+            assert_eq!(lines, "word\tC:\\Документы\\отчёт.docx\tC:\\tmp\\doc-00000.pdf\n");
+        }
         assert_eq!(explain(Kind::Excel, "Retrieving the COM class factory failed: 80040154 Class not registered"), "Microsoft Excel isn't installed");
         assert_eq!(explain(Kind::Word, "Неверный пароль"), "the document is password-protected");
     }
