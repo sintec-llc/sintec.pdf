@@ -2122,6 +2122,4 @@ key	Space	空格
 	Remove {n} pages	刪除 {n} 頁
 	The picture is too large for a signature (at most {n} MB)	圖片太大，無法用作簽名（最多 {n} MB）
 	Save ({key})	儲存 ({key})
-	About	關於
-	Contributors	貢獻者
-	Models	模型
+	Update downloads the new version, checks it and opens it: drag Sintec.PDF into Applications to replace this one. Download opens the release page.	「更新」會下載新版本、驗證並開啟它：將 Sintec.PDF 拖到「應用程式」以取代目前版本。「下載」會開啟發佈頁面。

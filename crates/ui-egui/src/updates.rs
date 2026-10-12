@@ -247,7 +247,9 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
         ui.add_space(10.0);
         let installable = can_install && offer.as_ref().is_some_and(|r| r.installer.is_some());
         ui.label(
-            egui::RichText::new(if installable {
+            egui::RichText::new(if installable && cfg!(target_os = "macos") {
+                tl!("Update downloads the new version, checks it and opens it: drag Sintec.PDF into Applications to replace this one. Download opens the release page.")
+            } else if installable {
                 tl!("Update downloads the new installer, checks it and restarts Sintec.PDF on the new version. Download opens the release page.")
             } else {
                 tl!("Asks GitHub for the latest release. Nothing is downloaded or installed until you choose.")
