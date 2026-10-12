@@ -1,5 +1,6 @@
-//! Middle-button scrolling for the document viewport: Linux latches auto-scroll, other
-//! platforms pan while the button is held. Either way the page tools never see the button,
+//! Middle-button scrolling for the document viewport: Linux latches auto-scroll, macOS pans
+//! while the button is held, and Windows does both (Sintec.PDF): a held drag pans like the Hand
+//! tool, a click without moving latches auto-scroll until the next click, Esc or the wheel. Either way the page tools never see the button,
 //! because egui's drag responses accept every pointer button.
 
 use egui::{Context, CursorIcon, Event, Key, PointerButton, Pos2, Stroke, Vec2, vec2};
@@ -21,6 +22,16 @@ pub(crate) struct AutoScroll {
     block_input: bool,
     /// Where the pointer was last frame during a held middle-button pan (not Linux).
     drag: Option<Pos2>,
+    /// Where the held middle-button pan started (Windows: released near it, it was a click).
+    drag_from: Option<Pos2>,
+}
+
+/// How the middle button scrolls on this platform.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Style {
+    Latch,
+    Drag,
+    Hybrid,
 }
 
 impl AutoScroll {
@@ -36,6 +47,7 @@ impl AutoScroll {
     pub(crate) fn cancel(&mut self) {
         self.anchor = None;
         self.drag = None;
+        self.drag_from = None;
         self.cancel_button = None;
         self.block_input = false;
     }
@@ -47,13 +59,51 @@ impl AutoScroll {
     /// Run before the document's widgets. Starting is restricted to the unobstructed viewport;
     /// once started, moving outside that viewport still controls the speed.
     pub(crate) fn update(&mut self, ui: &egui::Ui, viewport: egui::Rect, organize: bool) -> Vec2 {
-        self.update_for_platform(ui, viewport, organize, cfg!(target_os = "linux"))
+        let style = if cfg!(target_os = "linux") {
+            Style::Latch
+        } else if cfg!(target_os = "windows") {
+            Style::Hybrid
+        } else {
+            Style::Drag
+        };
+        self.update_for_platform(ui, viewport, organize, style)
     }
 
-    fn update_for_platform(&mut self, ui: &egui::Ui, viewport: egui::Rect, organize: bool, supported: bool) -> Vec2 {
-        if !supported {
-            return self.update_drag(ui, viewport);
+    fn update_for_platform(&mut self, ui: &egui::Ui, viewport: egui::Rect, organize: bool, style: Style) -> Vec2 {
+        match style {
+            Style::Latch => self.update_latched(ui, viewport, organize),
+            Style::Drag => self.update_drag(ui, viewport),
+            Style::Hybrid => self.update_hybrid(ui, viewport, organize),
         }
+    }
+
+    /// Windows: a held drag pans 1:1; released within the dead zone of where it was pressed (a
+    /// click), the press latches auto-scroll there instead. Once latched, the Linux behaviour
+    /// applies until a click, Esc, the wheel or losing focus stops it.
+    fn update_hybrid(&mut self, ui: &egui::Ui, viewport: egui::Rect, organize: bool) -> Vec2 {
+        if self.active() || self.cancel_button.is_some() {
+            self.drag_from = None;
+            return self.update_latched(ui, viewport, organize);
+        }
+        let delta = self.update_drag(ui, viewport);
+        let (released, pointer) = ui.ctx().input(|i| (i.pointer.button_released(PointerButton::Middle), i.pointer.latest_pos()));
+        if released && let Some(from) = self.drag_from.take() {
+            let still = pointer.filter(|p| p.is_finite()).is_none_or(|p| p.distance(from) <= DEAD_ZONE);
+            if still {
+                self.drag = None;
+                self.anchor = Some(from);
+                self.organize = organize;
+                self.block_input = true;
+                return Vec2::ZERO;
+            }
+        }
+        if self.drag.is_none() && !released {
+            self.drag_from = None;
+        }
+        delta
+    }
+
+    fn update_latched(&mut self, ui: &egui::Ui, viewport: egui::Rect, organize: bool) -> Vec2 {
         let ctx = ui.ctx();
         let (pointer, middle_press, middle_down, middle_released, cancel, cancel_button, dt) = ctx.input(|i| {
             let cancel_button = [PointerButton::Primary, PointerButton::Secondary, PointerButton::Extra1, PointerButton::Extra2]
@@ -147,6 +197,7 @@ impl AutoScroll {
             && ctx.layer_id_at(pressed_at) == Some(ui.layer_id())
         {
             self.drag = Some(pressed_at);
+            self.drag_from = Some(pressed_at);
         }
         let (Some(last), Some(pointer)) = (self.drag, pointer) else { return Vec2::ZERO };
         self.drag = middle_down.then_some(pointer);
@@ -211,15 +262,75 @@ mod tests {
 
     /// Run one frame of the non-Linux path; `check` sees the pan delta inside the frame.
     fn drag_frame(ctx: &Context, scroll: &mut AutoScroll, events: Vec<Event>, focused: bool, check: impl Fn(&AutoScroll, Vec2)) {
+        styled_frame(ctx, scroll, Style::Drag, events, focused, check);
+    }
+
+    fn styled_frame(ctx: &Context, scroll: &mut AutoScroll, style: Style, events: Vec<Event>, focused: bool, check: impl Fn(&AutoScroll, Vec2)) {
         let mut output = ctx.run_ui(
             egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(400.0, 400.0))), events, focused, ..Default::default() },
             |ui| {
-                let delta = scroll.update_for_platform(ui, ui.max_rect(), false, false);
+                let delta = scroll.update_for_platform(ui, ui.max_rect(), false, style);
                 check(scroll, delta);
             },
         );
         // This input-only test has no renderer to apply the generated font texture.
         output.textures_delta.clear();
+    }
+
+    /// Sintec.PDF on Windows: a held drag still pans 1:1; a click latches auto-scroll, which
+    /// the next middle click stops.
+    #[test]
+    fn windows_middle_click_latches_and_a_held_drag_still_pans() {
+        let ctx = Context::default();
+        let mut scroll = AutoScroll::default();
+        let p = egui::pos2(100.0, 100.0);
+        let frame = |scroll: &mut AutoScroll, events, check: &dyn Fn(&AutoScroll, Vec2)| {
+            styled_frame(&ctx, scroll, Style::Hybrid, events, true, |s, d| check(s, d));
+        };
+        frame(&mut scroll, vec![], &|_, _| {});
+        // Held drag: pans, and ends with the release.
+        frame(&mut scroll, vec![Event::PointerMoved(p), middle(p, true)], &|s, _| assert!(s.panning()));
+        frame(&mut scroll, vec![Event::PointerMoved(p + vec2(0.0, 60.0))], &|_, d| assert_eq!(d, vec2(0.0, 60.0)));
+        frame(&mut scroll, vec![middle(p + vec2(0.0, 60.0), false)], &|s, _| {
+            assert!(!s.panning() && !s.active(), "a drag doesn't latch");
+        });
+        // Click (pressed and released in place, even in one frame): latches at the press.
+        frame(&mut scroll, vec![Event::PointerMoved(p), middle(p, true), middle(p, false)], &|s, d| {
+            assert_eq!(d, Vec2::ZERO);
+            assert!(s.active() && !s.panning(), "a click starts scroll mode");
+            assert!(s.blocks_input(), "the click must not reach the page tools");
+        });
+        // Pointer below the anchor: scrolls down, without any button held.
+        for _ in 0..3 {
+            frame(&mut scroll, vec![Event::PointerMoved(p + vec2(0.0, 120.0))], &|s, d| {
+                assert!(s.active());
+                assert!(d.y <= 0.0, "content moves up: {d:?}");
+            });
+        }
+        // The next middle click stops it, and its release doesn't start another pan.
+        frame(&mut scroll, vec![middle(p + vec2(0.0, 120.0), true)], &|s, d| {
+            assert_eq!(d, Vec2::ZERO);
+            assert!(!s.active());
+        });
+        frame(&mut scroll, vec![middle(p + vec2(0.0, 120.0), false)], &|s, _| assert!(!s.active() && !s.panning()));
+        frame(&mut scroll, vec![Event::PointerMoved(p)], &|s, d| {
+            assert_eq!(d, Vec2::ZERO);
+            assert!(!s.active() && !s.panning() && !s.blocks_input());
+        });
+        // A click, then Esc stops it as well.
+        frame(&mut scroll, vec![middle(p, true), middle(p, false)], &|s, _| assert!(s.active()));
+        let escape = Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE };
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(400.0, 400.0))),
+                events: vec![escape],
+                focused: true,
+                ..Default::default()
+            },
+            |ui| assert!(scroll.escape(ui.ctx())),
+        );
+        output.textures_delta.clear();
+        assert!(!scroll.active());
     }
 
     #[test]

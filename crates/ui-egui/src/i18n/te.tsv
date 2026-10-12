@@ -1720,7 +1720,7 @@ action wizard	Start	ప్రారంభించు
 	JavaScript, e.g. getField("total").value	JavaScript, ఉదా. getField("total").value
 	Font: Helvetica	ఫాంట్: Helvetica
 	e.g. en-US	ఉదా. en-US
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	రెండరింగ్: hayro (తాత్కాలికంగా) · UI: egui · ఐకాన్‌లు: Lucide (ISC) · ఫాంట్‌లు: Inter, JetBrains Mono, Dancing Script (OFL)
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	రెండరింగ్: hayro (తాత్కాలికంగా) · UI: egui · ఐకాన్‌లు: Lucide (ISC) · ఫాంట్‌లు: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)
 	CheckBox	చెక్ బాక్స్
 	Radio	రేడియో బటన్
 	PushButton	పుష్ బటన్

@@ -1949,7 +1949,7 @@
 	Radio	Радиобутон
 	Remove redaction marks	Премахни маркировките за заличаване
 	Rename bookmark	Преименувай отметката
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	Изобразяване: hayro (bootstrap) · Интерфейс: egui · Икони: Lucide (ISC) · Шрифтове: Inter, JetBrains Mono, Dancing Script (OFL)
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	Изобразяване: hayro (bootstrap) · Интерфейс: egui · Икони: Lucide (ISC) · Шрифтове: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)
 	Replace page	Замени страницата
 	Resize comment	Преоразмери коментара
 	Rotate image	Завърти изображението

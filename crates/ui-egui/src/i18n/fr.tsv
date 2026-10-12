@@ -1726,7 +1726,7 @@
 	JavaScript, e.g. getField("total").value	JavaScript, p. ex. getField("total").value
 	Font: Helvetica	Police : Helvetica
 	e.g. en-US	p. ex. fr-FR
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	Rendu : hayro (amorçage) · Interface : egui · Icônes : Lucide (ISC) · Polices : Inter, JetBrains Mono, Dancing Script (OFL)
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	Rendu : hayro (amorçage) · Interface : egui · Icônes : Lucide (ISC) · Polices : Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)
 	CheckBox	Case à cocher
 	Radio	Bouton radio
 	PushButton	Bouton

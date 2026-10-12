@@ -1691,7 +1691,7 @@
 	JavaScript, e.g. getField("total").value	JavaScript（例: getField("total").value）
 	Font: Helvetica	フォント: Helvetica
 	e.g. en-US	例: ja-JP
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	描画: hayro（暫定） · UI: egui · アイコン: Lucide（ISC） · フォント: Inter、JetBrains Mono、Dancing Script（OFL）
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	描画: hayro（暫定） · UI: egui · アイコン: Lucide（ISC） · フォント: Inter、JetBrains Mono、Dancing Script、Marck Script（OFL）
 	CheckBox	チェックボックス
 	Radio	ラジオボタン
 	PushButton	プッシュボタン

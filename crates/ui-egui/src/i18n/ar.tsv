@@ -1792,7 +1792,7 @@
 	JavaScript, e.g. getField("total").value	JavaScript، مثلًا getField("total").value
 	Font: Helvetica	الخط: Helvetica
 	e.g. en-US	مثلًا en-US
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	العرض: hayro (مبدئي) · الواجهة: egui · الأيقونات: Lucide (ISC) · الخطوط: Inter, JetBrains Mono, Dancing Script (OFL)
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	العرض: hayro (مبدئي) · الواجهة: egui · الأيقونات: Lucide (ISC) · الخطوط: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)
 	CheckBox	خانة اختيار
 	Radio	زر اختيار
 	PushButton	زر ضغط

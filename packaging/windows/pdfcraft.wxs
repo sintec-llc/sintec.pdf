@@ -19,6 +19,10 @@
       Compressed="yes"
       Language="1033">
     <SummaryInformation Description="Sintec.PDF" Manufacturer="Sintec LLC" />
+    <!-- HKLM registrations must never point into a per-user installation (upstream #305). Allow
+         removal of an existing installation even if it was somehow installed per-user. -->
+    <Launch Condition="ALLUSERS = 1 OR (Installed AND REMOVE = &quot;ALL&quot;)"
+        Message="Sintec.PDF must be installed for all users. Run setup with administrator privileges and ALLUSERS=1; per-user installation is not supported." />
     <!-- Same-version upgrades let successive pre-releases of one X.Y.Z replace each other
          (MSI versions are numeric, so 1.2.3-rc.1 and 1.2.3-rc.2 are both 1.2.3). -->
     <MajorUpgrade AllowSameVersionUpgrades="yes"
@@ -63,10 +67,13 @@
              Sintec.PDF entry to pick was the advertised Start Menu shortcut, which Windows can't
              run as a file handler ("This app can't run on your PC"). -->
         <RegistryValue Root="HKLM" Key="Software\Classes\SintecPDF.Document" Value="PDF Document" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Classes\SintecPDF.Document\DefaultIcon" Value="[#PdfcraftExe],0" Type="string" />
+        <!-- A negative index selects the stable icon resource ID, rather than its position.
+             Resource 1 is the app logo; resource 2 is the PDF file icon (apps/pdfcraft/build.rs). -->
+        <RegistryValue Root="HKLM" Key="Software\Classes\SintecPDF.Document\DefaultIcon" Value="&quot;[#PdfcraftExe]&quot;,-2" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SintecPDF.Document\shell\open\command" Value="&quot;[#PdfcraftExe]&quot; &quot;%1&quot;" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\.pdf\OpenWithProgids" Name="SintecPDF.Document" Value="" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\Applications\sintec-pdf.exe" Name="FriendlyAppName" Value="Sintec.PDF" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\sintec-pdf.exe\DefaultIcon" Value="&quot;[#PdfcraftExe]&quot;,-2" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\Applications\sintec-pdf.exe\SupportedTypes" Name=".pdf" Value="" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\Applications\sintec-pdf.exe\shell\open\command" Value="&quot;[#PdfcraftExe]&quot; &quot;%1&quot;" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Sintec.PDF\Capabilities" Name="ApplicationName" Value="Sintec.PDF" Type="string" />
@@ -262,6 +269,33 @@
 
       <Component Id="PdfcraftCli">
         <File Id="PdfcraftCliExe" Source="$(var.BinDir)\sintec-pdf-cli.exe" KeyPath="yes" />
+      </Component>
+
+      <!-- The project's licences, NOTICE, the PDF file icon's ISC notice and the licences of the
+           fonts built into the exe travel with the binaries. -->
+      <Component Id="Licence0">
+        <File Id="LicenceFile0" Source="$(var.BinDir)\LICENSE-MIT" KeyPath="yes" />
+      </Component>
+      <Component Id="Licence1">
+        <File Id="LicenceFile1" Source="$(var.BinDir)\LICENSE-APACHE" KeyPath="yes" />
+      </Component>
+      <Component Id="Licence2">
+        <File Id="LicenceFile2" Source="$(var.BinDir)\NOTICE" KeyPath="yes" />
+      </Component>
+      <Component Id="Licence3">
+        <File Id="LicenceFile3" Source="$(var.BinDir)\LICENSE-document.txt" KeyPath="yes" />
+      </Component>
+      <Component Id="Licence4">
+        <File Id="LicenceFile4" Source="$(var.BinDir)\OFL-Inter.txt" KeyPath="yes" />
+      </Component>
+      <Component Id="Licence5">
+        <File Id="LicenceFile5" Source="$(var.BinDir)\OFL-JetBrainsMono.txt" KeyPath="yes" />
+      </Component>
+      <Component Id="Licence6">
+        <File Id="LicenceFile6" Source="$(var.BinDir)\OFL-DancingScript.txt" KeyPath="yes" />
+      </Component>
+      <Component Id="Licence7">
+        <File Id="LicenceFile7" Source="$(var.BinDir)\OFL-MarckScript.txt" KeyPath="yes" />
       </Component>
 
       <!-- OCR models (CC-BY-SA-4.0, licences alongside) in models\ beside the exe, where

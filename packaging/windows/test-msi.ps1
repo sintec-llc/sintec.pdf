@@ -68,6 +68,24 @@ foreach ($ext in @('pdf', 'png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'jp
   Assert-Equal $selection[0] 'Player' "$ext context menu selection"
 }
 
+# PDF files show the PDF file icon (exe resource 2), not the app logo, and so does "Open with".
+foreach ($key in @('Software\Classes\SintecPDF.Document\DefaultIcon', 'Software\Classes\Applications\sintec-pdf.exe\DefaultIcon')) {
+  $icon = Read-Row ('SELECT `Value`, `Component_` FROM `Registry` WHERE `Key` = ''' + $key + ''' AND `Name` IS NULL') 2
+  Assert-Equal $icon[0] '"[#PdfcraftExe]",-2' $key
+  Assert-Equal $icon[1] 'PdfcraftApp' "$key component"
+}
+# Licences installed beside the exe.
+$names = @('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'LICENSE-document.txt', 'OFL-Inter.txt', 'OFL-JetBrainsMono.txt', 'OFL-DancingScript.txt', 'OFL-MarckScript.txt')
+for ($i = 0; $i -lt $names.Count; $i++) {
+  $file = Read-Row ('SELECT `FileName`, `Component_` FROM `File` WHERE `File` = ''LicenceFile' + $i + '''') 2
+  if (($file[0] -split '\|')[-1] -cne $names[$i]) { throw "LicenceFile$i`: expected $($names[$i]), got '$($file[0])'" }
+  $dir = Read-Row ('SELECT `Directory_` FROM `Component` WHERE `Component` = ''' + $file[1] + '''') 1
+  Assert-Equal $dir[0] 'INSTALLFOLDER' "$($names[$i]) directory"
+}
+# Never per-user: HKLM registrations must not point into one user's profile.
+$launch = Read-Row 'SELECT `Condition` FROM `LaunchCondition`' 1
+Assert-Equal $launch[0] 'ALLUSERS = 1 OR (Installed AND REMOVE = "ALL")' 'Per-machine launch condition'
+
 # Negative sequences are Windows Installer's success/user-exit/failure paths. Only full UI
 # shows these dialogs: an unattended /qn or /qb install must never wait for a Finish click.
 foreach ($exit in @(@('InstallComplete', '-1'), @('InstallCancelled', '-2'), @('InstallFailed', '-3'))) {
@@ -86,4 +104,4 @@ $rm = Read-Row 'SELECT `Dialog` FROM `Dialog` WHERE `Dialog` = ''MsiRMFilesInUse
 Assert-Equal $rm[0] 'MsiRMFilesInUse' 'Files-in-use dialog'
 [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Database)
 [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Installer)
-Write-Output 'ok MSI: Start Menu shortcut, «Преобразовать в PDF» context menu, optional desktop shortcut (default on, checkbox), icon/key path, full-UI success/cancel/error and Finish controls, files-in-use dialog'
+Write-Output 'ok MSI: Start Menu shortcut, «Преобразовать в PDF» context menu, optional desktop shortcut (default on, checkbox), icon/key path, full-UI success/cancel/error and Finish controls, files-in-use dialog, PDF file icon, licences, per-machine only'

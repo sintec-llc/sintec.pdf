@@ -1798,7 +1798,7 @@
 	Radio	单选按钮
 	Remove redaction marks	移除密文标记
 	Rename bookmark	重命名书签
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	渲染：hayro（初期实现） · 界面：egui · 图标：Lucide（ISC） · 字体：Inter、JetBrains Mono、Dancing Script（OFL）
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	渲染：hayro（初期实现） · 界面：egui · 图标：Lucide（ISC） · 字体：Inter、JetBrains Mono、Dancing Script、Marck Script（OFL）
 	Replace page	替换页面
 	Resize comment	调整注释大小
 	Rotate image	旋转图像

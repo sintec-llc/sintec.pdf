@@ -1789,7 +1789,7 @@
 	JavaScript, e.g. getField("total").value	JavaScript, np. getField("total").value
 	Font: Helvetica	Czcionka: Helvetica
 	e.g. en-US	np. pl-PL
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	Renderowanie: hayro (wersja początkowa) · Interfejs: egui · Ikony: Lucide (ISC) · Czcionki: Inter, JetBrains Mono, Dancing Script (OFL)
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	Renderowanie: hayro (wersja początkowa) · Interfejs: egui · Ikony: Lucide (ISC) · Czcionki: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)
 	CheckBox	Pole wyboru
 	Radio	Przycisk opcji
 	PushButton	Przycisk

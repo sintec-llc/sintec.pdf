@@ -227,13 +227,35 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
     cancel
 }
 
-/// The Sintec.PDF logo (the app icon's master vector), `size` points square.
+/// The Sintec.PDF logo (the app icon at 512 px, decoded once), `size` points square.
 pub fn app_logo(ui: &mut egui::Ui, size: f32) -> Response {
-    ui.add(
-        egui::Image::from_bytes("bytes://sintec-pdf-logo.svg", include_bytes!("../../../assets/app-icon/pdfcraft.svg"))
-            .fit_to_exact_size(vec2(size, size))
-            .alt_text("Sintec.PDF logo"),
-    )
+    const LOGO_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/512x512/apps/ai.storyteller.pdfcraft.png");
+    let id = egui::Id::new("sintec-pdf-logo");
+    let ctx = ui.ctx().clone();
+    let texture = ctx.data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)).unwrap_or_else(|| {
+        let texture = decode_rgba_png(LOGO_PNG).map(|(size, rgba)| {
+            let options = egui::TextureOptions { mipmap_mode: Some(egui::TextureFilter::Linear), ..egui::TextureOptions::LINEAR };
+            ctx.load_texture("sintec-pdf-logo", egui::ColorImage::from_rgba_unmultiplied(size, &rgba), options)
+        });
+        ctx.data_mut(|d| d.insert_temp(id, texture.clone()));
+        texture
+    });
+    match texture {
+        Some(t) => ui.add(egui::Image::new(&t).fit_to_exact_size(vec2(size, size)).alt_text("Sintec.PDF logo")),
+        None => ui.allocate_response(vec2(size, size), egui::Sense::hover()),
+    }
+}
+
+/// An 8-bit RGBA PNG's size and pixels (the bundled logo); `None` for anything else.
+fn decode_rgba_png(bytes: &[u8]) -> Option<([usize; 2], Vec<u8>)> {
+    let mut reader = png::Decoder::new(std::io::Cursor::new(bytes)).read_info().ok()?;
+    let mut buf = vec![0; reader.output_buffer_size()?];
+    let info = reader.next_frame(&mut buf).ok()?;
+    if info.color_type != png::ColorType::Rgba || info.bit_depth != png::BitDepth::Eight {
+        return None;
+    }
+    buf.truncate(info.buffer_size());
+    Some(([info.width as usize, info.height as usize], buf))
 }
 
 /// Buttons for every project link (`pdfcraft_engine::links`), the first one prominent.
@@ -302,6 +324,16 @@ pub fn icon_pill(ui: &mut egui::Ui, icon: &str, label: &str, primary: bool) -> R
 mod tests {
     use super::*;
     use egui::Pos2;
+
+    #[test]
+    fn the_bundled_logo_decodes_and_junk_does_not() {
+        let png = include_bytes!("../../../assets/app-icon/hicolor/512x512/apps/ai.storyteller.pdfcraft.png");
+        let (size, rgba) = decode_rgba_png(png).expect("logo decodes");
+        assert_eq!(size, [512, 512]);
+        assert_eq!(rgba.len(), 512 * 512 * 4);
+        assert!(decode_rgba_png(b"not a png").is_none());
+        assert!(decode_rgba_png(&png[..png.len() / 2]).is_none());
+    }
 
     #[test]
     fn search_placeholder_never_overlaps_the_shortcut() {

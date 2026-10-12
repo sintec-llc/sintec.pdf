@@ -1727,7 +1727,7 @@
 	JavaScript, e.g. getField("total").value	JavaScript, z. B. getField("total").value
 	Font: Helvetica	Schrift: Helvetica
 	e.g. en-US	z. B. de-DE
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	Darstellung: hayro (Bootstrap) · Oberfläche: egui · Symbole: Lucide (ISC) · Schriften: Inter, JetBrains Mono, Dancing Script (OFL)
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	Darstellung: hayro (Bootstrap) · Oberfläche: egui · Symbole: Lucide (ISC) · Schriften: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)
 	CheckBox	Kontrollkästchen
 	Radio	Optionsfeld
 	PushButton	Schaltfläche

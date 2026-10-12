@@ -1812,7 +1812,7 @@ date	December	декабря
 	Radio	Переключатель
 	Remove redaction marks	Убрать метки скрытия
 	Rename bookmark	Переименовать закладку
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	Отрисовка: hayro (временно) · Интерфейс: egui · Значки: Lucide (ISC) · Шрифты: Inter, JetBrains Mono, Dancing Script (OFL)
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	Отрисовка: hayro (временно) · Интерфейс: egui · Значки: Lucide (ISC) · Шрифты: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)
 	Replace page	Заменить страницу
 	Resize comment	Изменить размер комментария
 	Rotate image	Повернуть изображение

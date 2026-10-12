@@ -1790,7 +1790,7 @@
 	JavaScript, e.g. getField("total").value	JavaScript, наприклад getField("total").value
 	Font: Helvetica	Шрифт: Helvetica
 	e.g. en-US	наприклад uk-UA
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	Відтворення: hayro (початковий рушій) · Інтерфейс: egui · Піктограми: Lucide (ISC) · Шрифти: Inter, JetBrains Mono, Dancing Script (OFL)
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	Відтворення: hayro (початковий рушій) · Інтерфейс: egui · Піктограми: Lucide (ISC) · Шрифти: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)
 	CheckBox	Прапорець
 	Radio	Перемикач
 	PushButton	Кнопка

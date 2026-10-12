@@ -1716,7 +1716,7 @@
 	JavaScript, e.g. getField("total").value	JavaScript, pl. getField("total").value
 	Font: Helvetica	Betűtípus: Helvetica
 	e.g. en-US	pl. hu-HU
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	Megjelenítés: hayro (kiindulás) · Felület: egui · Ikonok: Lucide (ISC) · Betűtípusok: Inter, JetBrains Mono, Dancing Script (OFL)
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	Megjelenítés: hayro (kiindulás) · Felület: egui · Ikonok: Lucide (ISC) · Betűtípusok: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)
 	CheckBox	Jelölőnégyzet
 	Radio	Választógomb
 	PushButton	Nyomógomb
