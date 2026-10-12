@@ -96,3 +96,27 @@ fn bad_pictures_are_refused_with_a_message() {
     app.restore(r#"{"signature_image": {"Image": "bm90IGEgcG5n"}}"#);
     assert!(app.signature.is_none());
 }
+
+/// Sintec.PDF: a typed signature in Russian is placed (its script face has Cyrillic).
+#[test]
+fn a_typed_russian_name_is_placed() {
+    let mut h = Harness::builder().with_size(egui::vec2(1280.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        let bytes = app.session.create_from_text("t", "Sign below").unwrap();
+        app.open_bytes("contract.pdf", None, bytes.as_ref().clone()).unwrap();
+        app.signature = Some(SavedSig::Typed("Кочурин А. Е.".into()));
+        app
+    });
+    h.run_steps(4);
+    h.state_mut().quick_tool = pdfcraft_ui_egui::QuickTool::Fill(pdfcraft_ui_egui::fill_sign::FillTool::Signature);
+    let page = h.state().views[0].page_screen_rect(0).expect("page on screen");
+    let at = page.min + egui::vec2(page.width() * 0.3, page.height() * 0.5);
+    let id = h.state().views[0].id;
+    let before = h.state().session.get(id).unwrap().info.annotations.len();
+    click_at(&mut h, at);
+    let annots = h.state().session.get(id).unwrap().info.annotations.clone();
+    assert_eq!(annots.len(), before + 1, "the Russian name is placed");
+    let r = annots.last().unwrap().rect;
+    assert!(r[2] - r[0] > 40.0, "with its width: {r:?}");
+}
