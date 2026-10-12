@@ -2,9 +2,25 @@
 
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
-use skrifa::{FontRef, MetadataProvider};
+use skrifa::{FontRef, GlyphId, MetadataProvider};
 
 static FONT: &[u8] = include_bytes!("../../../assets/fonts/DancingScript.ttf");
+/// Sintec.PDF: Marck Script (OFL), a script face with Cyrillic, for names Dancing Script can't
+/// write (Russian, Ukrainian, Belarusian…). See AGENTS.md §1.4 for this fork's exception.
+static CYRILLIC_FONT: &[u8] = include_bytes!("../../../assets/fonts/MarckScript-Regular.ttf");
+
+/// The script face for `text`: Dancing Script when it has every letter, else Marck Script when
+/// that has every letter (one face per name, so a name never mixes styles), else Dancing Script
+/// (whatever neither has is left out, as before).
+fn script_font(text: &str) -> &'static [u8] {
+    let covers = |bytes: &'static [u8]| {
+        FontRef::new(bytes).is_ok_and(|f| {
+            let map = f.charmap();
+            text.chars().filter(|c| !c.is_whitespace()).all(|c| map.map(c).is_some())
+        })
+    };
+    if covers(FONT) || !covers(CYRILLIC_FONT) { FONT } else { CYRILLIC_FONT }
+}
 
 /// Bound signature work while allowing long personal names.
 pub const MAX_SIGNATURE_CHARS: usize = 256;
@@ -129,6 +145,12 @@ impl OutlinePen for Flatten {
 /// outline data. [`GlyphError::NoFont`] when the build has no Japanese face.
 pub fn japanese_glyph(ch: char) -> Result<GlyphOutline, GlyphError> {
     let Some(face) = crate::document_japanese_font() else { return Err(GlyphError::NoFont) };
+    japanese_glyph_from(face, ch)
+}
+
+/// The bounded outline and advance from the explicitly selected craft-fonts face.
+/// Uses the same complexity and missing-glyph checks as [`japanese_glyph`].
+pub fn japanese_glyph_from(face: &crate::CraftFont, ch: char) -> Result<GlyphOutline, GlyphError> {
     let Ok(font) = FontRef::new(face.bytes) else { return Err(GlyphError::Missing) };
     let loc = LocationRef::default();
     let metrics = font.metrics(Size::unscaled(), loc);
@@ -139,6 +161,13 @@ pub fn japanese_glyph(ch: char) -> Result<GlyphOutline, GlyphError> {
     if !width.is_finite() || width <= 0.0 || width > 2.0 {
         return Err(GlyphError::Missing);
     }
+    bounded_outline(&font, gid, width)
+}
+
+/// Glyph `gid` of `font` in em units with advance `width`, bounded like [`japanese_glyph`].
+pub(crate) fn bounded_outline(font: &FontRef, gid: GlyphId, width: f64) -> Result<GlyphOutline, GlyphError> {
+    let loc = LocationRef::default();
+    let scale = 1.0 / font.metrics(Size::unscaled(), loc).units_per_em.max(1) as f64;
     let Some(glyph) = font.outline_glyphs().get(gid) else { return Err(GlyphError::Missing) };
     let mut pen = Flatten::new(scale);
     let _ = glyph.draw(DrawSettings::unhinted(Size::unscaled(), loc), &mut pen);
@@ -171,7 +200,7 @@ pub fn script_outline(text: &str) -> ScriptOutline {
     if text.chars().take(MAX_SIGNATURE_CHARS + 1).count() > MAX_SIGNATURE_CHARS {
         return ScriptOutline::default();
     }
-    let Ok(font) = FontRef::new(FONT) else { return ScriptOutline::default() };
+    let Ok(font) = FontRef::new(script_font(text)) else { return ScriptOutline::default() };
     let loc = LocationRef::default();
     let metrics = font.metrics(Size::unscaled(), loc);
     let scale = 1.0 / metrics.units_per_em.max(1) as f64;
@@ -199,6 +228,22 @@ pub fn script_outline(text: &str) -> ScriptOutline {
 
 #[cfg(test)]
 mod tests {
+    /// Sintec.PDF: Russian (and other Cyrillic) names are written too, in Marck Script; Latin
+    /// names keep Dancing Script.
+    #[test]
+    fn cyrillic_names_are_written_in_a_cyrillic_script_face() {
+        for name in ["Кочурин А. Е.", "Іваненко", "Ёлкин-Щукин"] {
+            let o = super::script_outline(name);
+            let letters = name.chars().filter(|c| c.is_alphabetic()).count();
+            assert!(o.contours.len() >= letters, "{name}: {} contours for {letters} letters", o.contours.len());
+            assert!(o.width > 1.0, "{name}: {}", o.width);
+        }
+        assert_eq!(super::script_font("Kochurin"), super::FONT);
+        assert_eq!(super::script_font("Кочурин"), super::CYRILLIC_FONT);
+        // A name mixing scripts is written in one face, the one that has every letter.
+        assert_eq!(super::script_font("Кочурин A."), super::CYRILLIC_FONT);
+    }
+
     #[test]
     fn long_names_keep_every_glyph_with_bounded_outline_work() {
         let text = "Alexandria Catherine Elizabeth Montgomery-Wellington";

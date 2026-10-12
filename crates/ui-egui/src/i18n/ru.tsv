@@ -824,7 +824,7 @@ date	December	декабря
 	Applied 1 redaction mark. Save to remove the content from the file.	Применена 1 метка скрытия. Сохраните, чтобы удалить содержимое из файла.
 	Applied {n} redaction marks. Save to remove the content from the file.	Применено меток скрытия: {n}. Сохраните, чтобы удалить содержимое из файла.
 	JavaScript Console	Консоль JavaScript
-	JavaScript is turned off (Preferences ▸ JavaScript).	JavaScript выключен (Настройки ▸ JavaScript).
+	JavaScript is turned off (Preferences ▸ JavaScript).	JavaScript выключен (Настройки › JavaScript).
 	Output appears here.	Здесь появится вывод.
 	Document JavaScripts	JavaScript документа
 	Script Name:	Имя сценария:
@@ -851,7 +851,6 @@ date	December	декабря
 	Searchable Image (Exact)	Изображение с поиском (точное)
 	Adds invisible text over each word; the page image is not changed	Добавляет невидимый текст поверх каждого слова; изображение страницы не меняется
 	Downsample to	Понизить разрешение до
-	Text recognition isn't installed: its models are missing (run `cargo xtask models`, or set PRINTCRAFT_MODELS).	Распознавание текста не установлено: нет моделей (выполните `cargo xtask models` или задайте PRINTCRAFT_MODELS).
 	Settings	Параметры
 	Protect	Защита
 	Advanced options	Дополнительные параметры
@@ -1737,7 +1736,7 @@ date	December	декабря
 	An image asks to be interpolated	Изображение требует интерполяции
 	An image has alternates or OPI information	У изображения есть альтернативы или сведения OPI
 	Button Style:	Стиль кнопки:
-	Change {key}	Изменить {key}
+	Change {key}	Изменить: {key}
 	Change comment properties	Изменить свойства комментария
 	Change field properties	Изменить свойства поля
 	Change initial view	Изменить начальный вид
@@ -1850,7 +1849,6 @@ date	December	декабря
 	the image is empty	изображение пустое
 	The operation failed.	Операция не удалась.
 	the password is incorrect	неверный пароль
-	the text recognition models are not installed (run `cargo xtask models`, or set PRINTCRAFT_MODELS)	модели распознавания текста не установлены (выполните `cargo xtask models` или задайте PRINTCRAFT_MODELS)
 	The title in the metadata and the document information differ	Заголовок в метаданных и в сведениях о документе различается
 	the title must not be empty	заголовок не может быть пустым
 	there are no pages to print	нет страниц для печати
@@ -1947,7 +1945,224 @@ date	December	декабря
 	not available yet	пока недоступно
 	some of its tools aren't available yet	часть инструментов пока недоступна
 	Tools marked Soon aren't available yet; the others work today.	Инструменты с пометкой «Скоро» пока недоступны, остальные уже работают.
-signature	Type	Ввести
+signature pad	Type	Ввести
 	Save (⌘S)	Сохранить (⌘S)
 	This link's action ({s}) isn't supported yet	Действие ссылки ({s}) пока не поддерживается
 	Has JavaScript actions	Есть действия JavaScript
+# From upstream PdfCraft 0.6.0
+	Interface size	Размер интерфейса
+	Auto ({percent}%)	Авто ({percent}%)
+	Auto follows the system's text size. Pages always render at the display's full resolution.	В режиме «Авто» используется размер текста из настроек системы. Страницы всегда отображаются в полном разрешении экрана.
+	Open Recent	Открыть недавние
+	Clear Recent Files	Очистить недавние файлы
+	Remove from Recent	Убрать из недавних
+	Remove {name} from Recent	Убрать {name} из недавних
+	Pin folder to Home…	Закрепить папку на главной…
+	Folders	Папки
+	Pin a folder…	Закрепить папку…
+	Pin a folder to Home	Закрепить папку на главной
+	Pin a folder to list its newest PDFs here, such as where your scanner or a synced cloud drive saves them.	Закрепите папку, чтобы видеть здесь её новые PDF, например папку, куда сохраняет файлы сканер или синхронизируемый облачный диск.
+	Unpin	Открепить
+	Unpin {folder}	Открепить {folder}
+	Looking for PDFs…	Поиск PDF…
+	This folder isn't available right now. It may have moved, or its drive or cloud sync is offline.	Эта папка сейчас недоступна. Возможно, она перемещена или её диск либо облачная синхронизация не в сети.
+	No PDFs in this folder yet	В этой папке пока нет PDF
+	Show less	Свернуть
+	Show {n} more	Показать ещё {n}
+	The newest {n} of {total} PDFs	Последние {n} PDF из {total}
+	Pinned folders need the desktop app	Для закреплённых папок нужно настольное приложение
+	Choose a folder on this computer to pin	Выберите папку на этом компьютере, чтобы закрепить её
+	{folder} is already pinned to Home	{folder} уже закреплена на главной
+	You can pin up to {n} folders. Unpin one first.	Можно закрепить не более {n} папок. Сначала открепите одну из них.
+	Pinned {folder} to Home	Папка {folder} закреплена на главной
+	No recent files	Нет недавних файлов
+	Column select	Выделение столбца
+	Flatten Fill & Sign when saving	Расплющить «Заполнить и подписать» при сохранении
+	Text, marks and signatures become part of the page. Other comments stay editable.	Текст, пометки и подписи становятся частью страницы. Остальные комментарии можно по-прежнему править.
+	Join our Discord	Присоединяйтесь к нашему Discord
+	Zoom in / out (also pinch or {key}-scroll)	Масштаб (также щипок или {key}-прокрутка)
+	Open a PDF ({key})	Открыть PDF ({key})
+	Print ({key})	Печать ({key})
+	Document properties ({key})	Свойства документа ({key})
+	Zoom out ({key})	Уменьшить ({key})
+	Zoom in ({key})	Увеличить ({key})
+	Rotate view clockwise ({key})	Повернуть вид по часовой стрелке ({key})
+	Get help, share feedback and follow development on Discord.	Получайте помощь, делитесь отзывами и следите за разработкой в Discord.
+	New bookmarks from structure	Новые закладки из структуры
+	Sintec.PDF web page	Веб-страница Sintec.PDF
+	Rotation:	Поворот:
+	Windows store  ·  	Хранилище Windows  ·
+	The key is in the Windows certificate store, which may ask to allow Sintec.PDF to use it.	Ключ находится в хранилище сертификатов Windows, которое может запросить разрешение на использование Sintec.PDF.
+	Line ending	Окончание линии
+	Open arrow	Открытая стрелка
+	Closed arrow	Закрытая стрелка
+	Butt	Торец
+	Reverse open arrow	Обратная открытая стрелка
+	Reverse closed arrow	Обратная закрытая стрелка
+	Slash	Косая черта
+	Some bookmarks are not shown here: the panel lists a limited number, nested a limited depth.	Некоторые закладки здесь не показаны: панель показывает ограниченное число закладок с ограниченной глубиной вложенности.
+	Multiple words or phrases	Несколько слов или фраз
+	One word or phrase per line	По одному слову или фразе в строке
+	Import list…	Импортировать список…
+	{n} word(s) or phrase(s)	Слов или фраз: {n}
+	{name} is too large for a word list (at most 1 MB).	Файл {name} слишком велик для списка слов (не более 1 МБ).
+	Redaction code:	Код сокрытия:
+	Selected pages	Выделенные страницы
+	Text recognition isn't installed: its model files are missing. Reinstall Sintec.PDF, or set PDFCRAFT_MODELS to the folder that holds them.	Распознавание текста не установлено: отсутствуют файлы моделей. Переустановите Sintec.PDF или задайте в PDFCRAFT_MODELS папку, в которой они лежат.
+	New bookmark ({key})	Новая закладка ({key})
+	Set layer visibility	Задать видимость слоя
+	Previous ({key})	Предыдущее ({key})
+	Next ({key})	Следующее ({key})
+	Part of	Часть
+	This file is already as small as it can be made ({size}). No copy was saved.	Этот файл уже минимального размера ({size}). Копия не сохранена.
+	Saved {place}: {before} → {after} (not smaller){detail}	Сохранено {place}: {before} → {after} (не меньше){detail}
+	Files are combined from top to bottom. Leave Pages empty to take every page.	Файлы объединяются сверху вниз. Оставьте «Страницы» пустыми, чтобы взять все страницы.
+	Unlock…	Разблокировать…
+	Select a password-protected file first	Сначала выберите файл, защищённый паролем
+	Enter the permissions password to allow combining	Введите пароль разрешений, чтобы разрешить объединение
+	Enter the password that opens it	Введите пароль для открытия
+	Unlock {name}	Разблокировать {name}
+	Unlock {n} files	Разблокировать {n} файлов
+	The same password is tried on each file.	Один и тот же пароль пробуется на каждом файле.
+	Hide password	Скрыть пароль
+	Show password	Показать пароль
+	Wrong password	Неверный пароль
+	The password is only used to read the file; it isn't saved.	Пароль используется только для чтения файла; он не сохраняется.
+	Unlock	Разблокировать
+	Opened, but its security settings don't allow combining. Enter the permissions password.	Открыто, но настройки безопасности не разрешают объединение. Введите пароль разрешений.
+	Unlocked: the combined file won't be password-protected	Разблокировано: объединённый файл не будет защищён паролем
+	Unlocked {n} of {m} files	Разблокировано {n} из {m} файлов
+	Drop PDFs or folders here, or choose them.	Перетащите PDF или папки сюда или выберите их.
+	Add folder…	Добавить папку…
+	Add folder and subfolders…	Добавить папку и вложенные папки…
+	More ways to add files	Больше способов добавить файлы
+	Every PDF in the folder	Каждый PDF в папке
+	Every PDF in the folder and the folders inside it	Каждый PDF в папке и вложенных папках
+	Add folder	Добавить папку
+	Add folder and subfolders	Добавить папку и вложенные папки
+	No PDFs found in {folder}	В {folder} не найдено PDF
+	Added the first {n} PDFs in {folder}	Добавлены первые {n} PDF из {folder}
+	Click to sort, drag to move the column. Drag its edge to resize it.	Щёлкните для сортировки, перетащите, чтобы переместить столбец. Перетащите край, чтобы изменить размер.
+	Reset columns	Сбросить столбцы
+	Remove {n} files	Удалить {n} файлов
+	{n} selected	Выбрано: {n}
+	sorted ascending	отсортировано по возрастанию
+	sorted descending	отсортировано по убыванию
+	Protected: the combined file won't keep its security settings	Защищено: объединённый файл не сохранит настройки безопасности
+	Add open documents	Добавить открытые документы
+	All open documents	Все открытые документы
+	No documents are open	Нет открытых документов
+	Select a file first	Сначала выберите файл
+	1 file	1 файл
+	{n} files	{n} файлов
+	1 file needs attention	1 файл требует внимания
+	{n} files need attention	{n} файлов требуют внимания
+	{name} can't be combined: {why}	{name} нельзя объединить: {why}
+	Check the pages of {name}: {why}	Проверьте страницы {name}: {why}
+	Add the PDFs to combine	Добавить PDF для объединения
+	File name	Имя файла
+	Warnings	Предупреждения
+	Drag to reorder	Перетащить для изменения порядка
+	{k} of {n}	{k} из {n}
+	? of {n}	? из {n}
+	Added more than once	Добавлено более одного раза
+	yesterday	вчера
+	{n} days ago	{n} дней назад
+	No pages selected	Страницы не выбраны
+	Password-protected	Защищён паролем
+	Its security settings don't allow copying pages	Его настройки безопасности не разрешают копировать страницы
+	Can't be read: {e}	Нельзя прочитать: {e}
+	Includes unsaved changes	Включает несохранённые изменения
+	the text recognition models are not installed (reinstall Sintec.PDF, or set PDFCRAFT_MODELS to the folder that holds them)	модели распознавания текста не установлены (переустановите Sintec.PDF или задайте в PDFCRAFT_MODELS папку, в которой они лежат)
+	This web address mixes letters from different alphabets, a common way to imitate another site's name.	Этот веб-адрес смешивает буквы из разных алфавитов, распространённый способ имитировать имя другого сайта.
+	This web address uses letters from another alphabet, which can look like familiar ones.	Этот веб-адрес использует буквы из другого алфавита, которые могут выглядеть как знакомые.
+	Reopen the files that were open when Sintec.PDF last closed	Повторно открывать файлы, которые были открыты при последнем закрытии Sintec.PDF
+	Choose a PNG or JPEG image (up to 4 MiB). Transparency is preserved.	Выберите изображение PNG или JPEG (до 4 МиБ). Прозрачность сохраняется.
+	Couldn't import the signature image: {e}	Не удалось импортировать изображение подписи: {e}
+	Create PDF from multiple files…	Создать PDF из нескольких файлов…
+	Optimizing… removing user data	Оптимизация… удаление пользовательских данных
+	Optimizing… image {d} of {t}	Оптимизация… изображение {d} из {t}
+	Optimizing… cleaning up	Оптимизация… очистка
+	Optimizing… merging identical objects	Оптимизация… объединение одинаковых объектов
+	Optimizing… writing the copy	Оптимизация… запись копии
+	Cancelling…	Отмена…
+	Created a PDF from {n} files	PDF создан из файлов: {n}
+	PDF, images and text	PDF, изображения и текст
+	Insert a file before page {label}	Вставить файл перед страницей {label}
+	Insert a file at the end	Вставить файл в конец
+	Save pages	Сохранить страницы
+	Save these pages as one PDF	Сохранить эти страницы в один PDF
+	No changes to save	Нет изменений для сохранения
+	Created a PDF from {n} files; left out: {names}	PDF создан из файлов: {n}; пропущены: {names}
+	Created a PDF from the first {n} files	PDF создан из первых файлов: {n}
+	Go to page…	Перейти на страницу…
+	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	Стандартные шрифты не могут отобразить «{c}» ({code}). Пока в виде текста можно добавлять только западноевропейские символы.
+	Reset page size	Сбросить размер страниц
+	Date format	Формат даты
+	Fill & Sign dates	Даты для «Заполнить и подписать»
+	Pattern	Шаблон
+	Today: {date}	Сегодня: {date}
+	yyyy or yy year · m or mm month · mmm or mmmm month name · d or dd day · ddd or dddd weekday. H, h, M, s and t are time letters and can't be used on their own: put {escape} before a letter to show it as is.	yyyy или yy — год · m или mm — месяц · mmm или mmmm — название месяца · d или dd — день · ddd или dddd — день недели. H, h, M, s и t — буквы времени, их нельзя использовать отдельно: поставьте {escape} перед буквой, чтобы показать её как есть.
+	Same as interface ({language})	Как в интерфейсе ({language})
+	{chars} can't be written into the PDF yet: Fill & Sign text is Western European only. Pick a numeric format such as dd.mm.yyyy.	{chars} пока нельзя записать в PDF: текст «Заполнить и подписать» поддерживает только западноевропейские символы. Выберите числовой формат, например dd.mm.yyyy.
+	Opens the printer driver's preferences. They are saved for every print from this computer; the copies, two-sided, grayscale and paper chosen here still apply.	Открывает настройки драйвера принтера. Они сохраняются для всей печати с этого компьютера; выбранные здесь копии, двусторонняя печать, оттенки серого и бумага по-прежнему применяются.
+	The printer driver's own settings for this print: paper tray, paper type, finishing and more.	Собственные параметры драйвера принтера для этой печати: лоток, тип бумаги, финишная обработка и другое.
+	Couldn't open the printer's preferences: {e}	Не удалось открыть настройки принтера: {e}
+	Printer properties	Свойства принтера
+	Reset to printer defaults	Вернуть параметры принтера по умолчанию
+	This printer offers no settings of its own.	У этого принтера нет собственных параметров.
+	Scroll tabs left	Прокрутить вкладки влево
+	Scroll tabs right	Прокрутить вкладки вправо
+	Shared Field Properties	Общие свойства полей
+	{n} fields selected	Выбрано полей: {n}
+	Mixed	Разные значения
+	Custom font	Пользовательский шрифт
+	Only checked properties will change. Mixed means the selected fields have different values.	Изменятся только отмеченные свойства. «Разные значения» означает, что значения выбранных полей различаются.
+	Shift- or Ctrl/Command-click to select several fields.	Щёлкните с Shift или Ctrl/Command, чтобы выбрать несколько полей.
+	Font size 0 uses automatic sizing.	Размер шрифта 0 включает автоматический подбор размера.
+	Character limit:	Ограничение символов:
+	Character limit 0 means no limit. A comb of characters needs a limit.	Ограничение 0 означает отсутствие ограничения. Для посимвольных ячеек нужно задать ограничение.
+	To change locked fields, also set Locked to No.	Чтобы изменить заблокированные поля, также установите «Заблокировано» в «Нет».
+	Comb of characters	Гребёнка символов
+	The document changed while you were editing field properties.	Документ изменился, пока вы редактировали свойства полей.
+	The document is no longer open.	Документ больше не открыт.
+	The field properties dialog is no longer open.	Окно свойств полей больше не открыто.
+	The field properties could not be changed.	Не удалось изменить свойства полей.
+	The selected fields could not be found. Select them again.	Выбранные поля не найдены. Выберите их снова.
+	The field {name} no longer exists.	Поле {name} больше не существует.
+	A selected field has no widget on any page, so the fields can't be edited together.	У одного из выбранных полей нет виджета ни на одной странице, поэтому поля нельзя изменить вместе.
+	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} — с разрешением {dpi} dpi, максимальным, с каким их можно отрисовать)
+@plural	{n} object selected|{n} objects selected	Выделен {n} объект|Выделено {n} объекта|Выделено {n} объектов
+	Drag the selection to move it. Esc clears the selection.	Перетащите выделение, чтобы переместить его. Esc снимает выделение.
+	Shift-click to select several objects. Drag empty space to select an area.	Щёлкните с Shift, чтобы выбрать несколько объектов. Протяните рамку на пустом месте, чтобы выделить область.
+	Select at most 1000 objects at a time.	Выбирайте не более 1000 объектов одновременно.
+	Finish or discard the text being edited before selecting several objects.	Завершите или отмените редактирование текста, прежде чем выбирать несколько объектов.
+	Move object	Переместить объект
+	Move objects	Переместить объекты
+	Vertical text cannot be moved with this selection.	Вертикальный текст нельзя переместить вместе с этим выделением.
+	Text used as a clipping path cannot be moved with this selection.	Текст, используемый как обтравочный контур, нельзя переместить вместе с этим выделением.
+	These objects could not be moved. Select them again and try a smaller move.	Не удалось переместить эти объекты. Выберите их снова и попробуйте меньшее смещение.
+	This page contains objects that cannot be selected together.	На этой странице есть объекты, которые нельзя выделить вместе.
+	Fill colour	Цвет заливки
+	No fill	Без заливки
+	Fill colour: none	Цвет заливки: нет
+key	Ctrl	Ctrl
+key	Shift	Shift
+key	Delete	Delete
+key	Esc	Esc
+key	Home	Home
+key	End	End
+key	Space	Пробел
+	Grid view	Вид сеткой
+	List view	Вид списком
+	Files are combined in the order shown. Drag them to change it.	Файлы объединяются в показанном порядке. Перетащите их, чтобы изменить его.
+	Preview unavailable: {e}	Предпросмотр недоступен: {e}
+	Pages: {k} of {n}	Страницы: {k} из {n}
+	Check the pages	Проверьте страницы
+	Switch to List view to change the pages it takes.	Переключитесь на вид списком, чтобы изменить, какие страницы взять.
+	Expand all	Развернуть все
+	Collapse all	Свернуть все
+	Remove page	Удалить страницу
+	Remove {n} pages	Удалить страницы: {n}
+	The picture is too large for a signature (at most {n} MB)	Изображение слишком большое для подписи (не более {n} МБ)
+	Save ({key})	Сохранить ({key})
