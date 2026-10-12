@@ -297,12 +297,15 @@ mod tests {
         assert!(pdf.contains("<string>Alternate</string>"), "rank stays Alternate: offered without taking over Preview");
     }
 
-    // The bundle id must match the app id the binary uses; renames change both (#174).
+    // Sintec.PDF has its own macOS bundle id, so it never shares LaunchServices registrations or a
+    // preferences domain with an installed PdfCraft. (APP_ID stays the Linux/Wayland id, which the
+    // hicolor icon names use.)
     #[test]
-    fn macos_bundle_id_matches_app_id() {
-        assert!(read("packaging/macos/Info.plist.in").contains("<string>ai.storyteller.pdfcraft</string>"), "bundle id");
-        let main = read("apps/pdfcraft/src/main.rs");
-        assert!(main.contains(r#"const APP_ID: &str = "ai.storyteller.pdfcraft""#), "APP_ID drifted from the bundle id");
+    fn macos_bundle_id_is_sintecs() {
+        let plist = read("packaging/macos/Info.plist.in");
+        assert!(plist.contains("<string>io.github.sintec-llc.sintec-pdf</string>"), "bundle id");
+        assert!(!plist.contains("ai.storyteller"), "upstream's bundle id must not come back");
+        assert!(plist.contains("<key>CFBundleExecutable</key>\n  <string>Sintec.PDF</string>"), "executable name");
     }
 
     // Committed file with `<!-- -->` comments stripped, so a commented-out claim cannot pass.

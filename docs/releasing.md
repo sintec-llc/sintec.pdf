@@ -1,15 +1,22 @@
 # Releasing Sintec.PDF
 
-> **Sintec.PDF builds for Windows only.** Every push to the `release` branch runs
-> `.github/workflows/release.yml`, which builds the x64 MSI and portable zip
-> (`sintec-pdf-<version>-windows-x64.*`), checks the MSI with `packaging/windows/test-msi.ps1`, and
-> creates or updates a **draft** GitHub Release named `Sintec.PDF v<version>`. Nobody sees a draft
-> until a maintainer publishes it. The macOS, Linux, FreeBSD, web and ARM64 jobs described below
-> come from upstream PdfCraft; their workflows were removed here, and the packaging scripts are
-> kept only as reference.
+> **Sintec.PDF builds for Windows and macOS.** Every push to the `release` branch runs
+> `.github/workflows/release.yml`, which builds, in parallel:
+>
+> - the x64 MSI and portable zip (`sintec-pdf-<version>-windows-x64.*`), checked with
+>   `packaging/windows/test-msi.ps1`;
+> - a disk image and a CLI zip per Mac processor, each built natively: Apple silicon on
+>   `macos-15` (`sintec-pdf-<version>-macos-aarch64.dmg`) and Intel on `macos-15-intel`
+>   (`sintec-pdf-<version>-macos-x86_64.dmg`).
+>
+> It then creates or updates a **draft** GitHub Release named `Sintec.PDF v<version>` with all of
+> them and `SHA256SUMS.txt`. Nobody sees a draft until a maintainer publishes it. CI (`ci.yml`)
+> also tests on both Mac processors and uploads ad-hoc signed DMGs as artifacts for every pull
+> request. The Linux, FreeBSD, web and Windows ARM64 jobs described below come from upstream
+> PdfCraft; their workflows were removed here, and the packaging scripts are kept only as
+> reference.
 
-The pipeline was ported from PhotoCraft's. User-facing names say **PdfCraft**; files, binaries and
-ids stay lowercase (`pdfcraft-<version>-<platform>-<arch>.<ext>`, `ai.storyteller.pdfcraft`).
+User-facing names say **Sintec.PDF**; crates and build outputs keep upstream's `pdfcraft` stem.
 
 ## Cutting a release
 
@@ -82,11 +89,22 @@ and an `ATTRIBUTION.txt`, straight into the package, so packaging needs the netw
 
 ### macOS
 
-`packaging/macos/package.sh` builds both architectures, joins them with `lipo`, and assembles
-`PdfCraft.app` from `Info.plist.in` (bundle id `ai.storyteller.pdfcraft`, macOS 11+, PDF declared
-as a document type with rank Alternate, so PdfCraft is offered under Open With without taking over
-from Preview). Files opened from Finder arrive as Apple events, which
-`apps/pdfcraft/src/apple_events.rs` receives.
+`packaging/macos/package.sh --arch aarch64|x86_64|universal` builds the chosen architecture(s),
+joins them with `lipo`, and assembles `Sintec.PDF.app` from `Info.plist.in` (bundle id
+`io.github.sintec-llc.sintec-pdf`, macOS 11+, PDF declared as a document type with rank Alternate,
+so Sintec.PDF is offered under Open With without taking over from Preview). Releases ship one DMG
+per processor. Files opened from Finder arrive as Apple events, which
+`apps/pdfcraft/src/apple_events.rs` receives. The licences that the Windows package installs next to
+the exe go to `Contents/Resources`.
+
+**Updates on a Mac:** «Обновить» downloads the DMG for the Mac's processor, checks it against
+`SHA256SUMS.txt`, opens it in Finder and closes the app, so the new Sintec.PDF can be dragged over
+the old one in Applications.
+
+**Without an Apple Developer ID** (the `APPLE_*` secrets below), the app is signed ad hoc and not
+notarized. It runs, but the first time a downloaded copy is opened Gatekeeper refuses it. The user
+right-clicks it in Applications and chooses Open (on macOS 15, System Settings ▸ Privacy &
+Security ▸ Open Anyway). Notarization needs a paid Apple Developer account (Sintec LLC's).
 
 - **Signing** uses the hardened runtime and a secure timestamp, executable first, then the bundle.
   `packaging/macos/import-cert.sh` puts the certificate in a temporary keychain, deleted at the end
@@ -95,9 +113,9 @@ from Preview). Files opened from Finder arrive as Apple events, which
   stapled, and the result is checked with `codesign --verify`, `stapler validate` and `spctl`. The
   app ships on a drag-to-Applications DMG, which is signed and notarized too.
   Its Finder window (background, icon size and positions) comes from
-  [`packaging/macos/dmg/`](../packaging/macos/dmg/README.md), and its volume is named `PdfCraft`
+  [`packaging/macos/dmg/`](../packaging/macos/dmg/README.md), and its volume is named `Sintec.PDF`
   without the version, which the window's background needs; the DMG file name keeps the version.
-- **CLI:** `pdfcraft-cli` is signed and notarized as a zip. A bare executable can't hold a stapled
+- **CLI:** `sintec-pdf-cli` is signed and notarized as a zip. A bare executable can't hold a stapled
   ticket, so Gatekeeper looks it up online the first time a downloaded copy runs.
 
 Without certificates (locally) the script signs ad-hoc and skips notarization:

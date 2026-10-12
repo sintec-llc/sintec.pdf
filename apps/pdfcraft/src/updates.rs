@@ -67,9 +67,18 @@ fn no_release_yet() -> Release {
     Release { version: concat!("v", env!("CARGO_PKG_VERSION")).to_string(), url: RELEASES_PAGE.to_string(), ..Default::default() }
 }
 
-/// The installer name suffix for this machine (`-windows-x64.msi`).
+/// The installer name suffix for this machine: `-windows-x64.msi` on Windows,
+/// `-macos-aarch64.dmg` / `-macos-x86_64.dmg` on a Mac.
 fn installer_suffix() -> String {
-    let arch = match std::env::consts::ARCH {
+    installer_suffix_for(std::env::consts::OS, std::env::consts::ARCH)
+}
+
+fn installer_suffix_for(os: &str, arch: &str) -> String {
+    if os == "macos" {
+        let arch = if arch == "aarch64" { "aarch64" } else { "x86_64" };
+        return format!("-macos-{arch}.dmg");
+    }
+    let arch = match arch {
         "aarch64" => "arm64",
         "x86" => "x86",
         _ => "x64",
@@ -197,7 +206,14 @@ fn launch_installer(msi: &std::path::Path) -> Result<(), String> {
         .map_err(|e| format!("couldn't start the installer: {e}"))
 }
 
-#[cfg(not(windows))]
+/// macOS: open the checked disk image in Finder; the app then closes so the new Sintec.PDF can be
+/// dragged over it into Applications.
+#[cfg(target_os = "macos")]
+fn launch_installer(dmg: &std::path::Path) -> Result<(), String> {
+    std::process::Command::new("/usr/bin/open").arg(dmg).spawn().map(|_| ()).map_err(|e| format!("couldn't open the disk image: {e}"))
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn launch_installer(_msi: &std::path::Path) -> Result<(), String> {
     Err("automatic updates install the Windows installer; download the new version instead".into())
 }
@@ -205,6 +221,22 @@ fn launch_installer(_msi: &std::path::Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each Mac gets the disk image for its own processor, Windows the MSI.
+    #[test]
+    fn installer_suffix_per_platform() {
+        assert_eq!(installer_suffix_for("macos", "aarch64"), "-macos-aarch64.dmg");
+        assert_eq!(installer_suffix_for("macos", "x86_64"), "-macos-x86_64.dmg");
+        assert_eq!(installer_suffix_for("windows", "x86_64"), "-windows-x64.msi");
+        assert_eq!(installer_suffix_for("windows", "aarch64"), "-windows-arm64.msi");
+        let body = r#"{"tag_name": "v0.3.0", "html_url": "https://github.com/sintec-llc/sintec.pdf/releases/tag/v0.3.0", "assets": [
+            {"name": "sintec-pdf-0.3.0-macos-aarch64.dmg", "browser_download_url": "https://github.com/sintec-llc/sintec.pdf/releases/download/v0.3.0/sintec-pdf-0.3.0-macos-aarch64.dmg"},
+            {"name": "sintec-pdf-0.3.0-macos-x86_64.dmg", "browser_download_url": "https://github.com/sintec-llc/sintec.pdf/releases/download/v0.3.0/sintec-pdf-0.3.0-macos-x86_64.dmg"},
+            {"name": "sintec-pdf-0.3.0-windows-x64.msi", "browser_download_url": "https://github.com/sintec-llc/sintec.pdf/releases/download/v0.3.0/sintec-pdf-0.3.0-windows-x64.msi"}]}"#;
+        let release = parse(body).unwrap();
+        let installer = release.installer.unwrap();
+        assert!(installer.ends_with(&installer_suffix()), "{installer}");
+    }
 
     #[test]
     fn no_published_release_reads_as_up_to_date() {

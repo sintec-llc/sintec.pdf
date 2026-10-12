@@ -63,7 +63,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Russian UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "f7843245b7992bb113f921715a6cd83862fd73f728729c01205b2d7272d90e30"
+sha256 = "cb95e13b2037d4de999604a18bd3c5b9dc807c871a650679fb918c648c8207cc"
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/es.tsv"
@@ -3117,27 +3117,15 @@ usage = "Sintec.PDF: Fill & Sign typed signatures and initials in Cyrillic (name
 sha256 = "504de8cc6f919163bc9afb67b9bc208d258230c5e8d00cb82ec52474f9fafc3b"
 
 [[asset]]
-path = "packaging/macos/dmg/background.svg"
-title = "PdfCraft macOS DMG window background"
-author = "@XusBadia"
-source = "Original work for this repository, derived from the PdfCraft app icon (assets/app-icon/pdfcraft.svg, referenced via an SVG image element, not copied)"
-licence = "MIT OR Apache-2.0"
-licence_file = "assets/app-icon/LICENSE.txt"
-kind = "image"
-usage = "Finder window of the macOS DMG; rendered to background.tiff by packaging/macos/dmg/generate.py"
-sha256 = "9c22d8a5aba55f512bc5cd2b5e3c8a32e51f995cd7819a81448918202344772b"
-
-
-[[asset]]
 path = "packaging/macos/dmg/background.tiff"
-title = "PdfCraft macOS DMG window background (rendered)"
-author = "@XusBadia"
-source = "Rendered from packaging/macos/dmg/background.svg by packaging/macos/dmg/generate.py"
+title = "Sintec.PDF macOS DMG window background"
+author = "Sintec LLC"
+source = "Drawn by packaging/macos/dmg/generate.py from the Sintec.PDF logo (assets/app-icon/sintec-pdf-logo.png) and Inter (assets/fonts, OFL-1.1)"
 licence = "MIT OR Apache-2.0"
 licence_file = "assets/app-icon/LICENSE.txt"
 kind = "image"
-usage = "1x + 2x HiDPI 16-colour palette TIFF copied into the macOS DMG by packaging/macos/package.sh; includes the app icon and the free LittleCMS built-in sRGB profile"
-sha256 = "f46881724a6621f3686a612a79dbdce4f7dbe9e2025610e44c9a094341334c2c"
+usage = "1x + 2x HiDPI 128-colour palette TIFF copied into the macOS DMG by packaging/macos/package.sh; includes the app logo, text set in Inter and the free LittleCMS built-in sRGB profile"
+sha256 = "888eda5ed85629e31cfa80335b5c15671c8faa713258322bd9c3bcbf22d9fd98"
 
 [[fetched]]
 file = "text-detection.rten"
