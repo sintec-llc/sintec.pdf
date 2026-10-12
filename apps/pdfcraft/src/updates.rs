@@ -179,7 +179,9 @@ pub fn fetch_installer(release: &Release) -> Result<std::path::PathBuf, String> 
 }
 
 /// The script that waits for this process to exit, installs the MSI (one administrator prompt)
-/// and starts the app again, whether or not the installation went ahead.
+/// and starts the app again, whether or not the installation went ahead. (Windows only; tested
+/// everywhere.)
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn installer_script(pid: u32, msi: &str, exe: &str) -> String {
     let q = |s: &str| s.replace('\'', "''");
     format!(

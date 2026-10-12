@@ -2153,3 +2153,4 @@ key	Space	Espacio
 	Remove {n} pages	Quitar {n} páginas
 	The picture is too large for a signature (at most {n} MB)	La imagen es demasiado grande para una firma (como máximo {n} MB)
 	Save ({key})	Guardar ({key})
+	Update downloads the new version, checks it and opens it: drag Sintec.PDF into Applications to replace this one. Download opens the release page.	«Actualizar» descarga la nueva versión, la comprueba y la abre: arrastre Sintec.PDF a Aplicaciones para reemplazar esta. «Descargar» abre la página de la versión.
