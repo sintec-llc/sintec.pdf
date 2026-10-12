@@ -19,9 +19,11 @@ Sintec.PDF is a fork of [PdfCraft](https://github.com/storytold/pdfcraft). Upstr
 ## Merging by hand
 
 ```sh
-git fetch upstream --tags
+# Upstream's tags in their own namespace: both projects tag releases v0.1.x, so a plain
+# `git fetch upstream --tags` fails (or would replace our tags).
+git fetch --no-tags upstream "+refs/heads/main:refs/remotes/upstream/main" "+refs/tags/v*:refs/upstream-tags/v*"
 git switch -c sync/upstream-vX.Y.Z main
-git merge --no-ff vX.Y.Z
+git merge --no-ff refs/upstream-tags/vX.Y.Z
 ```
 
 Resolve conflicts by these rules (they cover most of them):

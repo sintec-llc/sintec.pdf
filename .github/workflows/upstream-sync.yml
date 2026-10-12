@@ -34,10 +34,12 @@ jobs:
         id: up
         run: |
           git remote add upstream https://github.com/storytold/pdfcraft.git
-          git fetch --quiet upstream --tags
-          tag="$(git tag --list 'v*' --merged upstream/main --sort=-v:refname | head -n 1)"
+          # Upstream's tags go to their own namespace: both projects tag releases v0.1.x, and
+          # fetching them as plain tags fails ("would clobber existing tag") on our own.
+          git fetch --quiet --no-tags upstream "+refs/heads/main:refs/remotes/upstream/main" "+refs/tags/v*:refs/upstream-tags/v*"
+          tag="$(git for-each-ref --merged upstream/main --sort=-v:refname --format='%(refname:lstrip=2)' 'refs/upstream-tags/v*' | head -n 1)"
           echo "tag=$tag" >>"$GITHUB_OUTPUT"
-          if [ -z "$tag" ] || git merge-base --is-ancestor "$tag" HEAD; then
+          if [ -z "$tag" ] || git merge-base --is-ancestor "refs/upstream-tags/$tag" HEAD; then
             echo "state=current" >>"$GITHUB_OUTPUT"
             echo "Up to date with upstream ${tag:-(no release)}." >>"$GITHUB_STEP_SUMMARY"
           elif git ls-remote --exit-code --heads origin "sync/upstream-$tag" >/dev/null; then
@@ -56,7 +58,7 @@ jobs:
           git config user.name "sintec-sync[bot]"
           git config user.email "sintec-sync@users.noreply.github.com"
           git switch -c "sync/upstream-$TAG"
-          if git merge --no-ff --no-commit "$TAG"; then
+          if git merge --no-ff --no-commit "refs/upstream-tags/$TAG"; then
             echo "clean=true" >>"$GITHUB_OUTPUT"
           else
             echo "clean=false" >>"$GITHUB_OUTPUT"
