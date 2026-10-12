@@ -47,12 +47,14 @@ fn a_picture_signature_is_prepared_placed_and_kept() {
     h.run_steps(2);
     h.get_by_label("Image").click();
     h.run_steps(2);
-    h.get_by_label("Choose picture…").click();
+    // Browse… opens the system file dialog; the picked file arrives here (as in automation).
+    let bytes = std::fs::read(h.state().save_override.clone().unwrap()).unwrap();
+    h.state_mut().use_signature_picture("signature-scan.png", &bytes);
     h.run_steps(3);
     h.get_by_label("Apply").click();
     h.run_steps(3);
     let Some(SavedSig::Image(png)) = h.state().signature.clone() else { panic!("an image signature: {:?}", h.state().signature.is_some()) };
-    let back = image::load_from_memory(&png).unwrap().to_rgba8();
+    let back = image::load_from_memory(png.bytes()).unwrap().to_rgba8();
     assert!(back.width() < 480 && back.get_pixel(0, 0).0[3] == 0, "trimmed, paper transparent: {}×{}", back.width(), back.height());
 
     // Hovering shows it; clicking places it there, 150 pt wide.

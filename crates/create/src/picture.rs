@@ -3,7 +3,7 @@
 
 use std::io::Cursor;
 
-use image::{ImageFormat, ImageReader, RgbaImage};
+use image::{ImageDecoder, ImageFormat, ImageReader, RgbaImage};
 
 use crate::CreateError;
 
@@ -22,7 +22,11 @@ fn read(name: &str, bytes: &[u8]) -> Result<RgbaImage, CreateError> {
     if w == 0 || h == 0 || u64::from(w) * u64::from(h) > MAX_PIXELS {
         return Err(bad(format!("the picture is {w}×{h} pixels; at most {} megapixels", MAX_PIXELS / 1_000_000)));
     }
-    let img = ImageReader::with_format(Cursor::new(bytes), format).decode().map_err(|e| bad(e.to_string()))?;
+    // Phone photos are often stored sideways with an EXIF orientation: turn them as shown.
+    let mut decoder = ImageReader::with_format(Cursor::new(bytes), format).into_decoder().map_err(|e| bad(e.to_string()))?;
+    let orientation = decoder.orientation().map_err(|e| bad(e.to_string()))?;
+    let mut img = image::DynamicImage::from_decoder(decoder).map_err(|e| bad(e.to_string()))?;
+    img.apply_orientation(orientation);
     Ok(img.to_rgba8())
 }
 

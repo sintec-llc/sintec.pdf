@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use pdfcraft_js::formcalc::run_formcalc_within;
 use pdfcraft_js::xfa::{XfaDoc, XfaEffect, XfaEvent, XfaKind, XfaNode, run_xfa_within};
 use pdfcraft_xfa::model::Template;
 use pdfcraft_xfa::{FormNode, LiveForm, NodeKind, ScriptEvent};
@@ -166,10 +167,10 @@ fn count_instances(root: &FormNode, parent_som: &str, name: &str) -> usize {
     parent.map_or(0, |p| p.children.iter().filter(|c| c.name == name).count())
 }
 
-/// An instance SOM (`…table[0].row[2]`) split into its parent's data path and SOM, its name
-/// and its index.
-fn split_instance(som: &str) -> Option<(pdfcraft_xfa::DataPath, String, String, usize)> {
-    let mut path = pdfcraft_xfa::som_to_path(som);
+/// An instance SOM (`…table[0].row[2]`) split into its parent's data path (areas left out,
+/// see [`pdfcraft_xfa::data_path`]) and SOM, its name and its index.
+fn split_instance(tpl: &Template, som: &str) -> Option<(pdfcraft_xfa::DataPath, String, String, usize)> {
+    let mut path = pdfcraft_xfa::data_path(tpl, som);
     let (name, index) = path.pop()?;
     let parent_som = som.rsplit_once('.').map(|(p, _)| p).unwrap_or("").to_string();
     Some((path, parent_som, name, index))
@@ -207,6 +208,8 @@ struct FieldInfo {
     kind: pdfcraft_forms::FieldKind,
     value: Vec<String>,
     on_state: String,
+    /// List boxes that take several values (one per line in the data).
+    multi: bool,
 }
 
 fn field_infos(doc: &pdfcraft_cos::Document) -> HashMap<String, FieldInfo> {
@@ -214,7 +217,8 @@ fn field_infos(doc: &pdfcraft_cos::Document) -> HashMap<String, FieldInfo> {
         .into_iter()
         .map(|f| {
             let on_state = f.widgets.first().and_then(|w| w.on_state.clone()).unwrap_or_else(|| "1".into());
-            (f.name, FieldInfo { kind: f.kind, value: f.value, on_state })
+            let multi = f.kind == pdfcraft_forms::FieldKind::List && f.has(pdfcraft_forms::flags::MULTI_SELECT);
+            (f.name, FieldInfo { kind: f.kind, value: f.value, on_state, multi })
         })
         .collect()
 }
@@ -241,7 +245,6 @@ struct Runner<'a, 'b> {
     tpl: &'a Template,
     run: &'a mut XfaRun<'b>,
     clock: Clock,
-    formcalc_warned: bool,
     runs: usize,
     skipped: usize,
     relayouts: usize,
@@ -270,7 +273,6 @@ impl<'a, 'b> Runner<'a, 'b> {
             tpl,
             run,
             clock: Clock::start(budget_ms),
-            formcalc_warned: false,
             runs: 0,
             skipped: 0,
             relayouts: 0,
@@ -354,7 +356,7 @@ impl<'a, 'b> Runner<'a, 'b> {
     /// Give the object at `som` the value `value` (field `name` when it has a widget). Returns
     /// whether it changed.
     fn set_value(&mut self, som: &str, value: &str) -> bool {
-        let path = pdfcraft_xfa::som_to_path(som);
+        let path = pdfcraft_xfa::data_path(self.tpl, som);
         let name = self.by_som().get(som).cloned();
         let Some(name) = name else {
             // No widget (a hidden field, a draw, a row not laid out yet): the data alone.
@@ -381,11 +383,13 @@ impl<'a, 'b> Runner<'a, 'b> {
             }
             // Read-only fields still take values from scripts (calculated totals are read-only).
             K::PushButton | K::Signature => return false,
+            K::List if info.multi => value.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect(),
             _ => vec![value.to_string()],
         };
         let same = match info.kind {
             K::CheckBox => info.value.is_empty() == new_value.is_empty(),
             K::Radio => info.value.first() == new_value.first(),
+            K::List if info.multi => info.value == new_value,
             _ => info.value.first().map_or(value.is_empty(), |v| v == value),
         };
         if same {
@@ -480,7 +484,7 @@ impl<'a, 'b> Runner<'a, 'b> {
             if matches!(info.kind, pdfcraft_forms::FieldKind::PushButton | pdfcraft_forms::FieldKind::Signature) {
                 continue;
             }
-            let path = pdfcraft_xfa::som_to_path(som);
+            let path = pdfcraft_xfa::data_path(self.tpl, som);
             let text = data_text(info);
             if self.data.as_ref().and_then(|d| d.text_at(&path)).unwrap_or("") != text {
                 self.data_op(pdfcraft_xfa::DataOp::Value { path, text });
@@ -497,10 +501,12 @@ impl<'a, 'b> Runner<'a, 'b> {
         // Instances of each repeating subform before the script ran, as the effects leave them.
         let mut counts: HashMap<(String, String), usize> = HashMap::new();
         {
+            // A copy of the shared reference: `live()` borrows `self` mutably.
+            let tpl = self.tpl;
             let live = self.live();
             for e in effects {
                 if let XfaEffect::AddInstance { som } | XfaEffect::RemoveInstance { som } = e
-                    && let Some((_, parent_som, name, _)) = split_instance(som)
+                    && let Some((_, parent_som, name, _)) = split_instance(tpl, som)
                 {
                     let have = count_instances(&live.root, &parent_som, &name);
                     counts.entry((parent_som, name)).or_insert(have);
@@ -538,7 +544,7 @@ impl<'a, 'b> Runner<'a, 'b> {
                     }
                 }
                 XfaEffect::AddInstance { som } | XfaEffect::RemoveInstance { som } => {
-                    let Some((parent, parent_som, name, index)) = split_instance(som) else { continue };
+                    let Some((parent, parent_som, name, index)) = split_instance(self.tpl, som) else { continue };
                     let key = (parent_som, name.clone());
                     let have = counts.get(&key).copied().unwrap_or(0);
                     if matches!(e, XfaEffect::AddInstance { .. }) {
@@ -581,17 +587,15 @@ impl<'a, 'b> Runner<'a, 'b> {
             return Ok(None);
         }
         self.runs += 1;
-        if ev.formcalc {
-            if !self.formcalc_warned {
-                self.error(format!("{}: FormCalc scripts don't run yet (only JavaScript ones)", ev.som));
-                self.formcalc_warned = true;
-            }
-            return Ok(Some(Default::default()));
-        }
         let event = XfaEvent { activity: ev.activity.clone(), target: ev.som.clone(), new_text: new_text.to_string(), prev_text: String::new() };
         let doc_info = XfaDoc { file_name: String::new(), page: 0, page_count: self.run.page_count };
         let root_js = to_js(&self.live().root);
-        let o = run_xfa_within(&ev.script, &event, &doc_info, root_js, limits_for(&ev.activity), timeout_for(&ev.activity));
+        let (limits, timeout) = (limits_for(&ev.activity), timeout_for(&ev.activity));
+        let o = if ev.formcalc {
+            run_formcalc_within(&ev.script, &event, &doc_info, root_js, limits, timeout)
+        } else {
+            run_xfa_within(&ev.script, &event, &doc_info, root_js, limits, timeout)
+        };
         if o.abandoned {
             self.run.ran_away = true;
         }
@@ -748,7 +752,7 @@ mod tests {
         assert!(!som_matches("form[0].page1[0].qty[0]", "qt"));
         assert!(!som_matches("form[0].page1[0].price[0]", "qty"));
         assert_eq!(
-            split_instance("form[0].table[0].row[2]").map(|(p, ps, n, i)| (p.len(), ps, n, i)),
+            split_instance(&Template::default(), "form[0].table[0].row[2]").map(|(p, ps, n, i)| (p.len(), ps, n, i)),
             Some((2, "form[0].table[0]".into(), "row".into(), 2))
         );
     }

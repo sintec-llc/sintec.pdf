@@ -1159,7 +1159,6 @@
 	Searchable Image (Exact)	Imagen con búsqueda (exacta)
 	Adds invisible text over each word; the page image is not changed	Añade texto invisible sobre cada palabra; la imagen de la página no cambia
 	Downsample to	Reducir resolución a
-	Text recognition isn't installed: its models are missing (run `cargo xtask models`, or set PRINTCRAFT_MODELS).	El reconocimiento de texto no está instalado: faltan sus modelos (ejecuta `cargo xtask models` o define PRINTCRAFT_MODELS).
 	Settings	Ajustes
 	Optional	Opcional
 	Planned · {m}	Previsto · {m}
@@ -1667,7 +1666,6 @@
 	there are no pages to print	no hay páginas que imprimir
 	the document has no tags	el documento no tiene etiquetas
 	{0}: {1}	{0}: {1}
-	the text recognition models are not installed (run `cargo xtask models`, or set PRINTCRAFT_MODELS)	los modelos de reconocimiento de texto no están instalados (ejecuta `cargo xtask models` o define PRINTCRAFT_MODELS)
 	the image is empty	la imagen está vacía
 	this file isn't XFDF, FDF, XML or text form data	este archivo no contiene datos de formulario XFDF, FDF, XML ni de texto
 	nothing in the file matches this document	nada en el archivo coincide con este documento
@@ -1932,7 +1930,226 @@
 	not available yet	aún no disponible
 	some of its tools aren't available yet	algunas herramientas aún no están disponibles
 	Tools marked Soon aren't available yet; the others work today.	Las herramientas marcadas como Pronto aún no están disponibles; las demás ya funcionan.
-signature	Type	Escribir
 	Save (⌘S)	Guardar (⌘S)
 	This link's action ({s}) isn't supported yet	La acción de este enlace ({s}) aún no es compatible
 	Has JavaScript actions	Tiene acciones de JavaScript
+# From upstream PdfCraft 0.6.0
+	Interface size	Tamaño de la interfaz
+	Auto ({percent}%)	Automático ({percent} %)
+	Auto follows the system's text size. Pages always render at the display's full resolution.	Automático sigue el tamaño del texto del sistema. Las páginas siempre se muestran con la resolución completa de la pantalla.
+	Open Recent	Abrir recientes
+	Clear Recent Files	Borrar archivos recientes
+	Remove from Recent	Quitar de recientes
+	Remove {name} from Recent	Quitar {name} de recientes
+	Pin folder to Home…	Anclar carpeta en Inicio…
+	Folders	Carpetas
+	Pin a folder…	Anclar una carpeta…
+	Pin a folder to Home	Anclar una carpeta en Inicio
+	Pin a folder to list its newest PDFs here, such as where your scanner or a synced cloud drive saves them.	Ancla una carpeta para ver aquí sus PDF más recientes, por ejemplo donde los guarda tu escáner o una unidad en la nube sincronizada.
+	Unpin	Desanclar
+	Unpin {folder}	Desanclar {folder}
+	Looking for PDFs…	Buscando PDF…
+	This folder isn't available right now. It may have moved, or its drive or cloud sync is offline.	Esta carpeta no está disponible ahora. Puede que se haya movido o que su unidad o la sincronización en la nube estén sin conexión.
+	No PDFs in this folder yet	Aún no hay PDF en esta carpeta
+	Show less	Mostrar menos
+	Show {n} more	Mostrar {n} más
+	The newest {n} of {total} PDFs	Los {n} PDF más recientes de {total}
+	Pinned folders need the desktop app	Las carpetas ancladas requieren la aplicación de escritorio
+	Choose a folder on this computer to pin	Elige una carpeta de este equipo para anclarla
+	{folder} is already pinned to Home	{folder} ya está anclada en Inicio
+	You can pin up to {n} folders. Unpin one first.	Puedes anclar hasta {n} carpetas. Desancla una primero.
+	Pinned {folder} to Home	{folder} anclada en Inicio
+	No recent files	No hay archivos recientes
+	Create PDF from multiple files…	Crear PDF a partir de varios archivos…
+	Column select	Selección de columna
+	Join our Discord	Únete a nuestro Discord
+	Zoom in / out (also pinch or {key}-scroll)	Acercar / alejar (también con pellizco o {key} + desplazamiento)
+	Open a PDF ({key})	Abrir un PDF ({key})
+	Print ({key})	Imprimir ({key})
+	Document properties ({key})	Propiedades del documento ({key})
+	Zoom out ({key})	Alejar ({key})
+	Zoom in ({key})	Acercar ({key})
+	Rotate view clockwise ({key})	Girar la vista a la derecha ({key})
+	Get help, share feedback and follow development on Discord.	Recibe ayuda, comparte tu opinión y sigue el desarrollo en Discord.
+	New bookmarks from structure	Nuevos marcadores a partir de la estructura
+	Sintec.PDF web page	Página web de Sintec.PDF
+	Rotation:	Rotación:
+	Windows store  ·  	Almacén de Windows  ·  
+	The key is in the Windows certificate store, which may ask to allow Sintec.PDF to use it.	La clave está en el almacén de certificados de Windows, que puede pedirte permiso para que Sintec.PDF la use.
+	Some bookmarks are not shown here: the panel lists a limited number, nested a limited depth.	Algunos marcadores no se muestran aquí: el panel muestra un número limitado, con una profundidad de anidación limitada.
+	Multiple words or phrases	Varias palabras o frases
+	One word or phrase per line	Una palabra o frase por línea
+	Import list…	Importar lista…
+	{n} word(s) or phrase(s)	{n} palabra(s) o frase(s)
+	{name} is too large for a word list (at most 1 MB).	{name} es demasiado grande para una lista de palabras (máximo 1 MB).
+	Redaction code:	Código de censura:
+	Selected pages	Páginas seleccionadas
+	Text recognition isn't installed: its model files are missing. Reinstall Sintec.PDF, or set PDFCRAFT_MODELS to the folder that holds them.	El reconocimiento de texto no está instalado: faltan sus archivos de modelo. Reinstala Sintec.PDF o define PDFCRAFT_MODELS con la carpeta que los contiene.
+	New bookmark ({key})	Nuevo marcador ({key})
+	Set layer visibility	Definir visibilidad de capas
+	Previous ({key})	Anterior ({key})
+	Next ({key})	Siguiente ({key})
+	Part of	Parte de
+	This file is already as small as it can be made ({size}). No copy was saved.	Este archivo ya es lo más pequeño posible ({size}). No se guardó ninguna copia.
+	Saved {place}: {before} → {after} (not smaller){detail}	Guardado {place}: {before} → {after} (no es más pequeño){detail}
+	Optimizing… removing user data	Optimizando… eliminando datos de usuario
+	Optimizing… image {d} of {t}	Optimizando… imagen {d} de {t}
+	Optimizing… cleaning up	Optimizando… limpiando
+	Optimizing… merging identical objects	Optimizando… combinando objetos idénticos
+	Optimizing… writing the copy	Optimizando… escribiendo la copia
+	Cancelling…	Cancelando…
+	Optimization is already running	La optimización ya está en ejecución
+	Optimization cancelled	Optimización cancelada
+	Couldn't optimize the file	No se pudo optimizar el archivo
+	Files are combined from top to bottom. Leave Pages empty to take every page.	Los archivos se combinan de arriba abajo. Deja Páginas vacío para incluir todas las páginas.
+	Unlock…	Desbloquear…
+	Select a password-protected file first	Selecciona primero un archivo protegido con contraseña
+	Enter the permissions password to allow combining	Introduce la contraseña de permisos para permitir combinarlo
+	Enter the password that opens it	Introduce la contraseña que lo abre
+	Unlock {name}	Desbloquear {name}
+	Unlock {n} files	Desbloquear {n} archivos
+	The same password is tried on each file.	Se prueba la misma contraseña en cada archivo.
+	Hide password	Ocultar contraseña
+	Show password	Mostrar contraseña
+	Wrong password	Contraseña incorrecta
+	The password is only used to read the file; it isn't saved.	La contraseña solo se usa para leer el archivo; no se guarda.
+	Unlock	Desbloquear
+	Opened, but its security settings don't allow combining. Enter the permissions password.	Se abrió, pero su configuración de seguridad no permite combinarlo. Introduce la contraseña de permisos.
+	Unlocked: the combined file won't be password-protected	Desbloqueado: el archivo combinado no estará protegido con contraseña
+	Unlocked {n} of {m} files	Se desbloquearon {n} de {m} archivos
+	Drop PDFs or folders here, or choose them.	Suelta aquí PDF o carpetas, o elígelos.
+	Add folder…	Añadir carpeta…
+	Add folder and subfolders…	Añadir carpeta y subcarpetas…
+	More ways to add files	Más formas de añadir archivos
+	Every PDF in the folder	Todos los PDF de la carpeta
+	Every PDF in the folder and the folders inside it	Todos los PDF de la carpeta y de las carpetas que contiene
+	Add folder	Añadir carpeta
+	Add folder and subfolders	Añadir carpeta y subcarpetas
+	No PDFs found in {folder}	No se encontraron PDF en {folder}
+	Added the first {n} PDFs in {folder}	Se añadieron los primeros {n} PDF de {folder}
+	Click to sort, drag to move the column. Drag its edge to resize it.	Haz clic para ordenar; arrastra para mover la columna. Arrastra su borde para cambiar el ancho.
+	Reset columns	Restablecer columnas
+	Remove {n} files	Quitar {n} archivos
+	{n} selected	{n} seleccionados
+	sorted ascending	orden ascendente
+	sorted descending	orden descendente
+	Protected: the combined file won't keep its security settings	Protegido: el archivo combinado no conservará su configuración de seguridad
+	Add open documents	Añadir documentos abiertos
+	All open documents	Todos los documentos abiertos
+	No documents are open	No hay documentos abiertos
+	Select a file first	Selecciona primero un archivo
+	1 file	1 archivo
+	{n} files	{n} archivos
+	1 file needs attention	1 archivo necesita atención
+	{n} files need attention	{n} archivos necesitan atención
+	{name} can't be combined: {why}	No se puede combinar {name}: {why}
+	Check the pages of {name}: {why}	Revisa las páginas de {name}: {why}
+	Add the PDFs to combine	Añade los PDF que quieres combinar
+	File name	Nombre de archivo
+	Warnings	Advertencias
+	Drag to reorder	Arrastra para reordenar
+	{k} of {n}	{k} de {n}
+	? of {n}	? de {n}
+	Added more than once	Añadido más de una vez
+	yesterday	ayer
+	{n} days ago	hace {n} días
+	No pages selected	No hay páginas seleccionadas
+	Password-protected	Protegido con contraseña
+	Its security settings don't allow copying pages	Su configuración de seguridad no permite copiar páginas
+	Can't be read: {e}	No se puede leer: {e}
+	Includes unsaved changes	Incluye cambios sin guardar
+	Portable mode is off: {folder} can't be written ({error}). Settings are kept in your user folder instead.	El modo portátil está desactivado: no se puede escribir en {folder} ({error}). La configuración se guarda en tu carpeta de usuario.
+	Sintec.PDF is drawing without a graphics processor, so it may be slow. Updating the graphics driver may help.	Sintec.PDF está dibujando sin procesador gráfico, así que puede ir lento. Actualizar el controlador gráfico puede ayudar.
+	the text recognition models are not installed (reinstall Sintec.PDF, or set PDFCRAFT_MODELS to the folder that holds them)	los modelos de reconocimiento de texto no están instalados (reinstala Sintec.PDF o define PDFCRAFT_MODELS con la carpeta que los contiene)
+	This web address mixes letters from different alphabets, a common way to imitate another site's name.	Esta dirección web mezcla letras de distintos alfabetos, una forma habitual de imitar el nombre de otro sitio.
+	This web address uses letters from another alphabet, which can look like familiar ones.	Esta dirección web usa letras de otro alfabeto, que pueden parecerse a letras conocidas.
+	Reopen the files that were open when Sintec.PDF last closed	Volver a abrir los archivos que estaban abiertos al cerrar Sintec.PDF por última vez
+	Created a PDF from {n} files	Se creó un PDF a partir de {n} archivos
+	PDF, images and text	PDF, imágenes y texto
+	Insert a file before page {label}	Insertar un archivo antes de la página {label}
+	Insert a file at the end	Insertar un archivo al final
+	Save pages	Guardar páginas
+	Save these pages as one PDF	Guardar estas páginas en un solo PDF
+	No changes to save	No hay cambios que guardar
+	Created a PDF from {n} files; left out: {names}	Se creó un PDF a partir de {n} archivos; omitidos: {names}
+	Created a PDF from the first {n} files	Se creó un PDF a partir de los primeros {n} archivos
+	None of those files can be made into a PDF; use PDFs, images or .txt files	Ninguno de esos archivos se puede convertir en PDF; use archivos PDF, imágenes o .txt
+	Choose a PNG or JPEG image (up to 4 MiB). Transparency is preserved.	Elija una imagen PNG o JPEG (hasta 4 MiB). Se conserva la transparencia.
+	Couldn't import the signature image: {e}	No se pudo importar la imagen de la firma: {e}
+	Go to page…	Ir a la página…
+	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	Las fuentes estándar no pueden mostrar «{c}» ({code}). Por ahora solo se pueden añadir como texto caracteres de Europa occidental.
+	Open arrow	Flecha abierta
+	Closed arrow	Flecha cerrada
+	Butt	Extremo recto
+	Reverse open arrow	Flecha abierta invertida
+	Reverse closed arrow	Flecha cerrada invertida
+	Slash	Barra
+	Reset page size	Restablecer el tamaño de las páginas
+	Date format	Formato de fecha
+	Fill & Sign dates	Fechas de Rellenar y firmar
+	Pattern	Patrón
+	Today: {date}	Hoy: {date}
+	yyyy or yy year · m or mm month · mmm or mmmm month name · d or dd day · ddd or dddd weekday. H, h, M, s and t are time letters and can't be used on their own: put {escape} before a letter to show it as is.	yyyy o yy año · m o mm mes · mmm o mmmm nombre del mes · d o dd día · ddd o dddd día de la semana. H, h, M, s y t son letras de hora y no pueden usarse solas: pon {escape} delante de una letra para mostrarla tal cual.
+	Same as interface ({language})	Igual que la interfaz ({language})
+	{chars} can't be written into the PDF yet: Fill & Sign text is Western European only. Pick a numeric format such as dd.mm.yyyy.	{chars} todavía no se puede escribir en el PDF: el texto de Rellenar y firmar solo admite caracteres de Europa occidental. Elige un formato numérico como dd.mm.yyyy.
+	Opens the printer driver's preferences. They are saved for every print from this computer; the copies, two-sided, grayscale and paper chosen here still apply.	Abre las preferencias del controlador de la impresora. Se guardan para todas las impresiones de este equipo; las copias, la impresión a doble cara, la escala de grises y el papel elegidos aquí se siguen aplicando.
+	The printer driver's own settings for this print: paper tray, paper type, finishing and more.	Los ajustes propios del controlador de la impresora para esta impresión: bandeja, tipo de papel, acabado y más.
+	Couldn't open the printer's preferences: {e}	No se pudieron abrir las preferencias de la impresora: {e}
+	Printer properties	Propiedades de la impresora
+	Reset to printer defaults	Restablecer los valores predeterminados de la impresora
+	This printer offers no settings of its own.	Esta impresora no ofrece ajustes propios.
+	Scroll tabs left	Desplazar las pestañas a la izquierda
+	Scroll tabs right	Desplazar las pestañas a la derecha
+	Shared Field Properties	Propiedades comunes de los campos
+	{n} fields selected	{n} campos seleccionados
+	Mixed	Valores distintos
+	Custom font	Fuente personalizada
+	Only checked properties will change. Mixed means the selected fields have different values.	Solo se cambiarán las propiedades marcadas. «Valores distintos» indica que los campos seleccionados tienen valores diferentes.
+	Shift- or Ctrl/Command-click to select several fields.	Haz clic con Mayús o Ctrl/Comando para seleccionar varios campos.
+	Font size 0 uses automatic sizing.	El tamaño de fuente 0 ajusta el tamaño automáticamente.
+	Character limit:	Límite de caracteres:
+	Character limit 0 means no limit. A comb of characters needs a limit.	El límite de caracteres 0 significa sin límite. Las casillas de caracteres necesitan un límite.
+	To change locked fields, also set Locked to No.	Para cambiar campos bloqueados, establece también «Bloqueado» en «No».
+	Comb of characters	Peine de caracteres
+	The document changed while you were editing field properties.	El documento cambió mientras editabas las propiedades de los campos.
+	The document is no longer open.	El documento ya no está abierto.
+	The field properties dialog is no longer open.	El cuadro de propiedades de los campos ya no está abierto.
+	The field properties could not be changed.	No se pudieron cambiar las propiedades de los campos.
+	The selected fields could not be found. Select them again.	No se encontraron los campos seleccionados. Vuelve a seleccionarlos.
+	The field {name} no longer exists.	El campo {name} ya no existe.
+	A selected field has no widget on any page, so the fields can't be edited together.	Un campo seleccionado no tiene ningún widget en ninguna página, así que los campos no se pueden editar juntos.
+	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} a {dpi} ppp, el mayor tamaño al que se pueden dibujar)
+@plural	{n} object selected|{n} objects selected	{n} objeto seleccionado|{n} objetos seleccionados
+	Drag the selection to move it. Esc clears the selection.	Arrastra la selección para moverla. Esc borra la selección.
+	Shift-click to select several objects. Drag empty space to select an area.	Pulsa Mayús y haz clic para seleccionar varios objetos. Arrastra en un espacio vacío para seleccionar un área.
+	Select at most 1000 objects at a time.	Selecciona como máximo 1000 objetos a la vez.
+	Finish or discard the text being edited before selecting several objects.	Termina o descarta la edición del texto antes de seleccionar varios objetos.
+	Move object	Mover objeto
+	Move objects	Mover objetos
+	Vertical text cannot be moved with this selection.	El texto vertical no se puede mover con esta selección.
+	Text used as a clipping path cannot be moved with this selection.	El texto usado como trazado de recorte no se puede mover con esta selección.
+	These objects could not be moved. Select them again and try a smaller move.	No se pudieron mover estos objetos. Vuelve a seleccionarlos e intenta un desplazamiento menor.
+	This page contains objects that cannot be selected together.	Esta página contiene objetos que no se pueden seleccionar juntos.
+	Fill colour	Color de relleno
+	No fill	Sin relleno
+	Fill colour: none	Color de relleno: ninguno
+key	Ctrl	Ctrl
+key	Shift	Mayús
+key	Delete	Supr
+key	Esc	Esc
+key	Home	Inicio
+key	End	Fin
+key	Space	Espacio
+	Grid view	Vista de cuadrícula
+	List view	Vista de lista
+	Files are combined in the order shown. Drag them to change it.	Los archivos se combinan en el orden mostrado. Arrástralos para cambiarlo.
+	Preview unavailable: {e}	Vista previa no disponible: {e}
+	Pages: {k} of {n}	Páginas: {k} de {n}
+	Check the pages	Revisa las páginas
+	Switch to List view to change the pages it takes.	Cambia a la vista de lista para cambiar las páginas que se incluyen.
+	Expand all	Expandir todo
+	Collapse all	Contraer todo
+	Remove page	Quitar página
+	Remove {n} pages	Quitar {n} páginas
+	The picture is too large for a signature (at most {n} MB)	La imagen es demasiado grande para una firma (como máximo {n} MB)
+	Save ({key})	Guardar ({key})

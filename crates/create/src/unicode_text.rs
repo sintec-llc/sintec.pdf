@@ -177,6 +177,7 @@ fn to_unicode_cmap(used: &BTreeMap<u32, char>) -> Vec<u8> {
 }
 
 /// Windows-1251 bytes 0x80–0xFF as Unicode (from the WHATWG encoding index).
+#[cfg(test)]
 const CP1251_HIGH: [char; 128] = [
     'Ђ', 'Ѓ', '‚', 'ѓ', '„', '…', '†', '‡', '€', '‰', 'Љ', '‹', 'Њ', 'Ќ', 'Ћ', 'Џ', //
     'ђ', '‘', '’', '“', '”', '•', '–', '—', '\u{98}', '™', 'љ', '›', 'њ', 'ќ', 'ћ', 'џ', //
@@ -189,7 +190,8 @@ const CP1251_HIGH: [char; 128] = [
 ];
 
 /// Text file bytes as a string: UTF-8 (BOM optional), UTF-16 with a BOM, else Windows-1251.
-pub fn decode_text(bytes: &[u8]) -> String {
+#[cfg(test)]
+pub fn decode_text_1251(bytes: &[u8]) -> String {
     if let Some(rest) = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
         return String::from_utf8_lossy(rest).into_owned();
     }

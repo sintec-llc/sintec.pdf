@@ -19,7 +19,9 @@ tiff = "0.11"
 # PNG and JPEG decoding for signature pictures (both already in the tree).
 image = { version = "0.25", default-features = false, features = ["bmp", "gif", "png", "jpeg"] }
 thiserror = { workspace = true }
+# Already in the graph through lopdf; used only to read plain-text files (decode_text).
+encoding_rs = "0.8"
 
 [dev-dependencies]
-image = { version = "0.25", default-features = false, features = ["bmp", "gif"] }
+image = { version = "0.25", default-features = false, features = ["bmp", "gif", "jpeg"] }
 hayro-syntax = { workspace = true }
