@@ -40,6 +40,10 @@
          INSTALLDESKTOPSHORTCUT=0 on the msiexec command line for unattended installs. Secure, so the
          choice made in the (unelevated) UI reaches the elevated install. -->
     <Property Id="INSTALLDESKTOPSHORTCUT" Value="1" Secure="yes" />
+    <!-- Every install, upgrade, repair and removal of this package writes a verbose log to %TEMP%
+         (MSI*.LOG), however it was started (double-click, the in-app updater, Programs), so a
+         missing installation on someone's PC can be traced afterwards. -->
+    <Property Id="MsiLogging" Value="voicewarmup" />
     <UIRef Id="PdfcraftInstallerUI" />
 
     <StandardDirectory Id="ProgramFiles6432Folder">
