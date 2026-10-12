@@ -1,4 +1,4 @@
-PdfCraft PDF document icon (pdfcraft-document.svg and pdfcraft-document.ico).
+Sintec.PDF PDF file icon (pdfcraft-document.png and pdfcraft-document.ico).
 SPDX-License-Identifier: ISC AND (MIT OR Apache-2.0)
 
 The document outline and fold are adapted from Lucide file-text (lucide-static 1.49.0):
@@ -21,11 +21,13 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-The badge, outlined PDF lettering, colours and composition are original work
-by the PdfCraft contributors. Copyright (c) 2026 PdfCraft contributors.
+The colours, text lines and composition are original work by Sintec LLC and
+the PdfCraft contributors; the badge is the Sintec.PDF logo (Sintec LLC, see
+LICENSE.txt beside this file; the Sintec names and logos are Sintec LLC's
+trademarks). Copyright (c) 2026 Sintec LLC and PdfCraft contributors.
 Licensed under either the MIT License or the Apache License, Version 2.0,
 at your option. Full texts are LICENSE-MIT and LICENSE-APACHE at the
 repository root, and beside this file in Windows distributions.
 
-The icon uses no typeface or external image. Regenerate the ICO with
-packaging/icons.sh; every asset and its SHA-256 is recorded in ATTRIBUTION.toml.
+The icon uses no typeface or third-party image. Regenerate it with
+packaging/icons.py --document; every asset and its SHA-256 is recorded in ATTRIBUTION.toml.

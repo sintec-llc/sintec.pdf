@@ -1,47 +1,41 @@
 # Sintec.PDF app icon
 
-<img src="pdfcraft-small.svg" alt="Sintec.PDF app icon: an orange P on a black rounded square" width="128">
+<img src="hicolor/128x128/apps/ai.storyteller.pdfcraft.png" alt="Sintec.PDF app icon: an orange S over a blue PDF on a dark rounded square" width="128">
 
-**Design:** Sintec LLC's Sintec.PDF logo: a wide, heavy orange **P** on a black rounded square.
+**Design:** Sintec LLC's Sintec.PDF logo (2026-10): a wide, heavy orange **S** over a blue **PDF** on a
+dark-grey rounded square with a soft diagonal gradient.
 
-**Palette:** exactly two colours.
+**Master:** `sintec-pdf-logo.png`, Sintec LLC's artwork as supplied (2133 px), resampled to 1024 px,
+full bleed. Windows and Linux icons use the full-bleed tile. macOS icons put it on Apple's grid (an 824 px
+body centred on a transparent 1024 px canvas). The file names keep the upstream `pdfcraft` stem because
+the build, the MSI and the app refer to them.
 
-| Colour | Hex | Used for |
-|---|---|---|
-| Black | `#000000` | the full-bleed tile |
-| Sintec orange | `#FC9A1A` | the P |
+**PDF file icon:** `pdfcraft-document.png`, composed by `packaging/icons.py --document`: an orange sheet
+behind a white page with Lucide's file-text outline and fold (ISC), text lines, and the app logo as the
+badge in the lower right corner, with a thin transparent gap around it.
 
-**Tile:** `viewBox="0 0 512 512"`, a rounded square with `rx=37.5`, full bleed. Windows and Linux icons use
-the full-bleed tile. macOS icons put it on Apple's grid (an 824 px body centred on a transparent 1024 px
-canvas).
-
-**Provenance:** Sintec LLC's 163 px logo PNG, rebuilt as a vector rather than traced pixel by pixel: the
-stem and bars are straight lines at the measured positions, and the bowl and the counter are superellipses
-(exponents 2.3 and 2.4) fitted to the logo's edges by least squares (0.4 px RMS at the source size). Drawn
-back at 163 px, the vector matches the source PNG to a mean difference of 0.4/255. The file names keep the
-upstream `pdfcraft` stem because the build, the MSI and the app refer to them.
-Licence: [LICENSE.txt](LICENSE.txt) (`MIT OR Apache-2.0` for the files; the Sintec names and logos remain
-Sintec LLC's trademarks).
+Licence: [LICENSE.txt](LICENSE.txt) and [LICENSE-document.txt](LICENSE-document.txt) (`MIT OR Apache-2.0`
+for the files, plus ISC for the Lucide outline; the Sintec names and logos remain Sintec LLC's trademarks).
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `pdfcraft.svg` | the master vector; every PNG, `.ico` and `.icns` is rendered from it |
-| `pdfcraft-small.svg` | the same vector, for places that link the small file, such as this README |
+| `sintec-pdf-logo.png` | the master; every app-icon PNG, `.ico` and `.icns` is resampled from it |
 | `pdfcraft-1024.png` | 1024 px on Apple's grid; also the runtime Dock icon on macOS |
 | `pdfcraft.icns` | macOS icon (16–1024 px) |
 | `pdfcraft.ico` | Windows icon (16–256 px), embedded in the app exe (shipped as `sintec-pdf.exe`) by `apps/pdfcraft/build.rs` |
-| `hicolor/<n>x<n>/apps/ai.storyteller.pdfcraft.png` | Linux hicolor theme, 16–512 px; the 256 px one is the runtime icon on Windows and Linux |
-| `hicolor/scalable/apps/ai.storyteller.pdfcraft.svg` | Linux scalable icon (copy of the master) |
+| `hicolor/<n>x<n>/apps/ai.storyteller.pdfcraft.png` | Linux hicolor theme, 16–512 px; the 256 px one is the runtime icon on Windows and Linux, the 512 px one the in-app logo |
+| `pdfcraft-document.png` | the PDF file icon's master, 1024 px |
+| `pdfcraft-document.ico` | Windows PDF file icon (16–256 px), resource 2 of the exe; the installer's PDF file association uses it |
 
 Where it shows: `apps/pdfcraft/src/main.rs` sets the window icon (Dock, taskbar, Alt-Tab, launcher) and the
 Wayland app id `ai.storyteller.pdfcraft`; `packaging/linux/ai.storyteller.pdfcraft.desktop` names the
-hicolor icon.
+hicolor icon; `crates/ui-egui/src/widgets.rs` shows the logo on the home screen and in About.
 
 ## Regenerate
 
 ```sh
-packaging/icons.sh        # needs resvg and python3; iconutil (macOS) for the .icns
-cargo xtask assets        # then update the sha256 values in ATTRIBUTION.toml and run with --write
+python3 packaging/icons.py [--document]   # needs Pillow; --document recomposes the PDF file icon
+cargo xtask assets                        # then update the sha256 values in ATTRIBUTION.toml and run with --write
 ```

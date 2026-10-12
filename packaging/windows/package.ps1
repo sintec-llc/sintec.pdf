@@ -89,6 +89,13 @@ New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 # Cargo builds pdfcraft*.exe (the upstream crate names); they ship as sintec-pdf*.exe.
 Copy-Item (Join-Path $Bin 'pdfcraft.exe') (Join-Path $Stage 'sintec-pdf.exe')
 Copy-Item (Join-Path $Bin 'pdfcraft-cli.exe') (Join-Path $Stage 'sintec-pdf-cli.exe')
+# Licences beside the exe (the MSI installs each, the portable zip carries them): the project's,
+# NOTICE, the PDF file icon's (ISC) and the fonts built into the exe (OFL).
+foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'assets\app-icon\LICENSE-document.txt',
+               'assets\fonts\OFL-Inter.txt', 'assets\fonts\OFL-JetBrainsMono.txt',
+               'assets\fonts\OFL-DancingScript.txt', 'assets\fonts\OFL-MarckScript.txt') {
+  Copy-Item (Join-Path $Root $f) $Stage
+}
 
 # OCR models: models\ beside sintec-pdf.exe is where pdfcraft_ocr::Models::find looks, so Scan & OCR
 # works straight after install with nothing to download. Fetched (SHA-256 verified) if missing.
@@ -122,7 +129,7 @@ Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Ms
 $Portable = Join-Path $TargetDir "windows-package\sintec-pdf-$Version-windows-$Arch-portable"
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
-Copy-Item (Join-Path $Stage '*.exe') $Portable
+Get-ChildItem -LiteralPath $Stage -File | Copy-Item -Destination $Portable
 Copy-Item -Recurse $ModelsStage $Portable
 foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE') {
   $p = Join-Path $Root $f

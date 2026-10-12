@@ -1074,6 +1074,19 @@ impl DocView {
     /// View ▸ Zoom ▸ Fit Visible: zoom so the visible content of `page` (display-normalised
     /// [x0, y0, x1, y1], i.e. after view rotation) spans the window's width, its left edge at
     /// the window's left and its top at the top.
+    /// Sintec.PDF: something Esc closes before it leaves the tool (an open editor or text box, a
+    /// half-drawn shape, a selection, the Find bar).
+    pub(crate) fn escape_has_work(&self) -> bool {
+        self.line_editor.is_some()
+            || self.fill_text.is_some()
+            || self.comments.gesture.is_some()
+            || self.comments.selected.is_some()
+            || self.content.selected.is_some()
+            || self.image_selection.is_some()
+            || self.selection.is_some()
+            || self.find.is_some()
+    }
+
     pub fn fit_content(&mut self, page: usize, content: [f32; 4]) -> bool {
         const PAD: f32 = 16.0;
         let Some((_, pr)) = self.screen_rects.iter().find(|(p, _)| *p == page).copied() else { return false };

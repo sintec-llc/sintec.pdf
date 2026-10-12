@@ -1681,7 +1681,7 @@
 	JavaScript, e.g. getField("total").value	JavaScript, p. ej., getField("total").value
 	Font: Helvetica	Fuente: Helvetica
 	e.g. en-US	p. ej., es-ES
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	Renderizado: hayro (inicial) · Interfaz: egui · Iconos: Lucide (ISC) · Fuentes: Inter, JetBrains Mono, Dancing Script (OFL)
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	Renderizado: hayro (inicial) · Interfaz: egui · Iconos: Lucide (ISC) · Fuentes: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)
 	CheckBox	Casilla de verificación
 	Radio	Botón de opción
 	PushButton	Botón

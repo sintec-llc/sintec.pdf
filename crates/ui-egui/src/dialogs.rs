@@ -1110,7 +1110,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         ui.label(tl!("A clean-room, open-source PDF application written in Rust. MIT OR Apache-2.0."));
                         ui.label(
                             egui::RichText::new(
-                                "Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)",
+                                "Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)",
                             )
                             .color(t.text_muted)
                             .small(),

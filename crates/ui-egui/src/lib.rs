@@ -2092,12 +2092,25 @@ impl eframe::App for PdfCraftApp {
         if self.left_open && self.mode != Mode::Read {
             panels::left_panel(self, ui);
         }
+        // Sintec.PDF: Esc leaves the current tool (placing a stamp or a signature, commenting…)
+        // for the main view. Decided before the frame draws, while text fields, dialogs and the
+        // palette still say whether they own the key. Anything in progress (an open editor, a
+        // half-drawn shape, a selection, the Find bar, the page grid's own Esc) takes the first
+        // Esc, and the next one leaves the tool.
+        let esc_free = self.active.and_then(|i| self.views.get(i)).is_some_and(|v| !v.escape_has_work())
+            && !self.modal_open()
+            && !self.palette_open
+            && !ctx.egui_wants_keyboard_input()
+            && ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let t = theme::Tokens::get(&ctx);
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| match self.active {
             None if self.combine_showing() => combine_ui::page(self, ui),
             None => home::show(self, ui),
             Some(i) => canvas::document_area(self, i, ui),
         });
+        if esc_free && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            self.escape_to_main_view();
+        }
         self.process_pending_edits();
         palette::show(self, &ctx);
         dialogs::show(self, &ctx);
@@ -2108,6 +2121,16 @@ impl eframe::App for PdfCraftApp {
 }
 
 impl PdfCraftApp {
+    /// Back to the main view of the document: the Select tool, nothing half placed.
+    pub(crate) fn escape_to_main_view(&mut self) {
+        self.quick_tool = QuickTool::Select;
+        self.space_hand = None;
+        if let Some(view) = self.active.and_then(|i| self.views.get_mut(i)) {
+            view.fill_text = None;
+            view.comments.gesture = None;
+        }
+    }
+
     fn finish_render_frame(&mut self, ctx: &egui::Context) {
         // The Combine grid's thumbnails, whichever tab shows (renders under way still finish).
         self.combine_thumbs_frame(ctx);

@@ -495,8 +495,16 @@ fn middle_button_pans_while_held_outside_linux() {
         ok(&mut h, &c, "ui.click", json!({ "x": p.x, "y": p.y, "button": "middle" }));
         ok(&mut h, &c, "ui.move", json!({ "x": p.x, "y": p.y + 50.0 }));
         h.run_steps(8);
-        assert!(!h.state().views[0].auto_scrolling(), "a click does not latch auto-scroll outside Linux: organize={organize}");
         assert!(!h.state().views[0].middle_panning(), "a released click leaves nothing to pan: organize={organize}");
+        if cfg!(target_os = "windows") {
+            // Sintec.PDF: on Windows a middle click starts scroll mode, the next one stops it.
+            assert!(h.state().views[0].auto_scrolling(), "a click latches auto-scroll on Windows: organize={organize}");
+            ok(&mut h, &c, "ui.click", json!({ "x": p.x, "y": p.y + 50.0, "button": "middle" }));
+            h.run_steps(4);
+            assert!(!h.state().views[0].auto_scrolling(), "the next click stops it: organize={organize}");
+        } else {
+            assert!(!h.state().views[0].auto_scrolling(), "a click does not latch auto-scroll on macOS: organize={organize}");
+        }
     }
     // A drag pans while the button is held, and the Crop tool never sees it.
     let (mut h, c) = harness();

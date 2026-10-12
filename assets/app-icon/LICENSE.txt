@@ -1,7 +1,7 @@
-Sintec.PDF app icon (pdfcraft.svg, pdfcraft-small.svg and every file derived from them in this
-directory: pdfcraft-1024.png, pdfcraft.icns, pdfcraft.ico, hicolor/).
+Sintec.PDF app icon (sintec-pdf-logo.png and every file derived from it in this directory:
+pdfcraft-1024.png, pdfcraft.icns, pdfcraft.ico, hicolor/; and the badge of the PDF file icon).
 
-Artwork owned by Sintec LLC: the Sintec.PDF logo, rebuilt as a vector (no third-party material).
+Artwork owned by Sintec LLC: the Sintec.PDF logo (no third-party material).
 The files are licensed like the rest of Sintec.PDF, under either of
 
   * Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
@@ -13,4 +13,4 @@ That licence covers copyright only. The Sintec and Sintec.PDF names and logos ar
 Sintec LLC; no right to use them to identify any other product, or a modified version of
 Sintec.PDF, is granted.
 
-Regenerate the derived files with packaging/icons.sh.
+Regenerate the derived files with packaging/icons.py.

@@ -1684,7 +1684,7 @@
 	JavaScript, e.g. getField("total").value	JavaScript，例如 getField("total").value
 	Font: Helvetica	字型：Helvetica
 	e.g. en-US	例如 en-US
-	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	算繪：hayro（初期實作） · 介面：egui · 圖示：Lucide（ISC） · 字型：Inter、JetBrains Mono、Dancing Script（OFL）
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script, Marck Script (OFL)	算繪：hayro（初期實作） · 介面：egui · 圖示：Lucide（ISC） · 字型：Inter、JetBrains Mono、Dancing Script、Marck Script（OFL）
 	CheckBox	核取方塊
 	Radio	選項按鈕
 	PushButton	按鈕
