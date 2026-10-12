@@ -1,5 +1,6 @@
-# Release pipeline: every push to `release` builds the Windows installer and portable zip and
-# creates or updates the draft GitHub Release "Sintec.PDF v<version>". See docs/releasing.md.
+# Release pipeline: every push to `release` builds the Windows installer and portable zip and the
+# macOS disk images (Apple silicon and Intel, in parallel), and creates or updates the draft GitHub
+# Release "Sintec.PDF v<version>". See docs/releasing.md.
 #
 # Jobs run in the `release` environment (restricted to the `release` branch), which holds the
 # optional code-signing secrets. Missing secrets produce unsigned artifacts and a warning, never a
@@ -113,9 +114,67 @@ jobs:
           path: dist/release/*
           if-no-files-found: error
 
+  macos:
+    name: macOS ${{ matrix.arch }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    environment: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: aarch64, runner: macos-15, target: aarch64-apple-darwin }
+          - { arch: x86_64, runner: macos-15-intel, target: x86_64-apple-darwin }
+    env:
+      PDFCRAFT_VERSION: ${{ needs.version.outputs.version }}
+      PDFCRAFT_BUILD_DATE: ${{ needs.version.outputs.date }}
+    steps:
+      - uses: actions/checkout@v4
+      # The craft-fonts build input (Japanese fonts, OFL), embedded in every release.
+      - name: Check out craft-fonts
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: storytold/craft-fonts
+          ref: abb83316d96aa59c1cf64784289e378fe9fa5695
+          path: craft-fonts
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-macos-${{ matrix.arch }}
+      - name: Apply version override
+        if: inputs.version != ''
+        run: cargo xtask version set "$PDFCRAFT_VERSION"
+      # Without these secrets the app is signed ad hoc and not notarized: it runs, but Gatekeeper
+      # asks for right-click > Open the first time (docs/releasing.md).
+      - name: Import signing certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: packaging/macos/import-cert.sh
+      - name: Build, sign, notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+          CRAFT_FONTS_REQUIRED: "1"
+        run: packaging/macos/package.sh --arch ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-${{ matrix.arch }}
+          path: dist/release/*
+          if-no-files-found: error
+      - name: Remove temporary keychain
+        if: always()
+        run: |
+          if [ -n "${MACOS_KEYCHAIN:-}" ]; then security delete-keychain "$MACOS_KEYCHAIN" || true; fi
+
   release:
     name: Draft GitHub Release
-    needs: [version, windows]
+    needs: [version, windows, macos]
     runs-on: ubuntu-latest
     environment: release
     permissions:

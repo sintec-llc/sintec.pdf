@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate background.tiff and dmg-layout.DS_Store for the macOS DMG window (see README.md here).
 
-Needs resvg on PATH and:
+Draws the background with Pillow from the app logo and Inter (both in assets/). Needs:
     pip install 'pillow>=12' ds_store==1.3.3 mac_alias==2.2.3
 
 Runs on any OS, no Mac needed. Both outputs come from this script alone, so they carry nothing
@@ -12,38 +12,61 @@ from the machine that made them: no local paths, user or disk names, dates or vo
 
 import datetime
 import os
-import shutil
-import subprocess
 import sys
-import tempfile
 
 from ds_store import DSStore
 from mac_alias import Alias, TargetInfo, VolumeInfo
-from PIL import Image, ImageCms
+from PIL import Image, ImageCms, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 
 # Keep in sync with package.sh (volume name) and README.md (layout).
-VOLUME = "PdfCraft"
+VOLUME = "Sintec.PDF"
 WIDTH, HEIGHT = 660, 400  # window content, pt; the background's 1x size
 TITLE_BAR = 32
 ICON_SIZE = 128
-PALETTE = 16  # colours in background.tiff
-ICONS = {"PdfCraft.app": (326, 205), "Applications": (574, 205)}
+PALETTE = 128  # colours in background.tiff (the logo tile has a gradient)
+ICONS = {"Sintec.PDF.app": (326, 205), "Applications": (574, 205)}
 # A fixed date for the alias and the colour profile. Finder never matches it against the image
 # (each build is a new volume): it finds the background by volume name and path.
 FIXED_DATE = datetime.datetime(2026, 10, 8, tzinfo=datetime.timezone.utc)
 
 
-def render(svg, width, out):
-    # The SVG's text is already outlined and no fonts are loaded, so every machine draws the
-    # same pixels.
-    subprocess.run(
-        ["resvg", "--skip-system-fonts", "-w", str(width), svg, out],
-        check=True,
-    )
-    with Image.open(out) as im:
-        return im.convert("RGB")
+PAPER = (247, 245, 241)
+INK = (38, 38, 38)  # the logo tile's dark grey, for text
+SHELF = (236, 232, 225)  # the left panel, a shade darker than the paper
+ORANGE = (252, 154, 26)  # Sintec orange, as the logo's S
+MUTED = (110, 106, 100)
+PANEL = 232  # width of the dark panel on the left, pt
+
+
+def font(name, size):
+    return ImageFont.truetype(os.path.join(ROOT, "assets", "fonts", name), size)
+
+
+def render(scale):
+    """The window background at `scale` (1 = 660 x 400 px): a panel with the logo and the
+    name, and on the paper an orange arrow from the app to Applications under a hint. Nothing
+    enters the icon boxes or the label strips under them."""
+    k = 4 * scale  # draw at 4x and scale down for smooth edges
+    im = Image.new("RGB", (WIDTH * k, HEIGHT * k), PAPER)
+    d = ImageDraw.Draw(im)
+    d.rectangle([0, 0, PANEL * k, HEIGHT * k], fill=SHELF)
+    logo = Image.open(os.path.join(ROOT, "assets", "app-icon", "sintec-pdf-logo.png")).convert("RGBA")
+    size = 132 * k
+    im.paste(logo.resize((size, size), Image.LANCZOS), ((PANEL * k - size) // 2, 104 * k), logo.resize((size, size), Image.LANCZOS))
+    d.text((PANEL * k / 2, 268 * k), "Sintec.PDF", font=font("Inter-SemiBold.ttf", 26 * k), fill=INK, anchor="mm")
+    d.text((PANEL * k / 2, 300 * k), "PDF для работы", font=font("Inter-Regular.ttf", 14 * k), fill=MUTED, anchor="mm")
+    centre = (PANEL + WIDTH) / 2
+    d.text((centre * k, 62 * k), "Установка", font=font("Inter-SemiBold.ttf", 20 * k), fill=INK, anchor="mm")
+    d.text((centre * k, 92 * k), "Перетащите Sintec.PDF в «Программы»", font=font("Inter-Regular.ttf", 15 * k), fill=MUTED, anchor="mm")
+    # The arrow between the icon boxes (x 390-510), 12 pt clear of each.
+    y, x0, x1 = 205 * k, 404 * k, 496 * k
+    d.line([(x0, y), (x1 - 14 * k, y)], fill=ORANGE, width=6 * k)
+    d.ellipse([x0 - 3 * k, y - 3 * k, x0 + 3 * k, y + 3 * k], fill=ORANGE)
+    d.polygon([(x1, y), (x1 - 20 * k, y - 13 * k), (x1 - 20 * k, y + 13 * k)], fill=ORANGE)
+    return im.resize((WIDTH * scale, HEIGHT * scale), Image.LANCZOS)
 
 
 def quantize(im):
@@ -61,12 +84,9 @@ def srgb_profile():
     return bytes(icc)
 
 
-def write_tiff(svg, out):
+def write_tiff(out):
     """1x (72 dpi) and 2x (144 dpi) in one TIFF, as `tiffutil -cathidpicheck` writes them."""
-    with tempfile.TemporaryDirectory() as tmp:
-        one, two = (
-            quantize(render(svg, WIDTH * s, os.path.join(tmp, f"{s}x.png"))) for s in (1, 2)
-        )
+    one, two = (quantize(render(s)) for s in (1, 2))
     two.encoderinfo = {"dpi": (144, 144)}  # the rest as the first page
     # Opaque 16-colour palette, Deflate: the artwork is three inks plus antialiasing, and a palette
     # keeps the file small (RGB was ~230 KB; repository assets must stay small). As PhotoCraft's.
@@ -148,9 +168,7 @@ def write_ds_store(out):
 
 
 def main():
-    if not shutil.which("resvg"):
-        sys.exit("error: resvg not found (brew install resvg / cargo install resvg --locked)")
-    write_tiff(os.path.join(HERE, "background.svg"), os.path.join(HERE, "background.tiff"))
+    write_tiff(os.path.join(HERE, "background.tiff"))
     write_ds_store(os.path.join(HERE, "dmg-layout.DS_Store"))
 
 

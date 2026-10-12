@@ -2199,3 +2199,4 @@ key	Space	空格
 	Remove {n} pages	删除 {n} 页
 	The picture is too large for a signature (at most {n} MB)	图片太大，无法用作签名（最多 {n} MB）
 	Save ({key})	保存 ({key})
+	Update downloads the new version, checks it and opens it: drag Sintec.PDF into Applications to replace this one. Download opens the release page.	“更新”会下载新版本、校验并打开它：将 Sintec.PDF 拖到“应用程序”以替换当前版本。“下载”会打开发布页面。
