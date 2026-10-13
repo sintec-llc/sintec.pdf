@@ -2123,3 +2123,14 @@ key	Space	空格
 	The picture is too large for a signature (at most {n} MB)	圖片太大，無法用作簽名（最多 {n} MB）
 	Save ({key})	儲存 ({key})
 	Update downloads the new version, checks it and opens it: drag Sintec.PDF into Applications to replace this one. Download opens the release page.	「更新」會下載新版本、驗證並開啟它：將 Sintec.PDF 拖到「應用程式」以取代目前版本。「下載」會開啟發佈頁面。
+	Extract and save as…	擷取並另存為…
+	Extract and save as	擷取並另存為
+	p. {pages}	第 {pages} 頁
+	Saved {what} to {path}	已儲存（{what}）：{path}
+	Move here	移動到此處
+	Copy here (Shift: move)	複製到此處（Shift：移動）
+	Move to the end	移動到結尾
+	Copy to the end (Shift: move)	複製到結尾（Shift：移動）
+	Moved {what} to {name}	已移動到「{name}」：{what}
+	Copied {what} to {name}	已複製到「{name}」：{what}
+	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	已複製到「{name}」：{what}；原檔案保留了這些頁面（拖曳期間已變更，或將變為空白）

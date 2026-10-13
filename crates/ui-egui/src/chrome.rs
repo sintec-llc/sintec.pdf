@@ -67,6 +67,8 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     changed
                 });
                 let mut close = None;
+                let mut tab_drop: Option<usize> = None;
+                let mut over_tab = false;
                 ui.scope(|ui| {
                     ui.style_mut().always_scroll_the_only_direction = true;
                     let mut area = egui::ScrollArea::horizontal().id_salt("document_tabs").max_width(tabs_width).auto_shrink([true, true]);
@@ -86,6 +88,38 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                 }
                                 if response.clicked() {
                                     app.active = Some(i);
+                                }
+                                // Sintec.PDF: pages dragged from another document's Pages panel.
+                                // Resting on this tab opens it (to drop them between its pages);
+                                // releasing on it adds them after its last page.
+                                if let Some(tr) = &app.page_transfer
+                                    && tr.from != app.views[i].id
+                                    && let Some(p) = ui.input(|inp| inp.pointer.interact_pos())
+                                    && response.rect.contains(p)
+                                {
+                                    over_tab = true;
+                                    ui.painter().rect_stroke(response.rect, 6.0, Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
+                                    let now = ui.input(|inp| inp.time);
+                                    let since = match app.tab_hover {
+                                        Some((h, since)) if h == i => since,
+                                        _ => {
+                                            app.tab_hover = Some((i, now));
+                                            now
+                                        }
+                                    };
+                                    if ui.input(|inp| inp.pointer.primary_released()) {
+                                        tab_drop = Some(i);
+                                    } else if now - since > 0.6 && app.active != Some(i) {
+                                        app.active = Some(i);
+                                    }
+                                    let action = if ui.input(|inp| inp.modifiers.shift) {
+                                        tl!("Move to the end")
+                                    } else {
+                                        tl!("Copy to the end (Shift: move)")
+                                    };
+                                    egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), ui.id().with("tab-drop"), egui::PopupAnchor::Pointer)
+                                        .show(|ui| ui.label(action));
+                                    ui.ctx().request_repaint();
                                 }
                             }
                             if let Some(i) = close {
@@ -111,6 +145,13 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     let max = (out.content_size.x - out.inner_rect.width()).max(0.0);
                     ui.data_mut(|d| d.insert_temp(scroll_id, (out.state.offset.x, max)));
                 });
+                if !over_tab {
+                    app.tab_hover = None;
+                }
+                if let Some(i) = tab_drop {
+                    let remove = ui.input(|inp| inp.modifiers.shift);
+                    app.drop_page_transfer(i, None, remove);
+                }
                 if overflow && arrow(ui, "chevron-right", offset < max_offset - 0.5, tl!("Scroll tabs right")) {
                     scroll_to = Some((offset + TAB_MIN_WIDTH + gap).min(max_offset));
                 }

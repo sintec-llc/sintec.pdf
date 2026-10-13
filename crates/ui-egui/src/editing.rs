@@ -145,6 +145,7 @@ impl PdfCraftApp {
                 self.save_active(SaveTarget::InPlace);
             }
             Some(crate::canvas::ViewAction::Extract) => self.open_extract_dialog(),
+            Some(crate::canvas::ViewAction::ExtractSaveAs) => self.extract_save_as(),
             Some(crate::canvas::ViewAction::Split) => self.dialog = Some(crate::Dialog::Split),
             Some(crate::canvas::ViewAction::CopyPages { cut }) => self.copy_pages(cut),
             Some(crate::canvas::ViewAction::PastePages) => self.paste_pages(),
@@ -177,6 +178,59 @@ impl PdfCraftApp {
             self.notify_fmt("Cut {what}", &[("what", &what)]);
         } else {
             self.notify_fmt("Copied {what}", &[("what", &what)]);
+        }
+    }
+
+    /// Sintec.PDF: start a page drag that can leave the document: the active document's
+    /// `pages`, as it is now.
+    pub fn begin_page_transfer(&mut self, pages: Vec<usize>) {
+        let Some((_, id)) = self.active_ids() else { return };
+        let Some(doc) = self.session.get(id) else { return };
+        self.page_transfer =
+            Some(crate::PageTransfer { from: id, generation: doc.edit_generation(), name: doc.name.clone(), bytes: doc.bytes.clone(), pages });
+    }
+
+    /// Drop the dragged pages into document `target` (a tab index) at page gap `at` (`None`: after
+    /// its last page). With `remove`, they also leave the document they came from, if it is
+    /// unchanged since the drag started. Both are ordinary edits, undone separately.
+    pub fn drop_page_transfer(&mut self, target: usize, at: Option<usize>, remove: bool) {
+        let Some(tr) = self.page_transfer.take() else { return };
+        let Some(view) = self.views.get(target) else { return };
+        let target_id = view.id;
+        if target_id == tr.from || tr.pages.is_empty() {
+            return;
+        }
+        let Some(target_doc) = self.session.get(target_id) else { return };
+        let target_name = target_doc.display_name();
+        let at = at.unwrap_or(target_doc.info.pages.len()).min(target_doc.info.pages.len());
+        let count = tr.pages.len();
+        let previous = self.active;
+        self.active = Some(target);
+        let inserted = self.apply_edit(Edit::InsertPagesFrom { name: tr.name.clone(), bytes: tr.bytes.clone(), pages: Some(tr.pages.clone()), at });
+        if !inserted {
+            self.active = previous;
+            return;
+        }
+        self.views[target].select_pages(&(at..at + count).collect::<Vec<_>>());
+        self.views[target].go_to_page(at);
+        let what = if count == 1 { tl!("1 page").to_string() } else { crate::i18n::fmt(tl!("{n} pages"), &[("n", &count.to_string())]) };
+        let source = self.views.iter().position(|v| v.id == tr.from);
+        let source_doc = self.session.get(tr.from);
+        let can_remove = source_doc.is_some_and(|d| d.edit_generation() == tr.generation && count < d.info.pages.len());
+        match (remove, source, can_remove) {
+            (true, Some(s), true) => {
+                self.active = Some(s);
+                self.apply_edit(Edit::DeletePages { pages: tr.pages });
+                self.active = Some(target);
+                self.notify_fmt("Moved {what} to {name}", &[("what", &what), ("name", &target_name)]);
+            }
+            (true, _, _) => {
+                self.notify_fmt(
+                    "Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)",
+                    &[("what", &what), ("name", &target_name)],
+                );
+            }
+            (false, _, _) => self.notify_fmt("Copied {what} to {name}", &[("what", &what), ("name", &target_name)]),
         }
     }
 

@@ -424,6 +424,9 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let bm_editable = app.session.get(id).is_some_and(|d| d.allows_assembly() && d.read_only_reason.is_none());
     // Prepare a form is open: the Fields panel orders tabs.
     let preparing = app.is_preparing();
+    // Pages dragged here from another document's Pages panel (how many), and where they drop.
+    let foreign = app.page_transfer.as_ref().filter(|tr| tr.from != id).map(|tr| tr.pages.len());
+    let mut foreign_drop: Option<usize> = None;
     {
         let Some(doc) = app.session.get(id) else { return };
         let info = &doc.info;
@@ -578,7 +581,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             ui.label(tl!("Some bookmarks are not shown here: the panel lists a limited number, nested a limited depth."));
                         }
                     }
-                    RightPanel::Pages => pages(ui, &t, info, view, modal, bm_editable, &mut nav, &mut page_menu),
+                    RightPanel::Pages => pages(ui, &t, info, view, modal, bm_editable, &mut nav, &mut page_menu, foreign, &mut foreign_drop),
                     RightPanel::Fields => field_properties = fields(ui, &t, info, &doc.form, preparing, &mut view.prepare, &mut nav, &mut panel_edit),
                     RightPanel::Layers => {
                         if info.layers.is_empty() {
@@ -659,7 +662,18 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     if let Some(e) = panel_edit {
         app.apply_edit(e);
     }
+    // A drag of this document's pages can leave it (into another document's panel or tab).
+    if app.page_transfer.is_none()
+        && let Some(pages) = app.views.get(index).and_then(|v| v.panel_drag.clone())
+    {
+        app.begin_page_transfer(pages);
+    }
+    if let Some(gap) = foreign_drop {
+        let remove = ui.input(|i| i.modifiers.shift);
+        app.drop_page_transfer(index, Some(gap), remove);
+    }
     match page_menu {
+        Some(PageMenu::ExtractSaveAs) => app.extract_save_as(),
         Some(PageMenu::Extract { delete }) => {
             app.extract_draft = crate::ExtractDraft { separate: false, delete, ..Default::default() };
             app.dialog = Some(crate::Dialog::Extract);
@@ -959,6 +973,8 @@ pub(crate) const PANEL_THUMB_W: f32 = 150.0;
 pub(crate) enum PageMenu {
     /// Extract the selection (Extract pages, with "Delete pages after extracting" set to `delete`).
     Extract { delete: bool },
+    /// Sintec.PDF: save the selection as a new PDF file (Save As).
+    ExtractSaveAs,
     /// Rotate the selection by `degrees` clockwise.
     Rotate { degrees: i64 },
     /// A blank page the size of `page`, before or after it.
@@ -979,6 +995,8 @@ fn pages(
     editable: bool,
     nav: &mut Option<Nav>,
     menu: &mut Option<PageMenu>,
+    foreign: Option<usize>,
+    foreign_drop: &mut Option<usize>,
 ) {
     // Escape drops the selection while the pointer is over the panel and nothing else wants the key.
     if !modal
@@ -1064,6 +1082,10 @@ fn pages(
                     view.pending_action = Some(crate::canvas::ViewAction::Extract);
                     ui.close();
                 }
+                if ui.button(tl!("Extract and save as…")).clicked() {
+                    *menu = Some(PageMenu::ExtractSaveAs);
+                    ui.close();
+                }
                 if ui.add_enabled(editable, egui::Button::new(tl!("Extract and delete from file…"))).clicked() {
                     *menu = Some(PageMenu::Extract { delete: true });
                     ui.close();
@@ -1111,6 +1133,7 @@ fn pages(
         ui.add_space(4.0);
     }
     page_drag(ui, t, view, &rows, dropped);
+    foreign_page_drag(ui, t, view, &rows, foreign.filter(|_| editable), foreign_drop);
 }
 
 /// Queue deleting the selection (or the current page) of a document of `n` pages, unless that
@@ -1146,6 +1169,38 @@ fn moved_index(p: usize, moving: &[usize], to: usize) -> usize {
             let rest = p.saturating_sub(moving.iter().filter(|m| **m < p).count());
             if rest >= to { rest + moving.len() } else { rest }
         }
+    }
+}
+
+/// Sintec.PDF: pages dragged from another document over this one's thumbnails: the bar on the gap
+/// they would go to and their count by the pointer; on release over the panel, that gap (Shift at
+/// the drop moves them instead of copying).
+fn foreign_page_drag(ui: &mut egui::Ui, t: &Tokens, view: &crate::DocView, rows: &[Rect], foreign: Option<usize>, drop: &mut Option<usize>) {
+    let Some(n) = foreign else { return };
+    if view.panel_drag.is_some() {
+        return;
+    }
+    let Some(p) = ui.input(|i| i.pointer.interact_pos()) else { return };
+    if !ui.clip_rect().contains(p) {
+        return;
+    }
+    let gap = panel_gap(rows, p.y).unwrap_or(0);
+    if let (Some(first), Some(last)) = (rows.first(), rows.last()) {
+        let y = rows.get(gap).map_or(last.bottom() + 20.0, |r| r.top() - 3.0);
+        ui.painter().line_segment([pos2(first.left(), y), pos2(first.right(), y)], Stroke::new(3.0, t.accent));
+    }
+    let what = if n == 1 { tl!("1 page").to_string() } else { crate::i18n::fmt(tl!("{n} pages"), &[("n", &n.to_string())]) };
+    let action = if ui.input(|i| i.modifiers.shift) { tl!("Move here") } else { tl!("Copy here (Shift: move)") };
+    ui.painter().text(p + vec2(14.0, 14.0), Align2::LEFT_TOP, format!("{what} · {action}"), theme::medium(12.0), t.accent_text);
+    let clip = ui.clip_rect();
+    if p.y < clip.top() + 40.0 {
+        ui.scroll_with_delta(vec2(0.0, 10.0));
+    } else if p.y > clip.bottom() - 40.0 {
+        ui.scroll_with_delta(vec2(0.0, -10.0));
+    }
+    ui.ctx().request_repaint();
+    if ui.input(|i| i.pointer.primary_released()) {
+        *drop = Some(gap);
     }
 }
 

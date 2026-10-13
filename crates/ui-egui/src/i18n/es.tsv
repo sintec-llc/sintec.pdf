@@ -2154,3 +2154,14 @@ key	Space	Espacio
 	The picture is too large for a signature (at most {n} MB)	La imagen es demasiado grande para una firma (como máximo {n} MB)
 	Save ({key})	Guardar ({key})
 	Update downloads the new version, checks it and opens it: drag Sintec.PDF into Applications to replace this one. Download opens the release page.	«Actualizar» descarga la nueva versión, la comprueba y la abre: arrastre Sintec.PDF a Aplicaciones para reemplazar esta. «Descargar» abre la página de la versión.
+	Extract and save as…	Extraer y guardar como…
+	Extract and save as	Extraer y guardar como
+	p. {pages}	pág. {pages}
+	Saved {what} to {path}	Guardado ({what}): {path}
+	Move here	Mover aquí
+	Copy here (Shift: move)	Copiar aquí (Mayús: mover)
+	Move to the end	Mover al final
+	Copy to the end (Shift: move)	Copiar al final (Mayús: mover)
+	Moved {what} to {name}	Movido a «{name}»: {what}
+	Copied {what} to {name}	Copiado a «{name}»: {what}
+	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Copiado a «{name}»: {what}; el original las conserva (cambió durante el arrastre o quedaría vacío)

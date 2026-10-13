@@ -2167,3 +2167,14 @@ key	Space	Пробел
 	The picture is too large for a signature (at most {n} MB)	Изображение слишком большое для подписи (не более {n} МБ)
 	Save ({key})	Сохранить ({key})
 	Update downloads the new version, checks it and opens it: drag Sintec.PDF into Applications to replace this one. Download opens the release page.	«Обновить» скачает новую версию, проверит её и откроет: перетащите Sintec.PDF в «Программы», чтобы заменить эту. «Скачать» откроет страницу выпуска.
+	Extract and save as…	Извлечь и сохранить как…
+	Extract and save as	Извлечь и сохранить как
+	p. {pages}	стр. {pages}
+	Saved {what} to {path}	Сохранено ({what}): {path}
+	Move here	Переместить сюда
+	Copy here (Shift: move)	Скопировать сюда (Shift — переместить)
+	Move to the end	Переместить в конец
+	Copy to the end (Shift: move)	Скопировать в конец (Shift — переместить)
+	Moved {what} to {name}	Перемещено в «{name}»: {what}
+	Copied {what} to {name}	Скопировано в «{name}»: {what}
+	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Скопировано в «{name}»: {what}; в исходном файле страницы остались (он изменился во время перетаскивания или остался бы пустым)

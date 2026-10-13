@@ -2216,3 +2216,14 @@ key	Space	Spacja
 	Save ({key})	Zapisz ({key})
 	A photo or scan of your {what} on white paper, or a PNG with transparency: the paper becomes transparent.	Zdjęcie lub skan: {what} na białym papierze albo PNG z przezroczystością. Papier stanie się przezroczysty.
 	Update downloads the new version, checks it and opens it: drag Sintec.PDF into Applications to replace this one. Download opens the release page.	„Aktualizuj” pobiera nową wersję, sprawdza ją i otwiera: przeciągnij Sintec.PDF do folderu Aplikacje, aby zastąpić tę wersję. „Pobierz” otwiera stronę wydania.
+	Extract and save as…	Wyodrębnij i zapisz jako…
+	Extract and save as	Wyodrębnij i zapisz jako
+	p. {pages}	s. {pages}
+	Saved {what} to {path}	Zapisano ({what}): {path}
+	Move here	Przenieś tutaj
+	Copy here (Shift: move)	Kopiuj tutaj (Shift: przenieś)
+	Move to the end	Przenieś na koniec
+	Copy to the end (Shift: move)	Kopiuj na koniec (Shift: przenieś)
+	Moved {what} to {name}	Przeniesiono do „{name}”: {what}
+	Copied {what} to {name}	Skopiowano do „{name}”: {what}
+	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Skopiowano do „{name}”: {what}; oryginał je zachował (zmienił się podczas przeciągania lub zostałby pusty)

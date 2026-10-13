@@ -328,6 +328,19 @@ pub struct PageClip {
     pub pages: Vec<usize>,
 }
 
+/// Sintec.PDF: pages being dragged from one document's Pages panel, which can drop into another
+/// open document (its Pages panel, or its tab to add them at the end). Shift at the drop moves them.
+#[derive(Clone)]
+pub struct PageTransfer {
+    /// The document they come from, and its edit generation when the drag started: a move only
+    /// removes them from it if it hasn't changed since.
+    pub from: DocId,
+    pub generation: u64,
+    pub name: String,
+    pub bytes: std::sync::Arc<Vec<u8>>,
+    pub pages: Vec<usize>,
+}
+
 /// Files delivered asynchronously: (name, bytes).
 pub type Inbox = std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<u8>)>>>;
 
@@ -560,6 +573,10 @@ pub struct PdfCraftApp {
     pub progress_notice: Option<widgets::ProgressNotice>,
     /// Pages copied or cut in Organize Pages, ready to paste (into any document).
     pub page_clipboard: Option<PageClip>,
+    /// Pages dragged out of a document's Pages panel, while the button is held.
+    pub page_transfer: Option<PageTransfer>,
+    /// The tab a page drag rests on, and since when (it opens after a moment).
+    pub(crate) tab_hover: Option<(usize, f64)>,
     /// Files dropped on the page grid, waiting for the pointer to say which gap they go to.
     grid_drop: Option<GridDrop>,
     /// The last snapshot (width, height, RGBA); `system_clipboard` also puts it on the
@@ -818,6 +835,8 @@ impl PdfCraftApp {
             optimize_run: None,
             progress_notice: None,
             page_clipboard: None,
+            page_transfer: None,
+            tab_hover: None,
             grid_drop: None,
             last_snapshot: None,
             system_clipboard: true,
@@ -2100,6 +2119,11 @@ impl eframe::App for PdfCraftApp {
             self.escape_to_main_view();
         }
         self.process_pending_edits();
+        // A page drag ends with the button: dropped by now (tab or Pages panel), or let go elsewhere.
+        if self.page_transfer.is_some() && !ctx.input(|i| i.pointer.primary_down()) {
+            self.page_transfer = None;
+            self.tab_hover = None;
+        }
         palette::show(self, &ctx);
         dialogs::show(self, &ctx);
         self.show_progress(&ctx);
