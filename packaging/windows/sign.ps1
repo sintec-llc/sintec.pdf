@@ -68,6 +68,23 @@ try {
     $signArgs = $common + @('/tr', $ts, '/f', $pfx)
     if ($env:WINDOWS_CERTIFICATE_PASSWORD) { $signArgs += @('/p', $env:WINDOWS_CERTIFICATE_PASSWORD) }
     Invoke-SignTool ($signArgs + $Files)
+    # Sintec.PDF signs with Sintec LLC's internal certificate (self-signed, trusted on company PCs
+    # through Group Policy, docs/internal-signing.md). This machine (a CI runner, say) doesn't
+    # trust it, so `signtool verify /pa` would fail: check instead that each file carries an intact
+    # signature by this very certificate (UnknownError = intact but its root isn't trusted here).
+    $flags = [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+    $signer = New-Object Security.Cryptography.X509Certificates.X509Certificate2($pfx, $env:WINDOWS_CERTIFICATE_PASSWORD, $flags)
+    if ($signer.Subject -eq $signer.Issuer) {
+      foreach ($f in $Files) {
+        $sig = Get-AuthenticodeSignature -LiteralPath $f
+        if ($sig.SignerCertificate.Thumbprint -ne $signer.Thumbprint -or $sig.Status -notin 'Valid', 'UnknownError') {
+          throw "signature check failed for ${f}: $($sig.Status) $($sig.StatusMessage)"
+        }
+        if (-not $sig.TimeStamperCertificate) { throw "no timestamp on $f" }
+        Write-Output "signed by $($signer.Subject) ($($signer.Thumbprint)), timestamped: $f"
+      }
+      return
+    }
   }
   else {
     Write-Output "Signing with Azure Trusted Signing ($env:AZURE_SIGNING_ACCOUNT / $env:AZURE_CERT_PROFILE): $($Files -join ', ')"
