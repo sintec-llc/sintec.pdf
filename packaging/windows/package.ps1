@@ -125,6 +125,16 @@ Invoke-Native 'test-msi' { & (Get-Process -Id $PID).Path -NoProfile -File (Join-
 Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Msi, '.wixpdb'))
 & (Join-Path $PSScriptRoot 'sign.ps1') $Msi
 
+# ---- setup.exe ---------------------------------------------------------------------------------
+# The signed MSI inside a small launcher, for people and tools that expect an .exe: it unpacks the
+# MSI and runs Windows Installer on it (same dialogs, upgrades and removal as the MSI).
+$Setup = Join-Path $Dist "sintec-pdf-$Version-windows-$Arch-setup.exe"
+$env:SINTEC_SETUP_MSI = $Msi
+Invoke-Native "cargo build setup.exe ($Target)" { cargo build --release --locked -p pdfcraft-setup --target $Target }
+Remove-Item Env:\SINTEC_SETUP_MSI
+Copy-Item (Join-Path $Bin 'pdfcraft-setup.exe') $Setup -Force
+& (Join-Path $PSScriptRoot 'sign.ps1') $Setup
+
 # ---- portable zip ------------------------------------------------------------------------------
 $Portable = Join-Path $TargetDir "windows-package\sintec-pdf-$Version-windows-$Arch-portable"
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
@@ -155,4 +165,4 @@ if ($Arch -ne 'arm64' -or $HostArch -eq 'arm64') {
 } else {
   Write-Output "skipping sintec-pdf-cli --version: an $Arch build doesn't run on this $HostArch machine"
 }
-Get-Item $Msi, $Zip | Format-Table Name, Length
+Get-Item $Msi, $Setup, $Zip | Format-Table Name, Length

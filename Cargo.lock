@@ -3875,6 +3875,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "pdfcraft-setup"
+version = "0.2.3"
+dependencies = [
+ "winresource",
+]
+
+[[package]]
 name = "pdfcraft-sign"
 version = "0.2.3"
 dependencies = [

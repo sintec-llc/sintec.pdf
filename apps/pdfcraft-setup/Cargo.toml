@@ -1,0 +1,18 @@
+[package]
+name = "pdfcraft-setup"
+description = "Sintec.PDF setup.exe: carries the signed MSI and runs it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "pdfcraft-setup"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[build-dependencies]
+# Icon + VERSIONINFO for setup.exe; build.rs only uses it when targeting Windows.
+winresource = "0.1"
