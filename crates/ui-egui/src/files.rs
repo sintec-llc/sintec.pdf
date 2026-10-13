@@ -454,6 +454,48 @@ impl PdfCraftApp {
         self.dialog = Some(crate::Dialog::Extract);
     }
 
+    /// Sintec.PDF: Extract and save as: the selected pages (or the current page) as a new PDF,
+    /// saved where the user chooses (`save_override` in tests). The document itself is unchanged.
+    pub fn extract_save_as(&mut self) {
+        // What's typed in a form field is part of the document (#166).
+        if !self.commit_form_typing() {
+            return;
+        }
+        let Some((i, id)) = self.active_ids() else { return };
+        let mut pages = self.views[i].target_pages();
+        pages.sort_unstable();
+        pages.dedup();
+        let stem = self.session.get(id).map(|d| strip_pdf(&d.name).to_string()).unwrap_or_default();
+        let bytes = match self.session.extract(id, &pages) {
+            Ok(b) => b,
+            Err(e) => return self.notify_fmt("Couldn't extract pages: {e}", &[("e", &e.to_string())]),
+        };
+        let what = if pages.len() == 1 { tl!("1 page").to_string() } else { crate::i18n::fmt(tl!("{n} pages"), &[("n", &pages.len().to_string())]) };
+        let name = format!("{stem} ({}).pdf", crate::i18n::fmt(tl!("p. {pages}"), &[("pages", &page_ranges(&pages))]));
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let write = move |app: &mut Self, path: std::path::PathBuf| match crate::editing::write_atomically(&path.to_string_lossy(), &bytes) {
+                Ok(()) => app.notify_fmt("Saved {what} to {path}", &[("what", &what), ("path", &path.display().to_string())]),
+                Err(e) => app.notify_fmt("Couldn't write {name}: {e}", &[("name", &path.display().to_string()), ("e", &e.to_string())]),
+            };
+            match self.save_override.clone() {
+                Some(p) => write(self, p.into()),
+                None => {
+                    let dialog =
+                        rfd::AsyncFileDialog::new().set_title(tl!("Extract and save as").to_string()).add_filter("PDF", &["pdf"]).set_file_name(name);
+                    self.ask_one(crate::pickers::Ask::Save(dialog), None, write);
+                }
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = what;
+            if let Err(e) = crate::editing::download(&name, &bytes) {
+                self.notify_error(e);
+            }
+        }
+    }
+
     /// Copy the selected pages (or the current page) into a new unsaved document tab.
     pub fn extract_selection(&mut self) {
         // What's typed in a form field is part of the document (#166).
@@ -661,6 +703,22 @@ impl PdfCraftApp {
     }
 }
 
+/// Sorted, distinct page indices as people number pages: `[1, 2, 3, 6]` → "2-4, 7".
+pub(crate) fn page_ranges(pages: &[usize]) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    let mut i = 0;
+    while let Some(&start) = pages.get(i) {
+        let mut end = start;
+        while let Some(&next) = pages.get(i + 1).filter(|&&n| Some(n) == end.checked_add(1)) {
+            i += 1;
+            end = next;
+        }
+        parts.push(if end == start { (start + 1).to_string() } else { format!("{}-{}", start + 1, end + 1) });
+        i += 1;
+    }
+    parts.join(", ")
+}
+
 pub(crate) fn strip_pdf(name: &str) -> &str {
     name.strip_suffix(".pdf").or_else(|| name.strip_suffix(".PDF")).unwrap_or(name)
 }
@@ -861,5 +919,14 @@ mod stem_tests {
         // At most 200 bytes, cut on a character boundary.
         let long = file_stem_from_user(&"文".repeat(300));
         assert!(long.len() <= 200 && long.chars().all(|c| c == '文'), "{}", long.len());
+    }
+
+    #[test]
+    fn page_ranges_read_as_people_number_pages() {
+        use super::page_ranges;
+        assert_eq!(page_ranges(&[]), "");
+        assert_eq!(page_ranges(&[0]), "1");
+        assert_eq!(page_ranges(&[1, 2, 3, 6]), "2-4, 7");
+        assert_eq!(page_ranges(&[0, 2, 4, 5]), "1, 3, 5-6");
     }
 }

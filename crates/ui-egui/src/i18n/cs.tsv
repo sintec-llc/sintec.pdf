@@ -221,3 +221,14 @@ key	Space	Mezerník
 	The picture is too large for a signature (at most {n} MB)	Obrázek je pro podpis příliš velký (nejvýše {n} MB)
 	Save ({key})	Uložit ({key})
 	Update downloads the new version, checks it and opens it: drag Sintec.PDF into Applications to replace this one. Download opens the release page.	„Aktualizovat“ stáhne novou verzi, ověří ji a otevře: přetáhněte Sintec.PDF do složky Aplikace, aby nahradil tuto. „Stáhnout“ otevře stránku vydání.
+	Extract and save as…	Extrahovat a uložit jako…
+	Extract and save as	Extrahovat a uložit jako
+	p. {pages}	s. {pages}
+	Saved {what} to {path}	Uloženo ({what}): {path}
+	Move here	Přesunout sem
+	Copy here (Shift: move)	Kopírovat sem (Shift: přesunout)
+	Move to the end	Přesunout na konec
+	Copy to the end (Shift: move)	Kopírovat na konec (Shift: přesunout)
+	Moved {what} to {name}	Přesunuto do „{name}“: {what}
+	Copied {what} to {name}	Zkopírováno do „{name}“: {what}
+	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Zkopírováno do „{name}“: {what}; v původním souboru stránky zůstaly (během přetahování se změnil nebo by zůstal prázdný)

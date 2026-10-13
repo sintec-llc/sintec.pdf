@@ -408,6 +408,8 @@ pub struct DocView {
     /// The page-grid gap under the pointer this frame (where dropped files go), when it can
     /// take pages.
     pub grid_gap: Option<usize>,
+    /// Sintec.PDF: the gap in the Pages panel under files dragged in from outside the app.
+    pub panel_file_gap: Option<usize>,
     /// How large the page grid draws its pages (1.0 = the usual thumbnails).
     pub grid_zoom: f32,
     /// A zoom asked for this frame (toolbar, pinch, keys); the grid applies it once it has laid
@@ -452,6 +454,8 @@ pub enum ViewAction {
     /// Save the document as the grid shows it.
     Save,
     Extract,
+    /// Sintec.PDF: save the selected pages as a new PDF file (Save As).
+    ExtractSaveAs,
     Split,
     /// Copy the selected pages (Cut also deletes them).
     CopyPages {
@@ -570,6 +574,7 @@ impl DocView {
             pending_action: None,
             insert_at: None,
             grid_gap: None,
+            panel_file_gap: None,
             grid_zoom: 1.0,
             grid_zoom_request: None,
             grid_anchor: None,
@@ -3432,6 +3437,9 @@ fn organize_toolbar(view: &mut DocView, info: &DocInfo, editable: bool, dirty: b
                 if icons::button(ui, "file-output", 30.0, false, tl!("Extract pages to a new document")).clicked() {
                     view.pending_action = Some(ViewAction::Extract);
                 }
+                if icons::button(ui, "save", 30.0, false, tl!("Extract and save as…")).clicked() {
+                    view.pending_action = Some(ViewAction::ExtractSaveAs);
+                }
                 if icons::button(ui, "scissors", 30.0, false, tl!("Split into files…")).clicked() {
                     view.pending_action = Some(ViewAction::Split);
                 }
@@ -3723,12 +3731,17 @@ fn organize_grid(view: &mut DocView, info: &DocInfo, editable: bool, dirty: bool
                 if resp.double_clicked() {
                     open_page = Some(i);
                 }
-                // Right-click: Cut, Copy, Paste (on the selection, or this page).
+                // Right-click: Extract and save as, Cut, Copy, Paste (on the selection, or this page).
                 resp.context_menu(|ui| {
                     if !view.selected.contains(&i) {
                         view.selected = [i].into();
                         view.current = i;
                     }
+                    if ui.button(tl!("Extract and save as…")).clicked() {
+                        view.pending_action = Some(ViewAction::ExtractSaveAs);
+                        ui.close();
+                    }
+                    ui.separator();
                     if ui.add_enabled(editable, egui::Button::new(tl!("Cut"))).clicked() {
                         view.pending_action = Some(ViewAction::CopyPages { cut: true });
                         ui.close();

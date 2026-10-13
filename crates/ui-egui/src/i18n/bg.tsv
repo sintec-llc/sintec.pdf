@@ -2173,3 +2173,14 @@ key	Space	Интервал
 	Save ({key})	Запазване ({key})
 	A photo or scan of your {what} on white paper, or a PNG with transparency: the paper becomes transparent.	Снимка или сканиране: {what} на бяла хартия, или PNG с прозрачност. Хартията става прозрачна.
 	Update downloads the new version, checks it and opens it: drag Sintec.PDF into Applications to replace this one. Download opens the release page.	„Обнови“ изтегля новата версия, проверява я и я отваря: плъзнете Sintec.PDF в „Приложения“, за да замените тази. „Изтегли“ отваря страницата на версията.
+	Extract and save as…	Извличане и запазване като…
+	Extract and save as	Извличане и запазване като
+	p. {pages}	стр. {pages}
+	Saved {what} to {path}	Запазено ({what}): {path}
+	Move here	Преместване тук
+	Copy here (Shift: move)	Копиране тук (Shift — преместване)
+	Move to the end	Преместване в края
+	Copy to the end (Shift: move)	Копиране в края (Shift — преместване)
+	Moved {what} to {name}	Преместено в „{name}“: {what}
+	Copied {what} to {name}	Копирано в „{name}“: {what}
+	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Копирано в „{name}“: {what}; в изходния файл страниците останаха (той се промени по време на плъзгането или щеше да остане празен)

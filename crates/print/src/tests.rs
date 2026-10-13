@@ -238,14 +238,13 @@ fn windows_printer_list_and_job_description() {
     );
 }
 
+/// The printing scripts go to PowerShell on standard input, which it reads in the console code
+/// page: they must be ASCII (paths and names travel in the job file).
 #[test]
-fn powershell_scripts_are_base64_utf16() {
-    // The value PowerShell's own docs give for `dir "c:\program files"`.
-    assert_eq!(spool::powershell_encoded("dir \"c:\\program files\" "), "ZABpAHIAIAAiAGMAOgBcAHAAcgBvAGcAcgBhAG0AIABmAGkAbABlAHMAIgAgAA==");
-    for s in ["", "a", "ab", "abc"] {
-        assert_eq!(spool::powershell_encoded(s).len() % 4, 0, "{s:?}");
-    }
+fn powershell_scripts_are_ascii() {
     assert!(spool::WIN_PRINT_SCRIPT.contains("SINTEC_PRINT_JOB") && spool::WIN_PRINT_SCRIPT.contains("StandardPrintController"));
+    assert!(spool::WIN_PRINT_SCRIPT.is_ascii(), "print script");
+    assert!(spool::WIN_LIST_PRINTERS.is_ascii(), "printer list script");
 }
 
 #[test]
