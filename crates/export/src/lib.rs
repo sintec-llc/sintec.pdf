@@ -1,4 +1,4 @@
-//! pdfcraft-export — Export a PDF ▸ Word, HTML, RTF (L4).
+//! pdfcraft-export — Export a PDF ▸ Word, Excel, HTML, RTF (L4).
 //!
 //! The engine reduces each page to [`Page`]: paragraphs (text, box, size, bold/italic) and
 //! images (encoded bytes and box), in reading order. The writers turn that into a flowing
@@ -7,9 +7,44 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+mod xlsx;
 mod zip;
 
+pub use xlsx::xlsx;
 pub use zip::Zip;
+
+/// Reading back what the writers produce, for the tests.
+#[cfg(test)]
+pub(crate) mod tests_support {
+    use std::io::Read;
+
+    /// The files of a zip archive written by [`crate::Zip`]: (name, contents as text).
+    pub fn unzip(bytes: &[u8]) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        let mut at = 0usize;
+        let u16_at = |i: usize| bytes.get(i..i + 2).map_or(0, |b| u16::from_le_bytes([b[0], b[1]]) as usize);
+        let u32_at = |i: usize| bytes.get(i..i + 4).map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize);
+        while bytes.get(at..at + 4) == Some(b"PK\x03\x04".as_slice()) {
+            let method = u16_at(at + 8);
+            let size = u32_at(at + 18);
+            let name_len = u16_at(at + 26);
+            let extra = u16_at(at + 28);
+            let name = String::from_utf8_lossy(&bytes[at + 30..at + 30 + name_len]).into_owned();
+            let start = at + 30 + name_len + extra;
+            let data = &bytes[start..start + size];
+            let text = if method == 8 {
+                let mut s = String::new();
+                let _ = flate2::read::DeflateDecoder::new(data).read_to_string(&mut s);
+                s
+            } else {
+                String::from_utf8_lossy(data).into_owned()
+            };
+            out.push((name, text));
+            at = start + size;
+        }
+        out
+    }
+}
 
 /// A paragraph of a page.
 #[derive(Clone, Debug, PartialEq)]

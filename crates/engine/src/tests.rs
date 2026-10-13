@@ -2149,6 +2149,82 @@ trailer <</Root 1 0 R>>
     assert!(d.text_blocks(0).is_empty());
 }
 
+/// Export to Excel: a PDF price table comes out as cells, with its amounts as numbers.
+#[test]
+fn exporting_to_excel_puts_a_table_into_cells() {
+    let mut content = String::from("BT /F1 16 Tf 72 740 Td (Price list) Tj ET ");
+    for (i, (item, qty, price)) in
+        [("Item", "Qty", "Price"), ("Paper", "10", "1250.50"), ("Toner", "2", "3400"), ("Pens", "100", "12.5")].iter().enumerate()
+    {
+        let y = 700 - i * 20;
+        content.push_str(&format!(
+            "BT /F1 11 Tf 72 {y} Td ({item}) Tj ET BT /F1 11 Tf 200 {y} Td ({qty}) Tj ET BT /F1 11 Tf 300 {y} Td ({price}) Tj ET "
+        ));
+    }
+    let objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>".into(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".into(),
+    ];
+    let mut pdf = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(pdf.len());
+        pdf.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = pdf.len();
+    pdf.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        pdf.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    pdf.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    let mut s = Session::new();
+    let id = s.open("prices.pdf", None, Arc::new(pdf), None).unwrap();
+    let d = s.get(id).unwrap();
+    assert_eq!(compare::OfficeFormat::from_extension("XLSX"), Some(compare::OfficeFormat::Xlsx));
+    let xlsx = d.export_office_named(compare::OfficeFormat::Xlsx, "Страница");
+    // SINTEC_XLSX_OUT=file keeps the workbook, to open in Excel by hand.
+    if let Ok(out) = std::env::var("SINTEC_XLSX_OUT") {
+        std::fs::write(out, &xlsx).unwrap();
+    }
+    assert!(xlsx.starts_with(b"PK\x03\x04"));
+    // The sheet, inflated: the zip's first sheet entry.
+    let sheet = zip_entry(&xlsx, "xl/worksheets/sheet1.xml");
+    for cell in ["<v>1250.5</v>", "<v>3400</v>", "<v>12.5</v>", "<v>100</v>", ">Paper<", ">Price list<"] {
+        assert!(sheet.contains(cell), "{cell} missing from {sheet}");
+    }
+    // Item / Qty / Price sit in columns A, B, C of one row.
+    assert!(sheet.contains("r=\"A") && sheet.contains("r=\"B") && sheet.contains("r=\"C"), "{sheet}");
+    assert!(zip_entry(&xlsx, "xl/workbook.xml").contains("name=\"Страница 1\""));
+}
+
+/// An entry of a zip archive, inflated, as text (test helper).
+fn zip_entry(zip: &[u8], name: &str) -> String {
+    use std::io::Read;
+    let mut at = 0usize;
+    let u16_at = |i: usize| u16::from_le_bytes([zip[i], zip[i + 1]]) as usize;
+    let u32_at = |i: usize| u32::from_le_bytes([zip[i], zip[i + 1], zip[i + 2], zip[i + 3]]) as usize;
+    while zip.get(at..at + 4) == Some(b"PK\x03\x04".as_slice()) {
+        let (method, size, name_len, extra) = (u16_at(at + 8), u32_at(at + 18), u16_at(at + 26), u16_at(at + 28));
+        let entry = String::from_utf8_lossy(&zip[at + 30..at + 30 + name_len]).into_owned();
+        let start = at + 30 + name_len + extra;
+        if entry == name {
+            let data = &zip[start..start + size];
+            let mut s = String::new();
+            if method == 8 {
+                flate2::read::DeflateDecoder::new(data).read_to_string(&mut s).unwrap();
+            } else {
+                s = String::from_utf8_lossy(data).into_owned();
+            }
+            return s;
+        }
+        at = start + size;
+    }
+    panic!("{name} not in the archive");
+}
+
 #[test]
 fn exporting_office_files_keeps_text_colour() {
     // #526: a dark green heading came out black in Word.

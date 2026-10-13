@@ -2263,3 +2263,6 @@ key	Space	Пробел
 	Skip this version	Пропустить эту версию
 	Check for updates automatically	Проверять обновления автоматически
 	Asks GitHub for a newer version at start and twice a day, and offers it. Nothing is downloaded until you choose Update.	При запуске и дважды в день спрашивает GitHub о новой версии и предлагает её. Ничего не скачивается, пока вы не нажмёте «Обновить».
+
+# Export a PDF ▸ Excel (0.2.5).
+	Export to Excel…	Экспорт в Excel…

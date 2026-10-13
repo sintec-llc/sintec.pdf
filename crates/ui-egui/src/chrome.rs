@@ -427,7 +427,7 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         crate::commands::command_item(app, ui, "file.save");
                         crate::commands::command_item(app, ui, "file.save_as");
                         ui.menu_button(tl!("Export"), |ui| {
-                            for id in ["export.docx", "export.html", "export.rtf", "export.image", "export.text"] {
+                            for id in ["export.docx", "export.xlsx", "export.html", "export.rtf", "export.image", "export.text"] {
                                 crate::commands::command_item(app, ui, id);
                             }
                         });

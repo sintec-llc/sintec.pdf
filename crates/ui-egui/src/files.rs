@@ -752,7 +752,7 @@ impl PdfCraftApp {
     }
 
     /// Export all comments / form data: the format follows the file name's extension.
-    /// Export a PDF ▸ Word, HTML or RTF: ask where (`save_override` in tests), then write.
+    /// Export a PDF ▸ Word, Excel, HTML or RTF: ask where (`save_override` in tests), then write.
     pub fn export_office_dialog(&mut self, format: pdfcraft_engine::compare::OfficeFormat) {
         // What's typed in a form field is part of the document (#166).
         if !self.commit_form_typing() {
@@ -762,7 +762,8 @@ impl PdfCraftApp {
         let Some(doc) = self.session.get(id) else { return };
         let stem = doc.name.trim_end_matches(".pdf").trim_end_matches(".PDF").to_string();
         let ext = format.extension();
-        let bytes = doc.export_office(format);
+        // Excel sheets are named in the interface language ("Страница 1").
+        let bytes = doc.export_office_named(format, tl!("Page"));
         #[cfg(not(target_arch = "wasm32"))]
         {
             let write = move |app: &mut Self, path: std::path::PathBuf| match crate::editing::write_atomically(&path.to_string_lossy(), &bytes) {

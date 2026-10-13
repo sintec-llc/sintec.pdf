@@ -44,7 +44,7 @@ DirectX 12, falling back to OpenGL; on machines without a GPU, Windows' software
   digital IDs, validate signatures.
 - **Protect:** passwords and permissions, redaction, sanitising.
 - **Create and export:** PDFs from images, text or the clipboard; pages as PNG, JPEG or TIFF;
-  text, Word, HTML and RTF export; optimise file size.
+  text, Word, Excel, HTML and RTF export; optimise file size.
 - **Scan & OCR:** turn scanned pages into searchable, copyable PDFs.
   - **46 languages** with PaddleOCR PP-OCRv5 models: Russian, Ukrainian, Belarusian, Kazakh and
     other Cyrillic languages; German, French, Spanish, Italian, Polish, Turkish and the other
