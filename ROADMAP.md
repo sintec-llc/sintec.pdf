@@ -94,26 +94,13 @@ What's strong and missing in each: [target-app-parity.md](docs/target-app-parity
 
 ## Languages
 
-Measured from `crates/ui-egui/src/i18n/*.tsv` (2,143 keys). Detail and script notes:
-[localization-parity.md](docs/localization-parity.md).
+Sintec.PDF ships English and Russian only (the other PdfCraft catalogs were removed on
+2026-10-13). Detail: [localization-parity.md](docs/localization-parity.md).
 
 | Language | Code | Strings | Status |
 |---|---|---|---|
 | English | `en` | 100% | full |
-| Simplified Chinese | `zh-hans` | 97.4% | partial (no Hans UI face in releases, #826) |
-| Spanish | `es` | 95.5% | partial |
-| Hindi | `hi` | 0% | none |
-| Arabic | `ar` | 100% | partial (layout not mirrored) |
-| French | `fr` | 99.3% | partial |
-| Portuguese (Brazil) | `pt-br` | 99.4% | partial |
-| Indonesian | `id` | 0% | none |
-| Japanese | `ja` | 99.1% | partial |
-| German | `de` | 99.3% | partial |
-| Korean | `ko` | 0% | none |
-| Vietnamese | `vi` | 0% | none |
-
-Also shipped: Traditional Chinese, Russian, Bulgarian, Telugu, Hungarian, Ukrainian, Italian
-(94–100%) and Czech (menus only): **8 more languages**.
+| Russian | `ru` | every command, All tools label and `tl!` literal | partial (engine error details in English, no help) |
 
 ## Upcoming
 
@@ -122,19 +109,20 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | Rank | Milestone | Estimate (h) |
 |---|---|---|
 | 0 | Convert and share: encrypted output opens in Acrobat (#774), Create PDF from Office, Word export that keeps layout (#773) | 40–70 |
-| 1 | Backlog and platform: crash and wrong-result reports, Windows printing (#756), Chinese UI face (#826) | 65–120 |
+| 1 | Backlog and platform: crash and wrong-result reports, Windows printing (#756) | 65–120 |
 | 2 | Fidelity harness against Acrobat and the renderer decision (M2; owner decision on #841) | 110–190 |
 | 3 | Editing existing content (M7) | 100–180 |
 | 4 | OCR languages and Office export/import (M10) | 95–175 |
 | 5 | Preflight and PDF/A/X/UA (M11) | 65–115 |
 | 6 | Signatures for institutions: PKCS #11, timestamp servers, online LTV (M9) | 40–70 |
 | 7 | Accessibility tagging (M12) | 40–70 |
-| 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
+| 8 | 1.0 polish: performance, keyboard-only (M14) | 55–95 |
 
 ## Progress log
 
 Newest first: the date, what moved, and the new overall estimate.
 
+- **2026-10-13 (Sintec.PDF, M14):** English and Russian only. Removed the other 15 interface catalogs, their date names, the Arabic right-to-left label support and the Chinese-first font order; a saved language that is gone follows the system again. Fallback fonts for file names in other scripts stay.
 - **2026-10-10 (M14, interface size):** Preferences ▸ Interface size scales the whole interface (50–250 %, setting `ui_scale`, control option `ui-scale`); 50 % brings an interface the system draws at 200 % back to 100 % (#456). Auto, the default, follows the desktop's text scaling: on Linux and the BSDs the desktop app reads GNOME's `text-scaling-factor` once at launch, so with Large Text (1.25) on a 1× display the interface no longer draws 13 px labels that show their pixels next to the system's text. The size is egui's zoom factor, so `pixels_per_point` grows with it and page rasters stay one texel per screen pixel; egui's own ⌘+/⌘− interface zoom is turned off so those keys stay page zoom. Still missing: KDE's font DPI and Windows' "Make text bigger" aren't read (both scale only text there), and egui's text is still greyscale-antialiased without the system's gamma, so small text looks rougher than GTK's at 100 %.
 - **2026-10-10 (M14, #496):** Shortcut displays share a UI formatter across toolbar search, registry menus, command palette, Help and tooltips. Modifier and key names use a dedicated catalog context in every bundled translation; missing entries keep the English key name rather than a command translation. German shows Strg/Umschalt/Entf, macOS retains its symbols, and runtime language changes refresh the display. Regression coverage checks localized layout widths, English/German switching, platform conventions and unchanged command execution. Milestone and effort estimates unchanged.
 

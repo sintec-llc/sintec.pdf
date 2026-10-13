@@ -49,9 +49,8 @@ DirectX 12, falling back to OpenGL; on machines without a GPU, Windows' software
   - **Russian, Ukrainian and Belarusian** (PaddleOCR PP-OCRv5 East Slavic models), with Latin
     letters and digits mixed in.
   - **English** and other Latin-alphabet text (ocrs models).
-- **Interface languages:** Russian, English, Japanese, Simplified and Traditional Chinese, Czech
-  and Brazilian Portuguese. A Russian Windows starts in Russian automatically; change it under
-  Preferences.
+- **Interface languages:** Russian and English. A Russian Windows starts in Russian
+  automatically; change it under Preferences.
 - **Automation:** `sintec-pdf-cli` scripts every tool from the command line or as an MCP server.
 
 ## Build from source

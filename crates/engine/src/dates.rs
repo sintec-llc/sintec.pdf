@@ -34,29 +34,22 @@ pub const MAX_DATE_FORMAT_CHARS: usize = 64;
 /// Month and weekday names in one language. Weekdays start on Sunday.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DateLanguage {
-    /// The interface-language code where there is one (`en`, `cs`, `pt-br`, `zh-hans`, …).
+    /// The interface-language code (`en`, `ru`).
     pub code: &'static str,
     /// Its name in itself, for pickers.
     pub name: &'static str,
     pub months: [&'static str; 12],
     /// The month after a day number (`mmmm` when the pattern also shows `d` or `dd`), where
-    /// the language changes it: Czech `8. října`, Russian `8 октября`.
+    /// the language changes it: Russian `8 октября`.
     pub months_with_day: Option<[&'static str; 12]>,
     pub months_short: [&'static str; 12],
     pub days: [&'static str; 7],
     pub days_short: [&'static str; 7],
 }
 
-const CJK_MONTHS: [&str; 12] = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
-const ZH_MONTHS: [&str; 12] = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
-const ZH_DAYS: [&str; 7] = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
-
-const AR_MONTHS: [&str; 12] = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-const AR_DAYS: [&str; 7] = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-
 /// The languages month and weekday names can be written in (Preferences ▸ Date format ▸ Language):
 /// the interface languages, in the same order and with the same names.
-pub const DATE_LANGUAGES: [DateLanguage; 17] = [
+pub const DATE_LANGUAGES: [DateLanguage; 2] = [
     DateLanguage {
         code: "en",
         name: "English",
@@ -67,91 +60,6 @@ pub const DATE_LANGUAGES: [DateLanguage; 17] = [
         days_short: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
     },
     DateLanguage {
-        code: "ja",
-        name: "日本語",
-        months: CJK_MONTHS,
-        months_with_day: None,
-        months_short: CJK_MONTHS,
-        days: ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"],
-        days_short: ["日", "月", "火", "水", "木", "金", "土"],
-    },
-    DateLanguage {
-        code: "zh-hans",
-        name: "简体中文",
-        months: ZH_MONTHS,
-        months_with_day: None,
-        months_short: CJK_MONTHS,
-        days: ZH_DAYS,
-        days_short: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
-    },
-    DateLanguage {
-        code: "zh-hant",
-        name: "繁體中文",
-        months: ZH_MONTHS,
-        months_with_day: None,
-        months_short: CJK_MONTHS,
-        days: ZH_DAYS,
-        days_short: ["週日", "週一", "週二", "週三", "週四", "週五", "週六"],
-    },
-    DateLanguage {
-        code: "cs",
-        name: "Čeština",
-        months: ["leden", "únor", "březen", "duben", "květen", "červen", "červenec", "srpen", "září", "říjen", "listopad", "prosinec"],
-        months_with_day: Some([
-            "ledna",
-            "února",
-            "března",
-            "dubna",
-            "května",
-            "června",
-            "července",
-            "srpna",
-            "září",
-            "října",
-            "listopadu",
-            "prosince",
-        ]),
-        months_short: ["led", "úno", "bře", "dub", "kvě", "čvn", "čvc", "srp", "zář", "říj", "lis", "pro"],
-        days: ["neděle", "pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota"],
-        days_short: ["ne", "po", "út", "st", "čt", "pá", "so"],
-    },
-    DateLanguage {
-        code: "pt-br",
-        name: "Português (Brasil)",
-        months: ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"],
-        months_with_day: None,
-        months_short: ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"],
-        days: ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"],
-        days_short: ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"],
-    },
-    DateLanguage {
-        code: "de",
-        name: "Deutsch",
-        months: ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"],
-        months_with_day: None,
-        months_short: ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez."],
-        days: ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"],
-        days_short: ["So.", "Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa."],
-    },
-    DateLanguage {
-        code: "es",
-        name: "Español",
-        months: ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"],
-        months_with_day: None,
-        months_short: ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"],
-        days: ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"],
-        days_short: ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"],
-    },
-    DateLanguage {
-        code: "fr",
-        name: "Français",
-        months: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"],
-        months_with_day: None,
-        months_short: ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."],
-        days: ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"],
-        days_short: ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."],
-    },
-    DateLanguage {
         code: "ru",
         name: "Русский",
         months: ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"],
@@ -159,109 +67,6 @@ pub const DATE_LANGUAGES: [DateLanguage; 17] = [
         months_short: ["янв.", "февр.", "март", "апр.", "май", "июнь", "июль", "авг.", "сент.", "окт.", "нояб.", "дек."],
         days: ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"],
         days_short: ["вс", "пн", "вт", "ср", "чт", "пт", "сб"],
-    },
-    DateLanguage {
-        code: "bg",
-        name: "Български",
-        months: ["януари", "февруари", "март", "април", "май", "юни", "юли", "август", "септември", "октомври", "ноември", "декември"],
-        months_with_day: None,
-        months_short: ["яну", "фев", "март", "апр", "май", "юни", "юли", "авг", "сеп", "окт", "ное", "дек"],
-        days: ["неделя", "понеделник", "вторник", "сряда", "четвъртък", "петък", "събота"],
-        days_short: ["нд", "пн", "вт", "ср", "чт", "пт", "сб"],
-    },
-    DateLanguage {
-        code: "te",
-        name: "తెలుగు",
-        months: ["జనవరి", "ఫిబ్రవరి", "మార్చి", "ఏప్రిల్", "మే", "జూన్", "జులై", "ఆగస్టు", "సెప్టెంబర్", "అక్టోబర్", "నవంబర్", "డిసెంబర్"],
-        months_with_day: None,
-        months_short: ["జన", "ఫిబ్ర", "మార్చి", "ఏప్రి", "మే", "జూన్", "జులై", "ఆగ", "సెప్టెం", "అక్టో", "నవం", "డిసెం"],
-        days: ["ఆదివారం", "సోమవారం", "మంగళవారం", "బుధవారం", "గురువారం", "శుక్రవారం", "శనివారం"],
-        days_short: ["ఆది", "సోమ", "మంగళ", "బుధ", "గురు", "శుక్ర", "శని"],
-    },
-    DateLanguage {
-        code: "hu",
-        name: "Magyar",
-        months: [
-            "január",
-            "február",
-            "március",
-            "április",
-            "május",
-            "június",
-            "július",
-            "augusztus",
-            "szeptember",
-            "október",
-            "november",
-            "december",
-        ],
-        months_with_day: None,
-        months_short: ["jan.", "febr.", "márc.", "ápr.", "máj.", "jún.", "júl.", "aug.", "szept.", "okt.", "nov.", "dec."],
-        days: ["vasárnap", "hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat"],
-        days_short: ["V", "H", "K", "Sze", "Cs", "P", "Szo"],
-    },
-    DateLanguage {
-        code: "uk",
-        name: "Українська",
-        months: ["січень", "лютий", "березень", "квітень", "травень", "червень", "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"],
-        months_with_day: Some([
-            "січня",
-            "лютого",
-            "березня",
-            "квітня",
-            "травня",
-            "червня",
-            "липня",
-            "серпня",
-            "вересня",
-            "жовтня",
-            "листопада",
-            "грудня",
-        ]),
-        months_short: ["січ.", "лют.", "бер.", "квіт.", "трав.", "черв.", "лип.", "серп.", "вер.", "жовт.", "лист.", "груд."],
-        days: ["неділя", "понеділок", "вівторок", "середа", "четвер", "пʼятниця", "субота"],
-        days_short: ["нд", "пн", "вт", "ср", "чт", "пт", "сб"],
-    },
-    DateLanguage {
-        code: "it",
-        name: "Italiano",
-        months: ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"],
-        months_with_day: None,
-        months_short: ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"],
-        days: ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"],
-        days_short: ["dom", "lun", "mar", "mer", "gio", "ven", "sab"],
-    },
-    // Arabic has no shorter written forms of its month and weekday names.
-    DateLanguage {
-        code: "ar",
-        name: "العربية",
-        months: AR_MONTHS,
-        months_with_day: None,
-        months_short: AR_MONTHS,
-        days: AR_DAYS,
-        days_short: AR_DAYS,
-    },
-    DateLanguage {
-        code: "pl",
-        name: "Polski",
-        months: ["styczeń", "luty", "marzec", "kwiecień", "maj", "czerwiec", "lipiec", "sierpień", "wrzesień", "październik", "listopad", "grudzień"],
-        months_with_day: Some([
-            "stycznia",
-            "lutego",
-            "marca",
-            "kwietnia",
-            "maja",
-            "czerwca",
-            "lipca",
-            "sierpnia",
-            "września",
-            "października",
-            "listopada",
-            "grudnia",
-        ]),
-        months_short: ["sty", "lut", "mar", "kwi", "maj", "cze", "lip", "sie", "wrz", "paź", "lis", "gru"],
-        days: ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"],
-        days_short: ["niedz.", "pon.", "wt.", "śr.", "czw.", "pt.", "sob."],
     },
 ];
 
@@ -272,7 +77,7 @@ pub fn date_language(code: &str) -> Option<&'static DateLanguage> {
 
 /// The characters of `text` that Fill & Sign can't write into a PDF yet, each once. Its text is
 /// drawn in Helvetica with WinAnsi encoding (Western European letters), so anything else (`ř`,
-/// Japanese, Chinese) would become `?` in the file.
+/// Cyrillic, Japanese) would become `?` in the file.
 pub fn unwritable(text: &str) -> String {
     let mut out = String::new();
     for c in text.chars() {
@@ -536,31 +341,23 @@ mod tests {
 
     #[test]
     fn names_follow_the_date_language() {
-        assert_eq!(in_lang("dddd, d \\de mmmm \\de yyyy", "es"), "sábado, 7 de marzo de 2026");
-        assert_eq!(in_lang("ddd d mmm", "pt-br"), "sáb 7 mar");
-        assert_eq!(in_lang("dddd d mmmm yyyy", "fr"), "samedi 7 mars 2026");
-        assert_eq!(in_lang("dddd d mmmm yyyy", "it"), "sabato 7 marzo 2026");
-        assert_eq!(in_lang("ddd d mmm", "it"), "sab 7 mar");
-        assert_eq!(in_lang("dddd, d mmmm", "te"), "శనివారం, 7 మార్చి");
-        assert_eq!(in_lang("dddd, d mmmm", "ar"), "السبت, 7 مارس");
-        assert_eq!(in_lang("yyyy\\年mmmmd\\日 dddd", "ja"), "2026年3月7日 土曜日");
-        assert_eq!(in_lang("yyyy\\年mmmmd\\日 dddd", "zh-hans"), "2026年三月7日 星期六");
-        assert_eq!(in_lang("ddd", "zh-hant"), "週六");
-        assert_eq!(date_language("PT-BR").map(|l| l.code), Some("pt-br"));
+        assert_eq!(in_lang("dddd, d mmmm yyyy", "ru"), "суббота, 7 марта 2026");
+        assert_eq!(in_lang("ddd d mmm", "ru"), "сб 7 март");
+        assert_eq!(in_lang("dddd, mmmm d", "en"), "Saturday, March 7");
+        assert_eq!(date_language("RU").map(|l| l.code), Some("ru"));
         assert!(date_language("xx").is_none());
+        assert!(date_language("de").is_none(), "only the interface languages");
         for l in &DATE_LANGUAGES {
             assert!(l.months.iter().chain(&l.months_short).chain(&l.days).chain(&l.days_short).all(|n| !n.is_empty()), "{}", l.code);
         }
     }
 
     #[test]
-    fn czech_and_russian_months_change_after_a_day() {
-        assert_eq!(in_lang("d. mmmm yyyy", "cs"), "7. března 2026");
-        assert_eq!(in_lang("mmmm yyyy", "cs"), "březen 2026");
+    fn russian_months_change_after_a_day() {
         assert_eq!(in_lang("d mmmm yyyy", "ru"), "7 марта 2026");
         assert_eq!(in_lang("mmmm yyyy", "ru"), "март 2026");
         // A weekday (dddd) is not a day number.
-        assert_eq!(in_lang("dddd, mmmm", "cs"), "sobota, březen");
+        assert_eq!(in_lang("dddd, mmmm", "ru"), "суббота, март");
     }
 
     #[test]
@@ -568,17 +365,15 @@ mod tests {
         let mut s = Session::new().with_clock(|| 1_700_000_000);
         s.set_date_format("dddd d mmmm").unwrap();
         assert_eq!(s.today_text(None, None).as_deref(), Ok("Tuesday 14 November"), "English by default");
-        assert_eq!(s.today_text(None, Some("es")).as_deref(), Ok("martes 14 noviembre"), "a caller's language");
-        s.set_date_language(Some("PT-BR")).unwrap();
-        assert_eq!(s.date_language(), Some("pt-br"));
-        assert_eq!(s.today_text(None, None).as_deref(), Ok("terça-feira 14 novembro"));
-        assert_eq!(s.today_text(Some("d mmmm"), Some("uk")).as_deref(), Ok("14 листопада"), "Ukrainian months after a day");
-        assert_eq!(s.today_text(Some("dddd d mmmm"), Some("de")).as_deref(), Ok("Dienstag 14 November"));
-        assert!(s.set_date_language(Some("xx")).unwrap_err().contains("zh-hant"), "only the interface languages");
-        assert_eq!(s.date_language(), Some("pt-br"), "an unknown language keeps the previous one");
-        s.set_date_language(Some("IT")).unwrap();
-        assert_eq!(s.date_language(), Some("it"));
-        assert_eq!(s.today_text_for_pdf(None, None).as_deref(), Ok("martedì 14 novembre"), "Italian names and accents can be written into a PDF");
+        assert_eq!(s.today_text(None, Some("ru")).as_deref(), Ok("вторник 14 ноября"), "a caller's language");
+        s.set_date_language(Some("RU")).unwrap();
+        assert_eq!(s.date_language(), Some("ru"));
+        assert_eq!(s.today_text(Some("mmmm yyyy"), None).as_deref(), Ok("ноябрь 2023"));
+        let e = s.set_date_language(Some("xx")).unwrap_err();
+        assert!(e.contains("en, ru"), "only the interface languages: {e}");
+        assert_eq!(s.date_language(), Some("ru"), "an unknown language keeps the previous one");
+        s.set_date_language(Some("EN")).unwrap();
+        assert_eq!(s.today_text_for_pdf(None, None).as_deref(), Ok("Tuesday 14 November"));
         s.set_date_language(None).unwrap();
         assert_eq!(s.date_language(), None);
     }
@@ -586,15 +381,13 @@ mod tests {
     #[test]
     fn dates_the_pdf_cannot_hold_are_refused_not_damaged() {
         assert_eq!(unwritable("8. října 2026"), "ř");
-        assert_eq!(unwritable("2026年10月8日"), "年月日");
+        assert_eq!(unwritable("14 ноя"), "ноя");
         assert_eq!(unwritable("sábado, 7 de março – 2026?"), "", "Western European, dashes and ? are fine");
         let mut s = Session::new().with_clock(|| 1_700_000_000);
-        s.set_date_format("d. mmmm yyyy").unwrap();
-        assert_eq!(s.today_text_for_pdf(None, Some("es")).as_deref(), Ok("14. noviembre 2023"));
-        assert_eq!(s.today_text_for_pdf(None, Some("cs")).as_deref(), Ok("14. listopadu 2023"), "no letter outside WinAnsi");
-        let e = s.today_text_for_pdf(Some("dddd"), Some("ja")).unwrap_err();
-        assert!(e.contains("火曜日") && e.contains("can't be written into the PDF yet"), "{e}");
-        assert!(s.today_text_for_pdf(Some("dd.mm.yyyy"), Some("ja")).is_ok(), "numbers are fine in any language");
-        assert!(s.today_text_for_pdf(Some("yyyy\\年mm\\月"), Some("ja")).unwrap_err().contains("年月"));
+        s.set_date_format("d mmmm yyyy").unwrap();
+        assert_eq!(s.today_text_for_pdf(None, Some("en")).as_deref(), Ok("14 November 2023"));
+        let e = s.today_text_for_pdf(Some("dddd"), Some("ru")).unwrap_err();
+        assert!(e.contains("вторник") && e.contains("can't be written into the PDF yet"), "{e}");
+        assert!(s.today_text_for_pdf(Some("dd.mm.yyyy"), Some("ru")).is_ok(), "numbers are fine in any language");
     }
 }

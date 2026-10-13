@@ -1,6 +1,15 @@
-# Russian (ru) catalog. Format: see the header of ja.tsv
-# (context <TAB> source <TAB> translation; @id, @plural and other contexts; escapes \n \t \\).
-# Plural forms (see `plural_ru` in i18n/mod.rs): one (1, 21, 31…) | few (2–4, 22–24…) | many (0, 5–20, 25…).
+# Russian (ru) catalog. Columns, separated by a TAB:  context <TAB> source <TAB> translation
+#
+#   context  empty                a plain UI string; `source` is the English text in the code
+#            @id                  a command id (e.g. file.saveAs): wins over the English text for
+#                                 that menu item, so one id can read differently from its twin
+#            @plural              `source` is "one|other" (English forms); the translation lists the
+#                                 language's forms separated by "|" (see `plural` in i18n/mod.rs)
+#            anything else        a disambiguating context passed to `tr_ctx`
+#   escapes  \n  \t  \\  inside a column. `{name}` placeholders must appear in both columns.
+#   lines starting with # and blank lines are ignored.
+#
+# Plural forms (see `plural_russian` in i18n/mod.rs): one (1, 21, 31…) | few (2–4, 22–24…) | many (0, 5–20, 25…).
 #
 # Clean-room: written from the meaning of the English labels, following common Russian desktop
 # conventions (menus are nouns or infinitives, buttons are infinitives); not taken from Adobe

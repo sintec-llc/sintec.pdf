@@ -380,13 +380,13 @@ mod tests {
     #[test]
     fn search_placeholder_never_overlaps_the_shortcut() {
         let previous = crate::i18n::current();
-        for (code, expected) in [("en", "Ctrl+K"), ("de", "Strg+K")] {
+        for (code, expected) in [("en", "Ctrl+K"), ("ru", "Ctrl+K")] {
             crate::i18n::set_current(crate::i18n::Lang::from_code(code).unwrap());
             for width in [260.0, 160.0, 90.0] {
                 let ctx = egui::Context::default();
                 ctx.set_os(egui::os::OperatingSystem::Nix);
                 ctx.set_fonts(theme::font_definitions());
-                let placeholder = "Werkzeuge und Befehle suchen";
+                let placeholder = "Поиск инструментов и команд по названию";
                 let output = ctx.run_ui(egui::RawInput::default(), |ui| {
                     search_box(ui, placeholder, width);
                 });
@@ -399,7 +399,7 @@ mod tests {
                 let (_, shortcut) = text_shapes.iter().find(|(_, text)| text.galley.job.text.contains('K')).unwrap();
                 assert_eq!(shortcut.galley.job.text, expected);
                 assert!(clip.right() <= shortcut.pos.x - 9.0, "hint must leave a gap before the shortcut at width {width}");
-                assert!(hint.galley.elided, "the long original German hint must be elided at width {width}");
+                assert!(hint.galley.elided, "the long Russian hint must be elided at width {width}");
                 assert_eq!(hint.galley.rows.len(), 1);
                 output.drop_without_applying_deltas();
             }

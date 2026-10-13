@@ -187,8 +187,8 @@ mod tests {
 
     #[test]
     fn translated_card_description_leaves_room_for_the_action() {
-        let de = crate::i18n::Lang::from_code("de").unwrap();
-        crate::i18n::set_current(de);
+        let ru = crate::i18n::Lang::from_code("ru").unwrap();
+        crate::i18n::set_current(ru);
         let ctx = egui::Context::default();
         ctx.set_fonts(theme::font_definitions());
         let mut app = PdfCraftApp::new();
@@ -200,7 +200,7 @@ mod tests {
             .items
             .iter()
             .take(3)
-            .map(|item| crate::i18n::tr(de, item.label))
+            .map(|item| crate::i18n::tr(ru, item.label))
             .collect::<Vec<_>>()
             .join(" · ");
         let output = ctx
@@ -213,7 +213,7 @@ mod tests {
         let description = text_shapes.iter().find(|text| text.galley.job.text == blurb).unwrap();
         let action = text_shapes
             .iter()
-            .find(|text| text.galley.job.text == crate::i18n::tr(de, "Use now") && (text.pos.x - description.pos.x).abs() < 0.1)
+            .find(|text| text.galley.job.text == crate::i18n::tr(ru, "Use now") && (text.pos.x - description.pos.x).abs() < 0.1)
             .unwrap();
         assert!(description.galley.rows.len() <= 2);
         assert!(

@@ -315,14 +315,15 @@ fn the_shortcuts_dialog_lists_the_real_bindings() {
 fn localized_shortcuts_update_immediately_and_keep_command_ids_and_key_bindings() {
     let mut h = harness();
     h.ctx.set_os(OperatingSystem::Windows);
-    h.state_mut().set_option("language", "de").unwrap();
+    h.state_mut().set_option("language", "ru").unwrap();
     h.state_mut().execute("help.shortcuts");
     h.run_steps(3);
-    h.get_by_label("Strg+Umschalt+S");
+    // Russian keeps the key-cap names.
+    h.get_by_label("Ctrl+Shift+S");
     h.state_mut().set_option("language", "en").unwrap();
     h.run_steps(2);
     h.get_by_label("Ctrl+Shift+S");
-    h.state_mut().set_option("language", "de").unwrap();
+    h.state_mut().set_option("language", "ru").unwrap();
     h.ctx.set_os(OperatingSystem::Mac);
     h.run_steps(2);
     h.get_by_label("⇧⌘S");
@@ -331,7 +332,7 @@ fn localized_shortcuts_update_immediately_and_keep_command_ids_and_key_bindings(
     h.ctx.set_os(OperatingSystem::Windows);
     h.key_press_modifiers(Modifiers::CTRL | Modifiers::COMMAND, Key::K);
     h.run_steps(3);
-    assert!(h.state().palette_open, "the localized Strg+K display still binds Ctrl+K");
+    assert!(h.state().palette_open, "the translated interface still binds Ctrl+K");
     // Searching by the stable command id still works in a translated interface.
     h.state_mut().set_option("palette", "view.read_mode").unwrap();
     h.run_steps(2);

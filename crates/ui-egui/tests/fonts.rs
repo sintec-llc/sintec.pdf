@@ -5,7 +5,6 @@ use egui::{Color32, FontFamily, FontId};
 use pdfcraft_ui_egui::theme;
 
 const JAPANESE: &str = "日本語の文字";
-const CHINESE: &str = "简体中文欢迎";
 const ARABIC: &str = "واحد اثنين";
 const TELUGU: &str = "తెలుగు ఫైల్";
 
@@ -42,35 +41,6 @@ fn japanese_ui_text_uses_craft_fonts() {
     // Real glyphs are about a full em wide each; tofu boxes and missing glyphs are not.
     for w in layout_widths(&mut fonts, JAPANESE) {
         assert!(w > 13.0 * 0.8 * JAPANESE.chars().count() as f32, "{w}");
-    }
-}
-
-/// Chinese mode orders the CJK fallback with the `Hans` group first, so one line never
-/// mixes faces with different vertical metrics. Without an allowed `Hans` face in the
-/// build input the order part still holds; glyph coverage follows the craft-fonts checkout.
-#[test]
-fn chinese_ui_text_prefers_the_chinese_face() {
-    if pdfcraft_fonts::ui_chinese_fonts().is_empty() {
-        eprintln!(
-            "skipping chinese_ui_text_prefers_the_chinese_face: no Hans face bundled (set CRAFT_FONTS_DIR with an allowed Chinese face to run it)"
-        );
-        return;
-    }
-    let defs = theme::font_definitions_for(true);
-    let hans: Vec<String> = pdfcraft_fonts::ui_chinese_fonts().iter().map(|f| f.name()).collect();
-    for family in [FontFamily::Proportional, FontFamily::Monospace] {
-        let stack = &defs.families[&family];
-        let first_zh = stack.iter().position(|n| hans.iter().any(|h| h == n)).expect("a Hans face is a fallback");
-        let first_ja = stack.iter().position(|n| n.starts_with("BIZ UDPGothic")).expect("BIZ UDPGothic is a fallback");
-        let own = stack.iter().position(|n| n == "Inter" || n == "JetBrainsMono").expect("the app's own font");
-        assert!(own < first_zh && first_zh < first_ja, "{family:?}: {stack:?}");
-    }
-    let mut fonts = Fonts::new(TextOptions::default(), defs);
-    for id in families() {
-        assert!(fonts.has_glyphs(&id, CHINESE), "{id:?} lacks {CHINESE}");
-    }
-    for w in layout_widths(&mut fonts, CHINESE) {
-        assert!(w > 13.0 * 0.8 * CHINESE.chars().count() as f32, "{w}");
     }
 }
 
@@ -129,7 +99,7 @@ fn telugu_ui_text_uses_craft_fonts() {
 #[test]
 fn system_fallback_fills_missing_scripts() {
     assert!(!theme::font_definitions().font_data.contains_key(theme::SYSTEM_FALLBACK));
-    let defs = theme::installed_font_definitions(false);
+    let defs = theme::installed_font_definitions();
     if !defs.font_data.contains_key(theme::SYSTEM_FALLBACK) {
         eprintln!("skipping system_fallback_fills_missing_scripts: no installed fallback font (or PDFCRAFT_SYSTEM_FONTS=0)");
         assert!(defs.families.values().all(|stack| !stack.iter().any(|n| n == theme::SYSTEM_FALLBACK)));
@@ -162,25 +132,14 @@ fn ui_fonts_work_without_craft_fonts() {
     theme::install_fonts(&ctx);
 }
 
-/// Latin- and Cyrillic-script catalogs (Czech, Brazilian Portuguese, German, Spanish, French, Russian, Bulgarian, Hungarian, Ukrainian, Italian) are drawn entirely by the app's own faces
-/// (Inter, JetBrains Mono): no letter falls through to egui's defaults or a CJK fallback. (egui's
-/// `has_glyphs` can't answer this: with only the primary face it is also the replacement face.)
+/// The Russian catalog is drawn entirely by the app's own faces (Inter, JetBrains Mono): no
+/// letter falls through to egui's defaults or a CJK fallback. (egui's `has_glyphs` can't answer
+/// this: with only the primary face it is also the replacement face.)
 #[test]
-fn primary_ui_fonts_cover_latin_and_cyrillic_catalogs() {
+fn primary_ui_fonts_cover_the_russian_catalog() {
     use skrifa::MetadataProvider as _;
     let defs = theme::font_definitions();
-    for (code, catalog) in [
-        ("cs", include_str!("../src/i18n/cs.tsv")),
-        ("pt-br", include_str!("../src/i18n/pt-br.tsv")),
-        ("de", include_str!("../src/i18n/de.tsv")),
-        ("es", include_str!("../src/i18n/es.tsv")),
-        ("fr", include_str!("../src/i18n/fr.tsv")),
-        ("ru", include_str!("../src/i18n/ru.tsv")),
-        ("bg", include_str!("../src/i18n/bg.tsv")),
-        ("hu", include_str!("../src/i18n/hu.tsv")),
-        ("uk", include_str!("../src/i18n/uk.tsv")),
-        ("it", include_str!("../src/i18n/it.tsv")),
-    ] {
+    for (code, catalog) in [("ru", include_str!("../src/i18n/ru.tsv"))] {
         let mut text = String::from("áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽãõçâêôàÃÕÇÂÊÔÀñÑüÜäÄöÖőűß„“¿¡«»…ґҐєЄіІїЇ");
         for line in catalog.lines().filter(|l| !l.starts_with('#')) {
             if let Some(translation) = line.split('\t').nth(2) {
