@@ -342,6 +342,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("page.replace", "Replace pages…", PAGES, None, Assembly, "replace"),
     c("page.extract", "Extract pages…", PAGES, None, Assembly, "file-output"),
     c("page.extract_save_as", "Extract and save as…", PAGES, None, Assembly, "save"),
+    c("page.scan", "Scan into document…", PAGES, None, Nothing, "scan"),
     c("page.split", "Split document…", PAGES, None, Assembly, "scissors"),
     c("page.number", "Number pages…", PAGES, None, Assembly, "hash"),
     c("help.shortcuts", "Keyboard shortcuts", HELP, None, Nothing, "circle-help"),

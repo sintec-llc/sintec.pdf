@@ -47,6 +47,7 @@ mod marks_ui;
 mod measure_ui;
 mod ocr_ui;
 mod optimize_ui;
+mod scan_ui;
 mod search_ui;
 mod sign_ui;
 mod stamps_ui;
@@ -248,6 +249,8 @@ pub enum Dialog {
     CommentProps,
     /// Replace Pages (after choosing the file).
     ReplacePages,
+    /// Sintec.PDF: a page was scanned in; scan another?
+    ScanMore,
     /// Prepare a form ▸ Field Properties.
     FieldProps,
     /// Shared properties of several selected form fields.
@@ -526,6 +529,12 @@ pub struct PdfCraftApp {
     /// A «Преобразовать в PDF» conversion running in the background.
     #[allow(clippy::type_complexity)]
     pub convert_run: Option<std::sync::Arc<std::sync::Mutex<Option<Result<ConvertDone, String>>>>>,
+    /// Sintec.PDF: a scan waiting for the scanner's dialog to close.
+    pub scan_run: Option<scan_ui::ScanRun>,
+    /// Where scanned pages go: the document and the page index (`None`: a new document).
+    pub scan_target: Option<(DocId, usize)>,
+    /// Tests: pages the "scanner" hands over instead of Windows' scanner dialog, in order.
+    pub scan_fakes: Vec<scan_ui::ScanResult>,
     /// Document Properties ▸ Description fields being edited: (document, Title/Author/Subject/Keywords).
     pub props_draft: Option<(DocId, [String; 4])>,
     /// Document Properties ▸ Initial View (and reading options) being edited.
@@ -837,6 +846,9 @@ impl PdfCraftApp {
             print_file_override: None,
             print_run: None,
             convert_run: None,
+            scan_run: None,
+            scan_target: None,
+            scan_fakes: Vec::new(),
             props_draft: None,
             view_draft: None,
             requests: Default::default(),
@@ -2143,6 +2155,7 @@ impl eframe::App for PdfCraftApp {
         #[cfg(not(target_arch = "wasm32"))]
         self.poll_convert();
         self.poll_optimize();
+        self.poll_scan();
         self.poll_action();
         self.process_file_requests();
         #[cfg(not(target_arch = "wasm32"))]

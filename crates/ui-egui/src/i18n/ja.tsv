@@ -2244,3 +2244,24 @@ key	Space	スペース
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	「{name}」にコピーしました: {what}。元のファイルには残しました（ドラッグ中に変更されたか、空になるため）
 	Release to open it in a new window	離すと新しいウィンドウで開きます
 	Release to move it to that window	離すとそのウィンドウに移動します
+	Scan	スキャン
+	Scan into document	文書にスキャン
+	Scan into document…	文書にスキャン…
+	Page scanned	ページをスキャンしました
+	Put the next page on the scanner and scan it in after this one, or finish.	次のページをスキャナーに置いてこのページの後にスキャンするか、終了してください。
+	Scan another page	次のページをスキャン
+	The scanner is already in use	スキャナーは使用中です
+	Waiting for the scanner…	スキャナーを待っています…
+	Couldn't scan: {e}	スキャンできませんでした: {e}
+	Scanning works on Windows, through its built-in scanner support	スキャンは Windows の組み込みスキャナー機能で動作します
+	Windows' scanner support (WIA) isn't available on this computer	このコンピューターでは Windows のスキャナー機能 (WIA) を利用できません
+	No scanner was found. Check that it is connected and switched on	スキャナーが見つかりません。接続され電源が入っているか確認してください
+	The scanner is busy	スキャナーはビジー状態です
+	The scanner is offline. Check that it is connected and switched on	スキャナーがオフラインです。接続され電源が入っているか確認してください
+	The document feeder is empty	原稿フィーダーが空です
+	The scanner has a paper jam	スキャナーで紙詰まりが発生しています
+	The scanner's cover is open	スキャナーのカバーが開いています
+	The scanner's lamp is off	スキャナーのランプが消えています
+	The scanner reported an error. Check it and try again	スキャナーがエラーを報告しました。確認してもう一度お試しください
+	The scanned page is too large	スキャンしたページが大きすぎます
+	The scan failed	スキャンに失敗しました

@@ -2224,3 +2224,24 @@ key	Space	Leertaste
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Nach „{name}“ kopiert: {what}; das Original behält sie (es hat sich beim Ziehen geändert oder wäre leer)
 	Release to open it in a new window	Loslassen, um es in einem neuen Fenster zu öffnen
 	Release to move it to that window	Loslassen, um es in dieses Fenster zu verschieben
+	Scan	Scan
+	Scan into document	In Dokument scannen
+	Scan into document…	In Dokument scannen…
+	Page scanned	Seite gescannt
+	Put the next page on the scanner and scan it in after this one, or finish.	Legen Sie die nächste Seite auf den Scanner und scannen Sie sie hinter diese, oder beenden Sie.
+	Scan another page	Weitere Seite scannen
+	The scanner is already in use	Der Scanner wird bereits verwendet
+	Waiting for the scanner…	Warten auf den Scanner…
+	Couldn't scan: {e}	Scannen fehlgeschlagen: {e}
+	Scanning works on Windows, through its built-in scanner support	Scannen funktioniert unter Windows über dessen integrierte Scannerunterstützung
+	Windows' scanner support (WIA) isn't available on this computer	Die Scannerunterstützung von Windows (WIA) ist auf diesem Computer nicht verfügbar
+	No scanner was found. Check that it is connected and switched on	Kein Scanner gefunden. Prüfen Sie, ob er angeschlossen und eingeschaltet ist
+	The scanner is busy	Der Scanner ist beschäftigt
+	The scanner is offline. Check that it is connected and switched on	Der Scanner ist offline. Prüfen Sie, ob er angeschlossen und eingeschaltet ist
+	The document feeder is empty	Der Dokumenteneinzug ist leer
+	The scanner has a paper jam	Im Scanner ist ein Papierstau
+	The scanner's cover is open	Die Abdeckung des Scanners ist offen
+	The scanner's lamp is off	Die Lampe des Scanners ist aus
+	The scanner reported an error. Check it and try again	Der Scanner hat einen Fehler gemeldet. Prüfen Sie ihn und versuchen Sie es erneut
+	The scanned page is too large	Die gescannte Seite ist zu groß
+	The scan failed	Der Scan ist fehlgeschlagen

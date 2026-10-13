@@ -2154,3 +2154,24 @@ key	Space	స్పేస్
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	«{name}»కి కాపీ చేయబడింది: {what}; అసలు ఫైల్‌లో అవి ఉన్నాయి (లాగుతున్నప్పుడు మారింది లేదా ఖాళీ అయ్యేది)
 	Release to open it in a new window	కొత్త విండోలో తెరవడానికి వదలండి
 	Release to move it to that window	ఆ విండోకి తరలించడానికి వదలండి
+	Scan	స్కాన్
+	Scan into document	పత్రంలోకి స్కాన్ చేయండి
+	Scan into document…	పత్రంలోకి స్కాన్ చేయండి…
+	Page scanned	పేజీ స్కాన్ అయింది
+	Put the next page on the scanner and scan it in after this one, or finish.	తదుపరి పేజీని స్కానర్‌పై ఉంచి దీని తర్వాత స్కాన్ చేయండి, లేదా ముగించండి.
+	Scan another page	మరో పేజీని స్కాన్ చేయండి
+	The scanner is already in use	స్కానర్ ఇప్పటికే వాడుకలో ఉంది
+	Waiting for the scanner…	స్కానర్ కోసం వేచి ఉంది…
+	Couldn't scan: {e}	స్కాన్ చేయలేకపోయాము: {e}
+	Scanning works on Windows, through its built-in scanner support	స్కానింగ్ Windows లో దాని అంతర్నిర్మిత స్కానర్ మద్దతు ద్వారా పనిచేస్తుంది
+	Windows' scanner support (WIA) isn't available on this computer	ఈ కంప్యూటర్‌లో Windows స్కానర్ మద్దతు (WIA) అందుబాటులో లేదు
+	No scanner was found. Check that it is connected and switched on	స్కానర్ కనబడలేదు. అది కనెక్ట్ అయి ఆన్‌లో ఉందో తనిఖీ చేయండి
+	The scanner is busy	స్కానర్ బిజీగా ఉంది
+	The scanner is offline. Check that it is connected and switched on	స్కానర్ ఆఫ్‌లైన్‌లో ఉంది. అది కనెక్ట్ అయి ఆన్‌లో ఉందో తనిఖీ చేయండి
+	The document feeder is empty	డాక్యుమెంట్ ఫీడర్ ఖాళీగా ఉంది
+	The scanner has a paper jam	స్కానర్‌లో కాగితం ఇరుక్కుంది
+	The scanner's cover is open	స్కానర్ కవర్ తెరిచి ఉంది
+	The scanner's lamp is off	స్కానర్ దీపం ఆఫ్‌లో ఉంది
+	The scanner reported an error. Check it and try again	స్కానర్ లోపాన్ని నివేదించింది. దాన్ని తనిఖీ చేసి మళ్లీ ప్రయత్నించండి
+	The scanned page is too large	స్కాన్ చేసిన పేజీ చాలా పెద్దది
+	The scan failed	స్కాన్ విఫలమైంది

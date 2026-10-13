@@ -460,6 +460,8 @@ pub enum ViewAction {
     Extract,
     /// Sintec.PDF: save the selected pages as a new PDF file (Save As).
     ExtractSaveAs,
+    /// Sintec.PDF: scan a page in after the selection.
+    Scan,
     Split,
     /// Copy the selected pages (Cut also deletes them).
     CopyPages {
@@ -3439,6 +3441,9 @@ fn organize_toolbar(view: &mut DocView, info: &DocInfo, editable: bool, dirty: b
                 }
                 if icons::button(ui, "file-input", 30.0, false, tl!("Insert pages from a file…")).clicked() {
                     view.pending_action = Some(ViewAction::InsertFromFile);
+                }
+                if icons::button(ui, "scan", 30.0, false, tl!("Scan into document…")).clicked() {
+                    view.pending_action = Some(ViewAction::Scan);
                 }
                 if icons::button(ui, "file-output", 30.0, false, tl!("Extract pages to a new document")).clicked() {
                     view.pending_action = Some(ViewAction::Extract);

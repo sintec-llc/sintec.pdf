@@ -2233,3 +2233,24 @@ key	Space	Spazio
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Copiato in «{name}»: {what}; l’originale le conserva (è cambiato durante il trascinamento o resterebbe vuoto)
 	Release to open it in a new window	Rilascia per aprirlo in una nuova finestra
 	Release to move it to that window	Rilascia per spostarlo in quella finestra
+	Scan	Scansione
+	Scan into document	Scansiona nel documento
+	Scan into document…	Scansiona nel documento…
+	Page scanned	Pagina scansionata
+	Put the next page on the scanner and scan it in after this one, or finish.	Metti la pagina successiva sullo scanner e scansionala dopo questa, oppure termina.
+	Scan another page	Scansiona un'altra pagina
+	The scanner is already in use	Lo scanner è già in uso
+	Waiting for the scanner…	In attesa dello scanner…
+	Couldn't scan: {e}	Impossibile eseguire la scansione: {e}
+	Scanning works on Windows, through its built-in scanner support	La scansione funziona su Windows, tramite il supporto integrato per gli scanner
+	Windows' scanner support (WIA) isn't available on this computer	Il supporto scanner di Windows (WIA) non è disponibile su questo computer
+	No scanner was found. Check that it is connected and switched on	Nessuno scanner trovato. Verifica che sia collegato e acceso
+	The scanner is busy	Lo scanner è occupato
+	The scanner is offline. Check that it is connected and switched on	Lo scanner è offline. Verifica che sia collegato e acceso
+	The document feeder is empty	L'alimentatore di documenti è vuoto
+	The scanner has a paper jam	Inceppamento della carta nello scanner
+	The scanner's cover is open	Il coperchio dello scanner è aperto
+	The scanner's lamp is off	La lampada dello scanner è spenta
+	The scanner reported an error. Check it and try again	Lo scanner ha segnalato un errore. Controllalo e riprova
+	The scanned page is too large	La pagina scansionata è troppo grande
+	The scan failed	La scansione non è riuscita

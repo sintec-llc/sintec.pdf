@@ -580,6 +580,7 @@ impl PdfCraftApp {
             }
             "page.extract" => self.open_extract_dialog(),
             "page.extract_save_as" => self.extract_save_as(),
+            "page.scan" => self.start_scan(),
             "page.rotate_dialog" => {
                 if let Some(i) = active {
                     let n = self.session.get(self.views[i].id).map_or(1, |d| d.info.pages.len());
