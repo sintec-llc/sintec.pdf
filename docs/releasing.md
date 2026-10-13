@@ -90,7 +90,7 @@ and an `ATTRIBUTION.txt`, straight into the package, so packaging needs the netw
 ### macOS
 
 `packaging/macos/package.sh --arch aarch64|x86_64|universal` builds the chosen architecture(s),
-joins them with `lipo`, and assembles `Sintec.PDF.app` from `Info.plist.in` (bundle id
+joins them with `lipo`, and assembles `Sintec PDF.app` from `Info.plist.in` (bundle id
 `io.github.sintec-llc.sintec-pdf`, macOS 11+, PDF declared as a document type with rank Alternate,
 so Sintec.PDF is offered under Open With without taking over from Preview). Releases ship one DMG
 per processor. Files opened from Finder arrive as Apple events, which

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build, sign and (optionally) notarize the macOS release artifacts:
 #
-#   $DIST/sintec-pdf-<version>-macos-<arch>.dmg        Sintec.PDF.app on a drag-to-Applications DMG
+#   $DIST/sintec-pdf-<version>-macos-<arch>.dmg        "Sintec PDF.app" on a drag-to-Applications DMG
 #   $DIST/sintec-pdf-cli-<version>-macos-<arch>.zip    the headless CLI
 #
 # Usage: packaging/macos/package.sh [--arch universal|aarch64|x86_64] [--skip-build]
@@ -39,7 +39,11 @@ export MACOSX_DEPLOYMENT_TARGET=11.0
 IDENTITY="${MACOS_SIGN_IDENTITY:--}"
 SHORT_VERSION="${VERSION%%-*}"
 WORK="$CARGO_TARGET_DIR/macos-package"
-APP="$WORK/Sintec.PDF.app"
+# The bundle's file name has no dot before "PDF": a name ending in another type's extension
+# ("Sintec.PDF.app") makes Finder show ".app" (so an app can't pass for a document). The menu bar,
+# Dock menu and About still say Sintec.PDF (CFBundleName / CFBundleDisplayName).
+APP_NAME="Sintec PDF.app"
+APP="$WORK/$APP_NAME"
 DMG="$DIST/sintec-pdf-$VERSION-macos-$ARCH.dmg"
 CLI_ZIP="$DIST/sintec-pdf-cli-$VERSION-macos-$ARCH.zip"
 
@@ -108,12 +112,14 @@ notarize() {
   fi
 }
 
-# ---- Sintec.PDF.app ----------------------------------------------------------------------------
+# ---- Sintec PDF.app -----------------------------------------------------------------------------
 echo "==> assembling $APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 # Executable and icon carry the display name (CFBundleExecutable / CFBundleIconFile).
-cp "$WORK/bin/pdfcraft" "$APP/Contents/MacOS/Sintec.PDF"
-cp "$ROOT/assets/app-icon/pdfcraft.icns" "$APP/Contents/Resources/Sintec.PDF.icns"
+# No dots in these names either: CFBundleIconFile "Sintec.PDF" read as a file with extension
+# ".PDF", so macOS never found Sintec.PDF.icns and showed a blank icon.
+cp "$WORK/bin/pdfcraft" "$APP/Contents/MacOS/SintecPDF"
+cp "$ROOT/assets/app-icon/pdfcraft.icns" "$APP/Contents/Resources/AppIcon.icns"
 copy_font_licences "$APP/Contents/Resources"
 copy_sintec_licences "$APP/Contents/Resources"
 # OCR models: the app finds them at Contents/MacOS/../Resources/models. Before signing, so the
@@ -127,7 +133,7 @@ printf 'APPL????' >"$APP/Contents/PkgInfo"
 
 # Sign inside-out: nested code first, then the bundle itself (no --deep on the final signature).
 # Today the only nested code is the main executable; frameworks/helpers would be signed here too.
-sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP/Contents/MacOS/Sintec.PDF"
+sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP/Contents/MacOS/SintecPDF"
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP"
 codesign --verify --strict --deep --verbose=2 "$APP"
 
@@ -143,11 +149,15 @@ fi
 echo "==> building $DMG"
 STAGE="$WORK/dmg"
 mkdir -p "$STAGE"
-ditto "$APP" "$STAGE/Sintec.PDF.app"
+ditto "$APP" "$STAGE/$APP_NAME"
 ln -s /Applications "$STAGE/Applications"
 # Finder window layout: background, icon size and positions (packaging/macos/dmg/README.md).
 mkdir -p "$STAGE/.background"
 cp "$HERE/dmg/background.tiff" "$STAGE/.background/background.tiff"
+# Hidden by flag as well as by its dot, so Finder doesn't show it (over the logo) on Macs set to
+# show hidden files.
+chflags hidden "$STAGE/.background"
+if command -v SetFile >/dev/null; then SetFile -a V "$STAGE/.background"; fi
 cp "$HERE/dmg/dmg-layout.DS_Store" "$STAGE/.DS_Store"
 rm -f "$DMG"
 # `hdiutil create -srcfolder` writes the files as they are. `makehybrid -hfs` gave every file a
@@ -178,7 +188,7 @@ MOUNT="$WORK/dmg-check"
 rm -rf "$MOUNT"
 mkdir -p "$MOUNT"
 hdiutil_retry attach attach -nobrowse -readonly -mountpoint "$MOUNT" "$DMG" >/dev/null
-if ! codesign --verify --strict --deep --verbose=2 "$MOUNT/Sintec.PDF.app"; then
+if ! codesign --verify --strict --deep --verbose=2 "$MOUNT/$APP_NAME"; then
   hdiutil_retry detach detach "$MOUNT" >/dev/null || true
   exit 1
 fi

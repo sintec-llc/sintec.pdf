@@ -364,7 +364,7 @@ mod tests {
         let base = std::env::temp_dir().join(format!("pdfcraft-ocr-layouts-{}", std::process::id()));
         let layouts = [
             ("windows", "Sintec.PDF", "Sintec.PDF/models"),
-            ("macos", "Sintec.PDF.app/Contents/MacOS", "Sintec.PDF.app/Contents/Resources/models"),
+            ("macos", "Sintec PDF.app/Contents/MacOS", "Sintec PDF.app/Contents/Resources/models"),
             ("linux-deb-rpm", "usr/bin", "usr/share/pdfcraft/models"),
             ("linux-tar", "pdfcraft-1.0.0-linux-x86_64/bin", "pdfcraft-1.0.0-linux-x86_64/share/pdfcraft/models"),
             ("appimage", "Sintec.PDF.AppDir/usr/bin", "Sintec.PDF.AppDir/usr/share/pdfcraft/models"),
