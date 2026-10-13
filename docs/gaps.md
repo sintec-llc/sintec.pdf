@@ -25,7 +25,7 @@ update the numbers.
 | 4 | No printing on Windows or the web | feature, platform | 15–30 | [hardware-parity.md](hardware-parity.md) |
 | 5 | ~~Chinese UI shows missing-glyph boxes in releases~~ (out of scope: no Chinese interface) | localization | 0 | [localization-parity.md](localization-parity.md) |
 | 6 | Open-issue backlog of wrong results in shipped features | stability | 45–80 | this file |
-| 7 | OCR reads only unaccented Latin | feature | 40–75 | [file-format-parity.md](file-format-parity.md) |
+| 7 | OCR: no clean-up, editable output or Hebrew/Vietnamese | feature | 30–55 | [file-format-parity.md](file-format-parity.md) |
 | 8 | Office export weak, Office import absent | file format | 55–100 | [file-format-parity.md](file-format-parity.md) |
 | 9 | No Preflight; PDF/A partial; PDF/X and PDF/UA absent | standards | 65–115 | [pdf-spec-parity.md](pdf-spec-parity.md) |
 | 10 | Signatures: no PKCS #11, timestamp servers or online revocation | feature, hardware | 40–70 | [pdf-spec-parity.md](pdf-spec-parity.md) |
@@ -123,16 +123,17 @@ update the numbers.
   (`AGENTS.md` §4).
 - **Estimate:** 45–80 h (≈ 0.2–0.4 h per issue). **Doc:** this file.
 
-### 7. OCR reads only unaccented Latin
+### 7. OCR: no clean-up, editable output or Hebrew/Vietnamese
 
-- **Missing:** every other script and accented Latin; editable-text output; deskew, rotation,
+- **Done (2026-10-13):** 46 languages through PaddleOCR PP-OCRv5 (accented Latin, Cyrillic,
+  Greek, Chinese, Japanese, Korean, Arabic script, Devanagari, Thai, Tamil, Telugu).
+- **Missing:** Hebrew and Vietnamese (no PP-OCRv5 model); editable-text output; deskew, rotation,
   despeckle, background and camera clean-up; MRC compression; pluggable engines; OCR in the
   browser; scanner input.
-- **Evidence:** `ocr.ocr-languages` partial ("the models read only the Latin alphabet without
-  accents"); 19 of 26 OCR features planned; [#744](https://github.com/storytold/pdfcraft/issues/744)
+- **Evidence:** 19 of 26 OCR features planned; [#744](https://github.com/storytold/pdfcraft/issues/744)
   (Dutch). Acrobat ships on-device recognition for dozens of languages.
 - **Impact:** scanned documents are a core Pro workflow outside English.
-- **Estimate:** 40–75 h, partly blocked on openly licensed models. **Doc:**
+- **Estimate:** 30–55 h. **Doc:**
   [file-format-parity.md](file-format-parity.md).
 
 ### 8. Office export weak, Office import absent
@@ -286,7 +287,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-13 | minor | Gaps 5 and 14 out of scope: Sintec.PDF ships English and Russian only |
+| 2026-10-13 | minor | Gap 7: OCR reads 46 languages; gaps 5 and 14 out of scope (Sintec.PDF ships English and Russian only) |
 | 2026-10-10 | minor | Removed the alpha markers: with the cross-app gate rule, gaps 1 and 8 are partial sub-cases, not blockers; stage alpha |
 | 2026-10-10 | minor | Marked the alpha blockers (gap 1 and the Office part of gap 8) after the core-workflow gate put the stage at pre-alpha |
 | 2026-10-10 | major | Created. Ranked 24 gaps from the 2026-10-10 re-measure, the open GitHub issues and the former ROADMAP.md §Where we're lacking and where we're going (renderer, hardening, fidelity, editing, Pro workflows, 1.0 polish), which this file replaces |

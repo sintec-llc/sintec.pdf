@@ -2210,3 +2210,51 @@ key	Space	Пробел
 	The scanner reported an error. Check it and try again	Сканер сообщил об ошибке. Проверьте его и попробуйте ещё раз
 	The scanned page is too large	Отсканированная страница слишком велика
 	The scan failed	Сканирование не удалось
+
+# Scan & OCR ▸ Recognize Text ▸ Document language (pdfcraft_ocr::LANGUAGES, shown through i18n::t).
+	English	Английский
+	Russian	Русский
+	Ukrainian	Украинский
+	Belarusian	Белорусский
+	Kazakh	Казахский
+	Bulgarian	Болгарский
+	Serbian	Сербский
+	Macedonian	Македонский
+	Mongolian	Монгольский
+	Kyrgyz	Киргизский
+	Tajik	Таджикский
+	German	Немецкий
+	French	Французский
+	Spanish	Испанский
+	Italian	Итальянский
+	Portuguese	Португальский
+	Dutch	Нидерландский
+	Polish	Польский
+	Czech	Чешский
+	Slovak	Словацкий
+	Hungarian	Венгерский
+	Romanian	Румынский
+	Turkish	Турецкий
+	Swedish	Шведский
+	Danish	Датский
+	Norwegian	Норвежский
+	Finnish	Финский
+	Croatian	Хорватский
+	Slovenian	Словенский
+	Lithuanian	Литовский
+	Latvian	Латышский
+	Estonian	Эстонский
+	Indonesian	Индонезийский
+	Greek	Греческий
+	Chinese	Китайский
+	Japanese	Японский
+	Korean	Корейский
+	Arabic	Арабский
+	Persian	Персидский
+	Urdu	Урду
+	Hindi	Хинди
+	Marathi	Маратхи
+	Nepali	Непальский
+	Thai	Тайский
+	Tamil	Тамильский
+	Telugu	Телугу

@@ -1886,6 +1886,33 @@ fn recognize_text_reads_russian() {
     assert!(at("марта") < at("поставщик") && at("поставщик") < at("итого") && at("итого") < at("invoice"), "{text}");
 }
 
+/// OCR in the other PP-OCRv5 scripts (skipped without their models): accented Latin (German),
+/// general Cyrillic (Kazakh) and Greek. Each scan was drawn in Inter; the words come back through
+/// the saved text layer, accents and all.
+#[test]
+fn recognize_text_reads_german_kazakh_and_greek() {
+    let cases: [(&str, &[u8], &[&str]); 3] = [
+        ("de", include_bytes!("../tests/data/de-scan.png"), &["rechnung", "lieferant", "müller", "söhne", "gesamtbetrag", "fällig", "märz"]),
+        ("kk", include_bytes!("../tests/data/kk-scan.png"), &["шот-фактура", "қазан", "жеткізуші", "ақмола", "барлығы", "төлеуге", "теңге"]),
+        ("el", include_bytes!("../tests/data/el-scan.png"), &["τιμολόγιο", "προμηθευτής", "ελληνική", "σύνολο", "πληρωμής", "ευρώ"]),
+    ];
+    for (language, png, words) in cases {
+        if !ocr::available(language) {
+            eprintln!("skipped {language}: OCR models not installed");
+            continue;
+        }
+        let mut s = Session::new().with_clock(|| 1_700_000_000);
+        let scan = s.create_from_images(&[("scan.png".into(), png.to_vec())]).unwrap();
+        let id = s.open("scan.pdf", None, scan, None).unwrap();
+        let settings = ocr::OcrSettings { language: language.into(), ..Default::default() };
+        let found = s.recognize_text(id, &[], settings).unwrap();
+        assert!(found[0].skipped.is_none(), "{language}: {:?}", found[0].skipped);
+        let text = page_texts(&s, id)[0].to_lowercase();
+        let missing: Vec<_> = words.iter().filter(|w| !text.contains(*w)).collect();
+        assert!(missing.is_empty(), "{language}: {missing:?} missing from {text:?}");
+    }
+}
+
 /// A form whose scripts are custom JavaScript: total = price × qty (calculate, through a
 /// document-level function), shown with a custom format; qty is validated; a button script.
 fn scripted_form() -> Vec<u8> {

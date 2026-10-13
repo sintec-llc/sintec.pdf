@@ -1,11 +1,13 @@
 //! PaddleOCR PP-OCRv5 text detection + recognition (Apache-2.0 models), run through rten.
 //!
-//! Used for the scripts the ocrs models can't read (Cyrillic). The pipeline follows PaddleOCR's
+//! Used for every script but unaccented Latin (see [`crate::Script`]). The pipeline follows PaddleOCR's
 //! published inference settings: detection on a BGR image normalised with ImageNet statistics,
 //! a probability map thresholded at 0.3, boxes kept when their mean probability is at least 0.6
 //! and grown by the "unclip" ratio 1.5; recognition on each line scaled to 48 pixels high,
 //! normalised to [-1, 1], decoded greedily (CTC: index 0 is blank, then the dictionary, then a
 //! space). Word boxes come from the CTC time steps, so search highlights fall on the word.
+//! Right-to-left scripts come out of the model in drawing order and are put back into reading
+//! order ([`logical_rtl`]).
 //!
 //! Boxes are axis-aligned: pages are expected to be roughly straight (as scans usually are).
 
@@ -37,6 +39,8 @@ pub(crate) struct PaddleOcr {
     recognition: Model,
     /// Index `k` (1-based in the model output) is `dictionary[k - 1]`; one past the end is a space.
     dictionary: Vec<String>,
+    /// The script is written right to left.
+    rtl: bool,
 }
 
 /// An RGB image borrowed from the caller.
@@ -90,14 +94,14 @@ impl Rgb<'_> {
 }
 
 impl PaddleOcr {
-    pub(crate) fn load(detection: &Path, recognition: &Path, dictionary: &Path) -> Result<PaddleOcr, OcrError> {
+    pub(crate) fn load(detection: &Path, recognition: &Path, dictionary: &Path, rtl: bool) -> Result<PaddleOcr, OcrError> {
         let load = |p: &Path| Model::load_file(p).map_err(|e| OcrError::Load(p.display().to_string(), e.to_string()));
         let text = std::fs::read_to_string(dictionary).map_err(|e| OcrError::Load(dictionary.display().to_string(), e.to_string()))?;
         let entries: Vec<String> = text.lines().map(|l| l.trim_end_matches('\r').to_string()).collect();
         if entries.is_empty() {
             return Err(OcrError::Load(dictionary.display().to_string(), "the dictionary is empty".into()));
         }
-        Ok(PaddleOcr { detection: load(detection)?, recognition: load(recognition)?, dictionary: entries })
+        Ok(PaddleOcr { detection: load(detection)?, recognition: load(recognition)?, dictionary: entries, rtl })
     }
 
     pub(crate) fn recognize(&self, rgb: &[u8], width: u32, height: u32) -> Result<Vec<Line>, OcrError> {
@@ -105,7 +109,7 @@ impl PaddleOcr {
         let mut lines = Vec::new();
         for b in self.detect(&img)? {
             if let Some(line) = self.read_line(&img, b)? {
-                lines.push(line);
+                lines.push(if self.rtl { logical_rtl(line) } else { line });
             }
         }
         Ok(lines)
@@ -249,5 +253,108 @@ impl PaddleOcr {
         }
         flush(word.take(), &mut words);
         Ok((!words.is_empty()).then_some(Line { words }))
+    }
+}
+
+/// Characters drawn left to right inside right-to-left text: Latin letters, digits and the
+/// punctuation that goes with them (PaddleOCR keeps the same set in order when it reverses an
+/// Arabic result).
+fn ltr_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, ':' | '*' | '.' | '/' | '%' | '+' | '-')
+}
+
+/// A word read right to left: each right-to-left character reversed, runs of [`ltr_char`]s
+/// (numbers, Latin words) kept in their own order.
+fn reverse_rtl_word(text: &str) -> String {
+    let mut pieces: Vec<String> = Vec::new();
+    let mut run = String::new();
+    for c in text.chars() {
+        if ltr_char(c) {
+            run.push(c);
+            continue;
+        }
+        if !run.is_empty() {
+            pieces.push(std::mem::take(&mut run));
+        }
+        pieces.push(c.to_string());
+    }
+    if !run.is_empty() {
+        pieces.push(run);
+    }
+    pieces.into_iter().rev().collect()
+}
+
+/// A right-to-left line, read off the image left to right, in reading order: the words of each
+/// right-to-left stretch reversed (and their letters, [`reverse_rtl_word`]); a stretch of
+/// left-to-right words (a Latin name, a number) keeps its own order. Word boxes stay where the
+/// words are drawn.
+pub(crate) fn logical_rtl(line: Line) -> Line {
+    let rtl = |w: &Word| !w.text.chars().all(|c| ltr_char(c) || !c.is_alphanumeric());
+    let mut groups: Vec<(bool, Vec<Word>)> = Vec::new();
+    for mut w in line.words {
+        let is_rtl = rtl(&w);
+        if is_rtl {
+            w.text = reverse_rtl_word(&w.text);
+        }
+        match groups.last_mut() {
+            Some((kind, words)) if *kind == is_rtl => words.push(w),
+            _ => groups.push((is_rtl, vec![w])),
+        }
+    }
+    let words = groups
+        .into_iter()
+        .rev()
+        .flat_map(|(is_rtl, mut words)| {
+            if is_rtl {
+                words.reverse();
+            }
+            words
+        })
+        .collect();
+    Line { words }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn line(words: &[&str]) -> Line {
+        Line {
+            words: words
+                .iter()
+                .enumerate()
+                .map(|(i, t)| Word { text: (*t).to_string(), rect: [i as f32 * 10.0, 0.0, i as f32 * 10.0 + 9.0, 10.0] })
+                .collect(),
+        }
+    }
+
+    fn texts(l: &Line) -> Vec<&str> {
+        l.words.iter().map(|w| w.text.as_str()).collect()
+    }
+
+    #[test]
+    fn arabic_lines_come_back_in_reading_order() {
+        // "كتاب جديد" (new book) as drawn, left to right: "ديدج" then "باتك".
+        let read = logical_rtl(line(&["ديدج", "باتك"]));
+        assert_eq!(texts(&read), ["كتاب", "جديد"]);
+        // Boxes stay with their words: the first word in reading order is the rightmost.
+        assert_eq!(read.words[0].rect[0], 10.0);
+    }
+
+    #[test]
+    fn numbers_and_latin_keep_their_own_order() {
+        // A number inside an Arabic word, and a Latin name between Arabic words.
+        assert_eq!(reverse_rtl_word("2024ماع"), "عام2024");
+        assert_eq!(reverse_rtl_word("12.5%"), "12.5%");
+        let read = logical_rtl(line(&["ركش", "Sintec", "PDF", "جمانرب"]));
+        assert_eq!(texts(&read), ["برنامج", "Sintec", "PDF", "شكر"]);
+    }
+
+    #[test]
+    fn odd_lines_do_not_panic() {
+        assert!(logical_rtl(Line::default()).words.is_empty());
+        for t in ["", "\u{200F}", "،", "ا\u{0651}", "a", "١٢٣"] {
+            let _ = logical_rtl(line(&[t, t]));
+        }
     }
 }

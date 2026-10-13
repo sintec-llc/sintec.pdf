@@ -34,7 +34,9 @@ Resolve conflicts by these rules (they cover most of them):
 | `Cargo.lock` | take theirs, then `cargo update --workspace` |
 | `README.md`, `NOTICE`, `.github/` | keep ours |
 | `ATTRIBUTION.toml` | keep both sides' entries as separate records; then refresh the sha256 values and run `cargo xtask assets --write` |
-| `crates/ui-egui/src/i18n/*.tsv`, the `LANGUAGES` list | keep **both** sides' entries (and fix the array length) |
+| `crates/ui-egui/src/i18n/ru.tsv` | keep **both** sides' entries |
+| other `crates/ui-egui/src/i18n/*.tsv`, the interface `LANGUAGES` list, `DATE_LANGUAGES` | keep **ours**: Sintec.PDF ships English and Russian only, so delete upstream's other catalogs (`git rm`) and leave their rows out of both lists |
+| `crates/ocr/` | keep **ours** (46 languages through PP-OCRv5) until upstream's OCR beats it; see [M10](#m10-compare-and-keep-the-better-one) |
 | code | merge by hand; prefer upstream's design and re-apply our behaviour on top |
 
 Then:
@@ -70,6 +72,7 @@ implementations and keep the one that is more polished and effective** (owner's 
 - **Code:** tests, maintainability, and how much it costs us to keep differing from upstream.
 
 Ours, for reference: printing renders sheets and prints them through .NET (`crates/print/src/spool.rs`);
-OCR uses PaddleOCR PP-OCRv5 for Cyrillic (`crates/ocr/src/paddle.rs`); Office documents are
+OCR uses PaddleOCR PP-OCRv5 for every language but English (`crates/ocr/src/paddle.rs`; upstream 0.7.1
+still reads English only); Office documents are
 converted by the installed Office (`crates/engine/src/office.rs`). If upstream's version wins,
 take it and drop ours; if ours wins, keep it (and consider offering it upstream).

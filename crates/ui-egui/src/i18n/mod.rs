@@ -148,8 +148,12 @@ pub fn normalize_pref(pref: &str) -> Option<&'static str> {
     Lang::from_code(pref).map(Lang::code)
 }
 
+/// Languages whose speakers mostly read Russian too: their locales fall back to the Russian
+/// interface rather than English.
+const RUSSIAN_FALLBACK: &[&str] = &["uk", "kk"];
+
 /// Candidate language codes for a locale tag, most specific first: `ru_RU.UTF-8` →
-/// `ru-ru`, `ru`.
+/// `ru-ru`, `ru`; `uk_UA` → `uk-ua`, `uk`, `ru` ([`RUSSIAN_FALLBACK`]).
 fn candidates(tag: &str) -> Vec<String> {
     let base = tag.split(['.', '@']).next().unwrap_or("").replace('_', "-").to_ascii_lowercase();
     let parts: Vec<&str> = base.split('-').filter(|p| !p.is_empty()).collect();
@@ -159,6 +163,9 @@ fn candidates(tag: &str) -> Vec<String> {
     let mut out = Vec::new();
     for n in (1..=parts.len()).rev() {
         out.push(parts.get(..n).unwrap_or_default().join("-"));
+    }
+    if parts.first().is_some_and(|p| RUSSIAN_FALLBACK.contains(p)) {
+        out.push("ru".to_string());
     }
     out
 }
@@ -434,7 +441,12 @@ mod tests {
         assert_eq!(lang_from_tag("C"), Some(Lang::EN));
         assert_eq!(lang_from_tag("POSIX"), Some(Lang::EN));
         assert_eq!(lang_from_tag("fr_FR"), None);
-        assert_eq!(lang_from_tag("uk-UA"), None);
+        // Ukrainian and Kazakh fall back to Russian, not English.
+        assert_eq!(lang_from_tag("uk-UA"), Some(RU()));
+        assert_eq!(lang_from_tag("uk_UA.UTF-8"), Some(RU()));
+        assert_eq!(lang_from_tag("kk-KZ"), Some(RU()));
+        assert_eq!(lang_from_tag("kk"), Some(RU()));
+        assert_eq!(lang_from_tag("be-BY"), None);
         assert_eq!(lang_from_tag(""), None);
         assert_eq!(lang_from_tag("_"), None);
     }
@@ -444,6 +456,8 @@ mod tests {
         assert_eq!(candidates("ru_RU.UTF-8"), ["ru-ru", "ru"]);
         assert_eq!(candidates("ru"), ["ru"]);
         assert_eq!(candidates("sr-Latn-RS@latin"), ["sr-latn-rs", "sr-latn", "sr"]);
+        assert_eq!(candidates("uk_UA"), ["uk-ua", "uk", "ru"]);
+        assert_eq!(candidates("kk-KZ"), ["kk-kz", "kk", "ru"]);
         assert!(candidates("").is_empty());
     }
 
@@ -461,6 +475,9 @@ mod tests {
         assert_eq!(first_supported("de-DE\r\nru-RU\r\nen-US\r\n"), Some(RU()));
         assert_eq!(first_supported("en-US\r\n"), Some(Lang::EN));
         assert_eq!(first_supported("fr-FR\r\n"), None);
+        // A Ukrainian or Kazakh Windows without Russian in its list still gets Russian.
+        assert_eq!(first_supported("uk-UA\r\n"), Some(RU()));
+        assert_eq!(first_supported("kk-KZ\r\nen-US\r\n"), Some(RU()));
         assert_eq!(first_supported("\r\n"), None);
     }
 
@@ -869,6 +886,13 @@ mod tests {
         assert_eq!(tr(ru, "CheckBox"), "Флажок");
         set_current(Lang::EN);
         assert_eq!(command_label("Undo Fill in Save {e}"), "Undo Fill in Save {e}");
+    }
+
+    /// The OCR dialog shows each document language by its English name, translated.
+    #[test]
+    fn ocr_language_names_are_translated() {
+        let missing: Vec<_> = pdfcraft_engine::ocr::LANGUAGES.iter().map(|l| l.1).filter(|name| !has(RU(), name)).collect();
+        assert!(missing.is_empty(), "OCR language names missing from ru.tsv: {missing:?}");
     }
 
     /// Every bundled catalog is well-formed and consistent with its sources.

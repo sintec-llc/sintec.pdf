@@ -1,6 +1,6 @@
 # File format parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** major (first format matrix; Acrobat's formats from its bundle) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (OCR in 46 languages); earlier: major (first format matrix; Acrobat's formats from its bundle) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Every format Acrobat Pro reads or writes, and PdfCraft's support for it. Acrobat's list comes from
 its bundle's `Info.plist` `CFBundleDocumentTypes` (what it opens) and its public documentation
@@ -100,7 +100,7 @@ features total).
 |---|---|---|---|
 | Searchable image (invisible text layer) | yes | yes (Tr 3 text fitted to word boxes) | good for English |
 | Editable text and images output | yes | no | none |
-| Languages | dozens (Latin with accents, Cyrillic, Greek, CJK, Arabic, Hebrew, Indic) | Latin without accents only (ocrs models) | **basic** (#744) |
+| Languages | dozens (Latin with accents, Cyrillic, Greek, CJK, Arabic, Hebrew, Indic) | 46: English (ocrs); accented Latin, Cyrillic, Greek, Chinese, Japanese, Korean, Arabic script, Devanagari, Thai, Tamil, Telugu (PP-OCRv5). No Hebrew or Vietnamese | **partial** |
 | Deskew, rotation, despeckle, background and halo removal, descreen | yes | no | none |
 | Camera images (edges, perspective, whiteboard, card) | yes | no | none |
 | MRC (adaptive) compression, PDF/A output of scans | yes | no | none |
@@ -109,4 +109,5 @@ features total).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | OCR languages: 46 through PaddleOCR PP-OCRv5 (Sintec.PDF) |
 | 2026-10-10 | major | Created from Acrobat 26.002.21931's `CFBundleDocumentTypes`, Acrobat's public Create/Export documentation, and PdfCraft's code and checklist |

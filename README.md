@@ -46,9 +46,11 @@ DirectX 12, falling back to OpenGL; on machines without a GPU, Windows' software
 - **Create and export:** PDFs from images, text or the clipboard; pages as PNG, JPEG or TIFF;
   text, Word, HTML and RTF export; optimise file size.
 - **Scan & OCR:** turn scanned pages into searchable, copyable PDFs.
-  - **Russian, Ukrainian and Belarusian** (PaddleOCR PP-OCRv5 East Slavic models), with Latin
-    letters and digits mixed in.
-  - **English** and other Latin-alphabet text (ocrs models).
+  - **46 languages** with PaddleOCR PP-OCRv5 models: Russian, Ukrainian, Belarusian, Kazakh and
+    other Cyrillic languages; German, French, Spanish, Italian, Polish, Turkish and the other
+    European languages with accents; Chinese, Japanese, Korean; Arabic, Persian, Urdu; Hindi;
+    Greek, Thai, Tamil, Telugu. Latin letters and digits mixed in are read too.
+  - **English** (ocrs models).
 - **Interface languages:** Russian and English. A Russian Windows starts in Russian
   automatically; change it under Preferences.
 - **Automation:** `sintec-pdf-cli` scripts every tool from the command line or as an MCP server.

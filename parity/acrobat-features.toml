@@ -6439,8 +6439,8 @@ milestone = "M10"
 status = "partial"
 commands = ["ocr.recognize"]
 tools = ["ocr_recognize"]
-evidence = ["crates/ui-egui/tests/ocr.rs::recognize_text_dialog_adds_searchable_text"]
-notes = "Language choice exists, but the models read only the Latin alphabet without accents (English)."
+evidence = ["crates/ui-egui/tests/ocr.rs::recognize_text_dialog_adds_searchable_text", "crates/engine/src/tests.rs::recognize_text_reads_russian", "crates/engine/src/tests.rs::recognize_text_reads_german_kazakh_and_greek", "crates/ocr/src/paddle.rs::arabic_lines_come_back_in_reading_order"]
+notes = "46 languages: English through ocrs; accented Latin, Cyrillic (East Slavic and general), Greek, Chinese, Japanese, Korean, Arabic script (put back into reading order), Devanagari, Thai, Tamil and Telugu through PaddleOCR PP-OCRv5. Missing: Hebrew, Vietnamese, automatic language detection, several languages in one pass."
 
 [[feature]]
 id = "ocr.searchable-image"
