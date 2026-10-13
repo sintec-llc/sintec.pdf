@@ -305,7 +305,13 @@ mod tests {
         let plist = read("packaging/macos/Info.plist.in");
         assert!(plist.contains("<string>io.github.sintec-llc.sintec-pdf</string>"), "bundle id");
         assert!(!plist.contains("ai.storyteller"), "upstream's bundle id must not come back");
-        assert!(plist.contains("<key>CFBundleExecutable</key>\n  <string>Sintec.PDF</string>"), "executable name");
+        // No dot before "PDF" in file names macOS reads: "Sintec.PDF" counted as a .PDF file, so the
+        // icon wasn't found and Finder showed ".app" on the bundle.
+        assert!(plist.contains("<key>CFBundleExecutable</key>\n  <string>SintecPDF</string>"), "executable name");
+        assert!(plist.contains("<key>CFBundleIconFile</key>\n  <string>AppIcon</string>"), "icon file");
+        let package = read("packaging/macos/package.sh");
+        assert!(package.contains(r#"APP_NAME="Sintec PDF.app""#), "bundle name");
+        assert!(package.contains("Resources/AppIcon.icns"), "icon copied under the name the plist gives");
     }
 
     // Committed file with `<!-- -->` comments stripped, so a commented-out claim cannot pass.

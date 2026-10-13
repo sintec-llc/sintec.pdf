@@ -27,7 +27,7 @@ WIDTH, HEIGHT = 660, 400  # window content, pt; the background's 1x size
 TITLE_BAR = 32
 ICON_SIZE = 128
 PALETTE = 128  # colours in background.tiff (the logo tile has a gradient)
-ICONS = {"Sintec.PDF.app": (326, 205), "Applications": (574, 205)}
+ICONS = {"Sintec PDF.app": (326, 205), "Applications": (574, 205)}
 # A fixed date for the alias and the colour profile. Finder never matches it against the image
 # (each build is a new volume): it finds the background by volume name and path.
 FIXED_DATE = datetime.datetime(2026, 10, 8, tzinfo=datetime.timezone.utc)
@@ -149,9 +149,11 @@ def write_ds_store(out):
             "viewOptionsVersion": 1,
             "backgroundType": 2,
             "backgroundImageAlias": background_alias(),
-            "backgroundColorRed": 1.0,
-            "backgroundColorGreen": 1.0,
-            "backgroundColorBlue": 1.0,
+            # Paper, as the artwork's right side: if Finder opens the window larger than the
+            # background (its path or status bar showing, say), the extra area matches.
+            "backgroundColorRed": PAPER[0] / 255,
+            "backgroundColorGreen": PAPER[1] / 255,
+            "backgroundColorBlue": PAPER[2] / 255,
             "gridOffsetX": 0.0,
             "gridOffsetY": 0.0,
             "gridSpacing": 100.0,

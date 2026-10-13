@@ -11,7 +11,7 @@
   <key>CFBundleName</key>
   <string>Sintec.PDF</string>
   <key>CFBundleExecutable</key>
-  <string>Sintec.PDF</string>
+  <string>SintecPDF</string>
   <key>CFBundleIdentifier</key>
   <string>io.github.sintec-llc.sintec-pdf</string>
   <key>CFBundleInfoDictionaryVersion</key>
@@ -29,7 +29,7 @@
   <key>SintecPDFBuildCommit</key>
   <string>@BUILD_SHA@</string>
   <key>CFBundleIconFile</key>
-  <string>Sintec.PDF</string>
+  <string>AppIcon</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.productivity</string>
   <!-- Must match MACOSX_DEPLOYMENT_TARGET in package.sh. Big Sur is the first release on
