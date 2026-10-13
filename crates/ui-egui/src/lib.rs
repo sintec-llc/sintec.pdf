@@ -481,6 +481,12 @@ pub struct PdfCraftApp {
     pub update_installer: Option<updates::UpdateInstaller>,
     /// An update's installer has started: the app is closing so it can install.
     pub update_started: bool,
+    /// Preferences: ask GitHub for a newer version by itself (`updates::AUTO_CHECK_EVERY`).
+    pub auto_update_check: bool,
+    /// The release the user chose to skip: not offered by the automatic check.
+    pub update_skipped: Option<String>,
+    /// When updates were last checked (Unix seconds; kept with the settings).
+    pub update_last_check: i64,
     pub(crate) updates: updates::Updates,
     pub palette_open: bool,
     pub palette_query: String,
@@ -818,6 +824,9 @@ impl PdfCraftApp {
             update_source: None,
             update_installer: None,
             update_started: false,
+            auto_update_check: true,
+            update_skipped: None,
+            update_last_check: 0,
             updates: updates::Updates::default(),
             palette_open: false,
             palette_query: String::new(),
@@ -1498,6 +1507,9 @@ impl PdfCraftApp {
             // Null follows the system's text scaling.
             "ui_scale": self.ui_scale,
             "flatten_fill_sign": self.flatten_fill_sign_on_save,
+            "auto_update_check": self.auto_update_check,
+            "update_skipped": self.update_skipped,
+            "update_last_check": self.update_last_check,
             "date_format": self.session.date_format(),
             // Null follows the interface language.
             "date_language": self.session.date_language(),
@@ -1579,6 +1591,12 @@ impl PdfCraftApp {
         if let Some(on) = v["flatten_fill_sign"].as_bool() {
             self.flatten_fill_sign_on_save = on;
         }
+        if let Some(on) = v["auto_update_check"].as_bool() {
+            self.auto_update_check = on;
+        }
+        self.update_skipped = v["update_skipped"].as_str().and_then(updates::settings_version);
+        // Settings are untrusted: a negative or missing time asks again.
+        self.update_last_check = v["update_last_check"].as_i64().filter(|t| *t > 0).unwrap_or(0);
         // Settings are untrusted: a size out of range follows the system instead.
         self.ui_scale = v["ui_scale"].as_f64().and_then(ui_scale::valid);
         // Settings are untrusted: an unusable pattern keeps the default.
@@ -1882,6 +1900,13 @@ impl PdfCraftApp {
             }
             ("author", _) => self.comment_prefs.author = value.to_string(),
             ("ui-scale", _) => self.ui_scale = ui_scale::parse(value)?,
+            ("auto-update-check", _) => {
+                self.auto_update_check = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err("auto-update-check must be true or false".into()),
+                };
+            }
             ("flatten-fill-sign", _) => {
                 self.flatten_fill_sign_on_save = match value {
                     "true" => true,
@@ -2111,6 +2136,7 @@ impl eframe::App for PdfCraftApp {
                 report(dirty);
             }
         }
+        self.auto_check_updates();
         self.poll_updates();
         // Shortcuts deferred last frame: the text field has taken that frame's typing since.
         let deferred = std::mem::take(&mut self.deferred_commands);
@@ -2224,6 +2250,7 @@ impl eframe::App for PdfCraftApp {
             None => home::show(self, ui),
             Some(i) => canvas::document_area(self, i, ui),
         });
+        widgets::page_cursor_only_on_the_page(&ctx);
         if esc_free && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.escape_to_main_view();
         }
@@ -2245,6 +2272,7 @@ impl eframe::App for PdfCraftApp {
         }
         self.show_progress(&ctx);
         widgets::toast(self, &ctx);
+        widgets::hand_over_clickables(&ctx);
         self.finish_render_frame(&ctx);
     }
 }

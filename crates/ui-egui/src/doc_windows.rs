@@ -225,6 +225,7 @@ impl PdfCraftApp {
                     crate::canvas::document_area(self, i, ui);
                 }
             });
+            crate::widgets::page_cursor_only_on_the_page(&ctx);
             self.process_pending_edits();
             let overlay = self.dialog.is_some() || self.palette_open;
             if overlay && self.overlay_window.is_none() {
@@ -235,6 +236,7 @@ impl PdfCraftApp {
                 dialogs::show(self, &ctx);
             }
             self.finish_page_transfer_drop(&ctx);
+            crate::widgets::hand_over_clickables(&ctx);
         }
         let shown = self.active.and_then(|i| self.views.get(i)).filter(|v| v.window == id).map(|v| v.id);
         if let (Some(d), Some(w)) = (shown, self.doc_windows.iter_mut().find(|w| w.id == id)) {

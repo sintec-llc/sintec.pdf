@@ -4,13 +4,25 @@
 //! The desktop app supplies how to ask ([`PdfCraftApp::update_source`]) and how to install
 //! ([`PdfCraftApp::update_installer`]), so this crate has no network code; without a source (the
 //! web build, tests) the command opens the releases page. Nothing is downloaded or installed
-//! until the user chooses Update. It asks only when the user does: there is no check at start.
+//! until the user chooses Update.
+//!
+//! With Preferences ▸ Check for updates automatically (on by default) the app also asks by itself,
+//! at most every [`AUTO_CHECK_EVERY`] (the time of the last check is kept with the settings, so
+//! restarts don't ask again: GitHub allows 60 unauthenticated checks an hour per network address,
+//! and an office shares one). Only a newer version opens the dialog; failures stay quiet. A
+//! version the user skips is not offered again; Later waits until the next start.
 
 use std::sync::Arc;
 
 use egui::{Align, Layout};
 
 use crate::{PdfCraftApp, theme, widgets};
+
+/// How often the app asks by itself (seconds).
+pub const AUTO_CHECK_EVERY: i64 = 12 * 60 * 60;
+
+/// The longest version tag kept in the settings (they are untrusted).
+const MAX_VERSION_CHARS: usize = 32;
 
 /// Where every PdfCraft release is listed.
 pub const RELEASES_PAGE: &str = "https://github.com/sintec-llc/sintec.pdf/releases";
@@ -80,18 +92,59 @@ pub(crate) struct Updates {
     pub(crate) install: Install,
     /// The Updates dialog is showing.
     pub(crate) open: bool,
+    /// The running check was started by the app, not the user: it opens the dialog only for a
+    /// newer version.
+    background: bool,
+    /// The version the user answered Later for in this run: not offered again until restart.
+    later: Option<String>,
+}
+
+/// A version tag as kept in the settings: trimmed and bounded, or `None`.
+pub(crate) fn settings_version(v: &str) -> Option<String> {
+    let v = v.trim();
+    (!v.is_empty() && v.chars().count() <= MAX_VERSION_CHARS).then(|| v.to_string())
 }
 
 impl PdfCraftApp {
     /// Help ▸ Check for updates: ask for the latest release and show the outcome.
     pub fn check_for_updates(&mut self) {
-        let Some(source) = self.update_source.clone() else {
+        if self.update_source.is_none() {
             self.open_url(RELEASES_PAGE);
             return;
-        };
+        }
+        // The user asked: whatever a running background check finds, show it.
+        self.updates.background = false;
+        self.updates.open = true;
+        self.start_update_check();
+    }
+
+    /// Preferences ▸ Check for updates automatically: ask when the last check is
+    /// [`AUTO_CHECK_EVERY`] old (each frame; cheap until then). Needs an update source (the desktop
+    /// app) and a known clock.
+    pub(crate) fn auto_check_updates(&mut self) {
+        if !self.auto_update_check || self.update_source.is_none() || self.updates.open || self.modal_open() {
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if matches!(self.updates.check, Check::Running(_)) {
+            return;
+        }
+        let now = self.session.now_secs();
+        // A clock before the last check (changed by hand) asks again rather than waiting years.
+        if now <= 0 || (now >= self.update_last_check && now - self.update_last_check < AUTO_CHECK_EVERY) {
+            return;
+        }
+        self.update_last_check = now;
+        self.updates.background = true;
+        self.start_update_check();
+    }
+
+    /// Ask the update source on its own thread; [`PdfCraftApp::poll_updates`] picks up the answer.
+    fn start_update_check(&mut self) {
+        let Some(source) = self.update_source.clone() else { return };
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.updates.open = true;
+            self.update_last_check = self.session.now_secs().max(self.update_last_check);
             if matches!(self.updates.check, Check::Running(_)) {
                 return;
             }
@@ -111,6 +164,13 @@ impl PdfCraftApp {
             let _ = source;
             self.open_url(RELEASES_PAGE);
         }
+    }
+
+    /// Whether `release` is newer than this build and not set aside (skipped, or Later this run).
+    fn offer_by_itself(&self, release: &Release) -> bool {
+        is_newer(&release.version, env!("CARGO_PKG_VERSION"))
+            && self.update_skipped.as_deref() != Some(release.version.as_str())
+            && self.updates.later.as_deref() != Some(release.version.as_str())
     }
 
     /// Update: download, check and start the new version's installer, then close (the installer
@@ -155,6 +215,10 @@ impl PdfCraftApp {
                 Err(std::sync::mpsc::TryRecvError::Empty) => return,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => Err("the update check stopped unexpectedly".into()),
             };
+            // A check the app started speaks up only for a newer version it may offer.
+            if std::mem::take(&mut self.updates.background) && result.as_ref().is_ok_and(|r| self.offer_by_itself(r)) {
+                self.updates.open = true;
+            }
             self.updates.check = Check::Done(result);
         }
         #[cfg(not(target_arch = "wasm32"))]
@@ -190,6 +254,8 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut close = false;
     let mut download: Option<String> = None;
     let mut update: Option<Release> = None;
+    let mut later: Option<String> = None;
+    let mut skip: Option<String> = None;
     let modal = crate::widgets::modal(ctx, egui::Id::new("updates")).show(ctx, |ui| {
         crate::widgets::dialog_spacing(ui);
         ui.set_width(440.0);
@@ -269,6 +335,11 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         close = true;
                     }
                     if widgets::pill_button(ui, tl!("Later"), false).clicked() {
+                        later = Some(r.version.clone());
+                        close = true;
+                    }
+                    if widgets::pill_button(ui, tl!("Skip this version"), false).clicked() {
+                        skip = Some(r.version.clone());
                         close = true;
                     }
                 });
@@ -283,6 +354,12 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
     }
     if let Some(r) = update {
         app.start_update(r);
+    }
+    if let Some(v) = later {
+        app.updates.later = Some(v);
+    }
+    if let Some(v) = skip.and_then(|v| settings_version(&v)) {
+        app.update_skipped = Some(v);
     }
     if close {
         app.updates.open = false;

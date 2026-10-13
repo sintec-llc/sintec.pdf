@@ -325,9 +325,20 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
             .small()
             .color(t.text_muted),
     );
-    // The web build has no file paths to reopen.
+    // The web build has no file paths to reopen, and is always the current version.
     #[cfg(not(target_arch = "wasm32"))]
-    ui.checkbox(&mut app.reopen_last_session, tl!("Reopen the files that were open when Sintec.PDF last closed"));
+    {
+        ui.checkbox(&mut app.reopen_last_session, tl!("Reopen the files that were open when Sintec.PDF last closed"));
+        ui.checkbox(&mut app.auto_update_check, tl!("Check for updates automatically"));
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(tl!("Asks GitHub for a newer version at start and twice a day, and offers it. Nothing is downloaded until you choose Update."))
+                    .small()
+                    .color(t.text_muted),
+            )
+            .selectable(false),
+        );
+    }
     ui.add_space(8.0);
     // Identity: the author of new comments (Acrobat: Preferences ▸ Identity).
     ui.label(egui::RichText::new(tl!("Identity")).font(theme::semibold(13.0)));
