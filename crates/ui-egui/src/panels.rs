@@ -427,6 +427,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     // Pages dragged here from another document's Pages panel (how many), and where they drop.
     let foreign = app.page_transfer.as_ref().filter(|tr| tr.from != id).map(|tr| tr.pages.len());
     let mut foreign_drop: Option<usize> = None;
+    let mut pages_rect: Option<Rect> = None;
     {
         let Some(doc) = app.session.get(id) else { return };
         let info = &doc.info;
@@ -449,6 +450,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     .stroke(Stroke::new(1.0, t.divider)),
             )
             .show(ui, |ui| {
+                pages_rect = (panel == RightPanel::Pages).then(|| ui.max_rect());
                 let (title, count) = match panel {
                     RightPanel::Comments => ("Comments", Some(crate::comments_panel::count(info))),
                     RightPanel::Bookmarks => ("Bookmarks", None),
@@ -662,6 +664,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     if let Some(e) = panel_edit {
         app.apply_edit(e);
     }
+    app.pages_panel_rect = pages_rect;
     // A drag of this document's pages can leave it (into another document's panel or tab).
     if app.page_transfer.is_none()
         && let Some(pages) = app.views.get(index).and_then(|v| v.panel_drag.clone())
@@ -1134,6 +1137,7 @@ fn pages(
     }
     page_drag(ui, t, view, &rows, dropped);
     foreign_page_drag(ui, t, view, &rows, foreign.filter(|_| editable), foreign_drop);
+    file_drop_gap(ui, t, view, &rows, editable);
 }
 
 /// Queue deleting the selection (or the current page) of a document of `n` pages, unless that
@@ -1170,6 +1174,21 @@ fn moved_index(p: usize, moving: &[usize], to: usize) -> usize {
             if rest >= to { rest + moving.len() } else { rest }
         }
     }
+}
+
+/// Sintec.PDF: files dragged in from outside the app (Explorer) over the thumbnails: the bar on
+/// the gap they would go to. Dropped there, they are inserted into the document at that gap.
+fn file_drop_gap(ui: &mut egui::Ui, t: &Tokens, view: &mut crate::DocView, rows: &[Rect], editable: bool) {
+    let hovering = ui.input(|i| !i.raw.hovered_files.is_empty() || !i.raw.dropped_files.is_empty());
+    let pointer = ui.input(|i| i.pointer.latest_pos()).filter(|p| ui.clip_rect().contains(*p));
+    view.panel_file_gap = pointer.filter(|_| editable).map(|p| panel_gap(rows, p.y).unwrap_or(0));
+    if !hovering {
+        return;
+    }
+    let (Some(gap), Some(first), Some(last)) = (view.panel_file_gap, rows.first(), rows.last()) else { return };
+    let y = rows.get(gap).map_or(last.bottom() + 20.0, |r| r.top() - 3.0);
+    ui.painter().line_segment([pos2(first.left(), y), pos2(first.right(), y)], Stroke::new(3.0, t.accent));
+    ui.ctx().request_repaint();
 }
 
 /// Sintec.PDF: pages dragged from another document over this one's thumbnails: the bar on the gap

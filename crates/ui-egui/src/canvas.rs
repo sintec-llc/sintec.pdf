@@ -408,6 +408,8 @@ pub struct DocView {
     /// The page-grid gap under the pointer this frame (where dropped files go), when it can
     /// take pages.
     pub grid_gap: Option<usize>,
+    /// Sintec.PDF: the gap in the Pages panel under files dragged in from outside the app.
+    pub panel_file_gap: Option<usize>,
     /// How large the page grid draws its pages (1.0 = the usual thumbnails).
     pub grid_zoom: f32,
     /// A zoom asked for this frame (toolbar, pinch, keys); the grid applies it once it has laid
@@ -572,6 +574,7 @@ impl DocView {
             pending_action: None,
             insert_at: None,
             grid_gap: None,
+            panel_file_gap: None,
             grid_zoom: 1.0,
             grid_zoom_request: None,
             grid_anchor: None,

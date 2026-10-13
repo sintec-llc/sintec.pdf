@@ -1253,6 +1253,28 @@ fn files_dropped_between_pages_are_inserted_there() {
     assert_eq!(texts_of(h.state(), 0), ["Page 1", "Page 2", "Page 3", "a note"]);
 }
 
+/// Sintec.PDF: a PDF dropped from outside the app onto the Pages panel goes into the document at
+/// the gap under the pointer, not into a new tab.
+#[test]
+fn files_dropped_on_the_pages_panel_are_inserted_into_the_document() {
+    let mut h = harness(3, |app| app.right = Some(pdfcraft_ui_egui::RightPanel::Pages));
+    // The upper half of page 2's thumbnail: the gap before it.
+    let thumb = h.get_by_label("Page 2").rect();
+    h.hover_at(thumb.center() - egui::vec2(0.0, thumb.height() * 0.3));
+    h.run_steps(2);
+    drop_files(&mut h, vec![Dropped("extra.pdf", fixture(2))]);
+    h.run_steps(4);
+    assert_eq!(h.state().views.len(), 1, "not opened as a document");
+    assert_eq!(page_texts(h.state()), ["Page 1", "Page 1", "Page 2", "Page 2", "Page 3"]);
+    // Dropped elsewhere (the page itself), a file still opens in its own tab.
+    let page = h.state().views[0].page_screen_rect(0).unwrap().center();
+    h.hover_at(page);
+    h.run_steps(2);
+    drop_files(&mut h, vec![Dropped("other.pdf", fixture(1))]);
+    h.run_steps(4);
+    assert_eq!(h.state().views.len(), 2, "opened");
+}
+
 #[test]
 fn files_dropped_before_the_pointer_is_known_wait_for_it() {
     // Some platforms don't report the pointer while files are dragged over the window.
