@@ -108,10 +108,14 @@ mod tests {
 
     #[test]
     fn nothing_is_drawn_without_a_drag() {
-        let mut app = PdfCraftApp::default();
-        app.drag_ghost = Some(Ghost { screen: pos2(10.0, 10.0), title: "a.pdf".into(), doc: DocId(1), page: 0, pages: 0, preview: true });
+        let app = PdfCraftApp {
+            drag_ghost: Some(Ghost { screen: pos2(10.0, 10.0), title: "a.pdf".into(), doc: DocId(1), page: 0, pages: 0, preview: true }),
+            ..Default::default()
+        };
         let ctx = egui::Context::default();
         let out = ctx.run_ui(Default::default(), |ui| paint(&app, ui.ctx()));
-        assert!(out.shapes.is_empty(), "a stale ghost after the drag ended is not drawn");
+        let drawn = !out.shapes.is_empty();
+        out.drop_without_applying_deltas();
+        assert!(!drawn, "a stale ghost after the drag ended is not drawn");
     }
 }
