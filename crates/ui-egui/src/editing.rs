@@ -146,6 +146,7 @@ impl PdfCraftApp {
             }
             Some(crate::canvas::ViewAction::Extract) => self.open_extract_dialog(),
             Some(crate::canvas::ViewAction::ExtractSaveAs) => self.extract_save_as(),
+            Some(crate::canvas::ViewAction::Scan) => self.start_scan(),
             Some(crate::canvas::ViewAction::Split) => self.dialog = Some(crate::Dialog::Split),
             Some(crate::canvas::ViewAction::CopyPages { cut }) => self.copy_pages(cut),
             Some(crate::canvas::ViewAction::PastePages) => self.paste_pages(),
@@ -186,8 +187,14 @@ impl PdfCraftApp {
     pub fn begin_page_transfer(&mut self, pages: Vec<usize>) {
         let Some((_, id)) = self.active_ids() else { return };
         let Some(doc) = self.session.get(id) else { return };
-        self.page_transfer =
-            Some(crate::PageTransfer { from: id, generation: doc.edit_generation(), name: doc.name.clone(), bytes: doc.bytes.clone(), pages });
+        self.page_transfer = Some(crate::PageTransfer {
+            from: id,
+            generation: doc.edit_generation(),
+            window: self.current_window,
+            name: doc.name.clone(),
+            bytes: doc.bytes.clone(),
+            pages,
+        });
     }
 
     /// Drop the dragged pages into document `target` (a tab index) at page gap `at` (`None`: after
@@ -231,6 +238,13 @@ impl PdfCraftApp {
                 );
             }
             (false, _, _) => self.notify_fmt("Copied {what} to {name}", &[("what", &what), ("name", &target_name)]),
+        }
+        // Dropped into a document in another window: this window keeps its tab, and that window
+        // shows the document the pages went to.
+        let target_window = self.views.get(target).map_or(0, |v| v.window);
+        if target_window != self.current_window {
+            self.active = previous;
+            self.set_window_active(target_window, target_id);
         }
     }
 

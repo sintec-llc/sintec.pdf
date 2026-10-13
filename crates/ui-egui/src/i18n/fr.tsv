@@ -2222,3 +2222,26 @@ key	Space	Espace
 	Moved {what} to {name}	Déplacé vers « {name} » : {what}
 	Copied {what} to {name}	Copié vers « {name} » : {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Copié vers « {name} » : {what} ; l’original les conserve (il a changé pendant le glissement ou serait vide)
+	Release to open it in a new window	Relâchez pour l’ouvrir dans une nouvelle fenêtre
+	Release to move it to that window	Relâchez pour le déplacer dans cette fenêtre
+	Scan	Numérisation
+	Scan into document	Numériser dans le document
+	Scan into document…	Numériser dans le document…
+	Page scanned	Page numérisée
+	Put the next page on the scanner and scan it in after this one, or finish.	Placez la page suivante sur le scanner et numérisez-la après celle-ci, ou terminez.
+	Scan another page	Numériser une autre page
+	The scanner is already in use	Le scanner est déjà utilisé
+	Waiting for the scanner…	En attente du scanner…
+	Couldn't scan: {e}	Numérisation impossible : {e}
+	Scanning works on Windows, through its built-in scanner support	La numérisation fonctionne sous Windows, grâce à sa prise en charge intégrée des scanners
+	Windows' scanner support (WIA) isn't available on this computer	La prise en charge des scanners de Windows (WIA) n'est pas disponible sur cet ordinateur
+	No scanner was found. Check that it is connected and switched on	Aucun scanner trouvé. Vérifiez qu'il est connecté et allumé
+	The scanner is busy	Le scanner est occupé
+	The scanner is offline. Check that it is connected and switched on	Le scanner est hors ligne. Vérifiez qu'il est connecté et allumé
+	The document feeder is empty	Le chargeur de documents est vide
+	The scanner has a paper jam	Le scanner a un bourrage papier
+	The scanner's cover is open	Le capot du scanner est ouvert
+	The scanner's lamp is off	La lampe du scanner est éteinte
+	The scanner reported an error. Check it and try again	Le scanner a signalé une erreur. Vérifiez-le et réessayez
+	The scanned page is too large	La page numérisée est trop volumineuse
+	The scan failed	La numérisation a échoué

@@ -392,6 +392,8 @@ pub struct DocView {
     pub org_drag: Option<Vec<usize>>,
     /// Pages panel: the pages being dragged to a new place.
     pub panel_drag: Option<Vec<usize>>,
+    /// Sintec.PDF: the window showing this document's tab (0: the main window).
+    pub window: u64,
     /// Marquee Zoom / Snapshot: the rectangle being dragged (page, start), and a finished one.
     pub marquee: Option<(usize, Pos2)>,
     pub marquee_done: Option<crate::zoom_snap::Marquee>,
@@ -410,6 +412,8 @@ pub struct DocView {
     pub grid_gap: Option<usize>,
     /// Sintec.PDF: the gap in the Pages panel under files dragged in from outside the app.
     pub panel_file_gap: Option<usize>,
+    /// Where the Pages panel drew this document's thumbnails last (window points).
+    pub panel_rows: Vec<Rect>,
     /// How large the page grid draws its pages (1.0 = the usual thumbnails).
     pub grid_zoom: f32,
     /// A zoom asked for this frame (toolbar, pinch, keys); the grid applies it once it has laid
@@ -456,6 +460,8 @@ pub enum ViewAction {
     Extract,
     /// Sintec.PDF: save the selected pages as a new PDF file (Save As).
     ExtractSaveAs,
+    /// Sintec.PDF: scan a page in after the selection.
+    Scan,
     Split,
     /// Copy the selected pages (Cut also deletes them).
     CopyPages {
@@ -575,6 +581,7 @@ impl DocView {
             insert_at: None,
             grid_gap: None,
             panel_file_gap: None,
+            panel_rows: Vec::new(),
             grid_zoom: 1.0,
             grid_zoom_request: None,
             grid_anchor: None,
@@ -591,6 +598,7 @@ impl DocView {
             sign: Default::default(),
             org_drag: None,
             panel_drag: None,
+            window: 0,
             marquee: None,
             marquee_done: None,
             fill_text: None,
@@ -3433,6 +3441,9 @@ fn organize_toolbar(view: &mut DocView, info: &DocInfo, editable: bool, dirty: b
                 }
                 if icons::button(ui, "file-input", 30.0, false, tl!("Insert pages from a file…")).clicked() {
                     view.pending_action = Some(ViewAction::InsertFromFile);
+                }
+                if icons::button(ui, "scan", 30.0, false, tl!("Scan into document…")).clicked() {
+                    view.pending_action = Some(ViewAction::Scan);
                 }
                 if icons::button(ui, "file-output", 30.0, false, tl!("Extract pages to a new document")).clicked() {
                     view.pending_action = Some(ViewAction::Extract);

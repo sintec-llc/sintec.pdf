@@ -2245,3 +2245,26 @@ key	Space	Пробіл
 	Moved {what} to {name}	Переміщено до «{name}»: {what}
 	Copied {what} to {name}	Скопійовано до «{name}»: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Скопійовано до «{name}»: {what}; у вихідному файлі сторінки залишилися (він змінився під час перетягування або лишився б порожнім)
+	Release to open it in a new window	Відпустіть, щоб відкрити в новому вікні
+	Release to move it to that window	Відпустіть, щоб перенести в те вікно
+	Scan	Скан
+	Scan into document	Сканувати в документ
+	Scan into document…	Сканувати в документ…
+	Page scanned	Сторінку відскановано
+	Put the next page on the scanner and scan it in after this one, or finish.	Покладіть наступну сторінку в сканер і відскануйте її після цієї — або завершіть.
+	Scan another page	Сканувати ще
+	The scanner is already in use	Сканер уже використовується
+	Waiting for the scanner…	Очікування сканера…
+	Couldn't scan: {e}	Не вдалося відсканувати: {e}
+	Scanning works on Windows, through its built-in scanner support	Сканування працює у Windows через вбудовану підтримку сканерів
+	Windows' scanner support (WIA) isn't available on this computer	Підтримка сканерів Windows (WIA) недоступна на цьому комп'ютері
+	No scanner was found. Check that it is connected and switched on	Сканер не знайдено. Перевірте, що його підключено й увімкнено
+	The scanner is busy	Сканер зайнятий
+	The scanner is offline. Check that it is connected and switched on	Сканер не в мережі. Перевірте, що його підключено й увімкнено
+	The document feeder is empty	Лоток подачі документів порожній
+	The scanner has a paper jam	У сканері застряг папір
+	The scanner's cover is open	Кришку сканера відкрито
+	The scanner's lamp is off	Лампу сканера вимкнено
+	The scanner reported an error. Check it and try again	Сканер повідомив про помилку. Перевірте його та спробуйте ще раз
+	The scanned page is too large	Відсканована сторінка завелика
+	The scan failed	Сканування не вдалося

@@ -2134,3 +2134,26 @@ key	Space	空格
 	Moved {what} to {name}	已移動到「{name}」：{what}
 	Copied {what} to {name}	已複製到「{name}」：{what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	已複製到「{name}」：{what}；原檔案保留了這些頁面（拖曳期間已變更，或將變為空白）
+	Release to open it in a new window	放開即可在新視窗中開啟
+	Release to move it to that window	放開即可移到那個視窗
+	Scan	掃描
+	Scan into document	掃描到文件
+	Scan into document…	掃描到文件…
+	Page scanned	頁面已掃描
+	Put the next page on the scanner and scan it in after this one, or finish.	將下一頁放到掃描器上，掃描到這一頁之後，或者完成。
+	Scan another page	再掃描一頁
+	The scanner is already in use	掃描器正在使用中
+	Waiting for the scanner…	正在等待掃描器…
+	Couldn't scan: {e}	無法掃描：{e}
+	Scanning works on Windows, through its built-in scanner support	掃描功能在 Windows 上透過其內建掃描器支援實現
+	Windows' scanner support (WIA) isn't available on this computer	此電腦上無法使用 Windows 掃描器支援 (WIA)
+	No scanner was found. Check that it is connected and switched on	找不到掃描器。請檢查它是否已連接並開啟
+	The scanner is busy	掃描器忙碌中
+	The scanner is offline. Check that it is connected and switched on	掃描器已離線。請檢查它是否已連接並開啟
+	The document feeder is empty	送紙器是空的
+	The scanner has a paper jam	掃描器卡紙
+	The scanner's cover is open	掃描器蓋板已開啟
+	The scanner's lamp is off	掃描器燈已關閉
+	The scanner reported an error. Check it and try again	掃描器回報錯誤。請檢查後重試
+	The scanned page is too large	掃描的頁面過大
+	The scan failed	掃描失敗

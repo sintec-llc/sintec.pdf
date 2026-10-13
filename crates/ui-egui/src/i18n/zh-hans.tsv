@@ -2211,3 +2211,26 @@ key	Space	空格
 	Moved {what} to {name}	已移动到“{name}”：{what}
 	Copied {what} to {name}	已复制到“{name}”：{what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	已复制到“{name}”：{what}；原文件保留了这些页面（拖动期间已更改，或将变为空）
+	Release to open it in a new window	松开即可在新窗口中打开
+	Release to move it to that window	松开即可移到那个窗口
+	Scan	扫描
+	Scan into document	扫描到文档
+	Scan into document…	扫描到文档…
+	Page scanned	页面已扫描
+	Put the next page on the scanner and scan it in after this one, or finish.	将下一页放到扫描仪上，扫描到这一页之后，或者完成。
+	Scan another page	再扫描一页
+	The scanner is already in use	扫描仪正在使用中
+	Waiting for the scanner…	正在等待扫描仪…
+	Couldn't scan: {e}	无法扫描：{e}
+	Scanning works on Windows, through its built-in scanner support	扫描功能在 Windows 上通过其内置扫描仪支持实现
+	Windows' scanner support (WIA) isn't available on this computer	此计算机上无法使用 Windows 扫描仪支持 (WIA)
+	No scanner was found. Check that it is connected and switched on	未找到扫描仪。请检查它是否已连接并开启
+	The scanner is busy	扫描仪正忙
+	The scanner is offline. Check that it is connected and switched on	扫描仪已脱机。请检查它是否已连接并开启
+	The document feeder is empty	进纸器为空
+	The scanner has a paper jam	扫描仪卡纸
+	The scanner's cover is open	扫描仪盖板已打开
+	The scanner's lamp is off	扫描仪灯已关闭
+	The scanner reported an error. Check it and try again	扫描仪报告了错误。请检查后重试
+	The scanned page is too large	扫描的页面过大
+	The scan failed	扫描失败

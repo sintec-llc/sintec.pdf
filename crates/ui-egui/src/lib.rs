@@ -47,6 +47,7 @@ mod marks_ui;
 mod measure_ui;
 mod ocr_ui;
 mod optimize_ui;
+mod scan_ui;
 mod search_ui;
 mod sign_ui;
 mod stamps_ui;
@@ -67,6 +68,7 @@ mod autoscroll;
 mod bidi;
 pub mod bulk_fields;
 mod dialogs;
+mod doc_windows;
 mod edit_text_ui;
 mod editing;
 mod files;
@@ -247,6 +249,8 @@ pub enum Dialog {
     CommentProps,
     /// Replace Pages (after choosing the file).
     ReplacePages,
+    /// Sintec.PDF: a page was scanned in; scan another?
+    ScanMore,
     /// Prepare a form ▸ Field Properties.
     FieldProps,
     /// Shared properties of several selected form fields.
@@ -330,6 +334,36 @@ pub struct PageClip {
     pub pages: Vec<usize>,
 }
 
+/// Sintec.PDF: a window of its own showing some document tabs, torn off the main window (a tab
+/// dragged out of the tab strip). Closing it moves its tabs back to the main window.
+pub struct DocWindow {
+    pub id: u64,
+    /// Its shown tab.
+    pub active: Option<DocId>,
+    /// Where to open it (screen points), until it has been shown.
+    pub(crate) spawn_at: Option<egui::Pos2>,
+}
+
+/// Sintec.PDF: a document tab being dragged: to another place in its strip, onto another window's
+/// strip, or out of the strip into a new window.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TabDrag {
+    pub doc: DocId,
+    pub from_window: u64,
+}
+
+/// Where a window's tab strip, tabs and Pages panel were last drawn, in screen points: a drag
+/// started in one window ends there (the system hands it every pointer event), so drops onto
+/// another window are found from these.
+#[derive(Clone, Debug)]
+pub(crate) struct WindowGeometry {
+    pub window: u64,
+    pub strip: egui::Rect,
+    pub tabs: Vec<(DocId, egui::Rect)>,
+    /// The Pages panel: its document, its area and its thumbnails.
+    pub pages: Option<(DocId, egui::Rect, Vec<egui::Rect>)>,
+}
+
 /// Sintec.PDF: pages being dragged from one document's Pages panel, which can drop into another
 /// open document (its Pages panel, or its tab to add them at the end). Shift at the drop moves them.
 #[derive(Clone)]
@@ -338,6 +372,8 @@ pub struct PageTransfer {
     /// removes them from it if it hasn't changed since.
     pub from: DocId,
     pub generation: u64,
+    /// The window the drag started in (it receives the release, wherever the pointer is).
+    pub window: u64,
     pub name: String,
     pub bytes: std::sync::Arc<Vec<u8>>,
     pub pages: Vec<usize>,
@@ -493,6 +529,12 @@ pub struct PdfCraftApp {
     /// A «Преобразовать в PDF» conversion running in the background.
     #[allow(clippy::type_complexity)]
     pub convert_run: Option<std::sync::Arc<std::sync::Mutex<Option<Result<ConvertDone, String>>>>>,
+    /// Sintec.PDF: a scan waiting for the scanner's dialog to close.
+    pub scan_run: Option<scan_ui::ScanRun>,
+    /// Where scanned pages go: the document and the page index (`None`: a new document).
+    pub scan_target: Option<(DocId, usize)>,
+    /// Tests: pages the "scanner" hands over instead of Windows' scanner dialog, in order.
+    pub scan_fakes: Vec<scan_ui::ScanResult>,
     /// Document Properties ▸ Description fields being edited: (document, Title/Author/Subject/Keywords).
     pub props_draft: Option<(DocId, [String; 4])>,
     /// Document Properties ▸ Initial View (and reading options) being edited.
@@ -579,6 +621,19 @@ pub struct PdfCraftApp {
     pub page_transfer: Option<PageTransfer>,
     /// The tab a page drag rests on, and since when (it opens after a moment).
     pub(crate) tab_hover: Option<(usize, f64)>,
+    /// Torn-off windows (the main window is 0 and isn't listed).
+    pub doc_windows: Vec<DocWindow>,
+    pub(crate) next_window_id: u64,
+    /// The window being drawn now (0: the main window).
+    pub current_window: u64,
+    /// While a torn-off window is drawn: the main window's shown tab, to restore after.
+    pub(crate) saved_main_active: Option<Option<usize>>,
+    pub tab_drag: Option<TabDrag>,
+    /// Last frame's and this frame's window layouts (see [`WindowGeometry`]).
+    pub(crate) window_geometry: Vec<WindowGeometry>,
+    pub(crate) window_geometry_next: Vec<WindowGeometry>,
+    /// The window showing the open dialog or palette (they act on its document).
+    pub(crate) overlay_window: Option<u64>,
     /// Where the Pages panel was drawn last frame (files dropped on it go into the document).
     pub(crate) pages_panel_rect: Option<egui::Rect>,
     /// Files dropped on the page grid, waiting for the pointer to say which gap they go to.
@@ -791,6 +846,9 @@ impl PdfCraftApp {
             print_file_override: None,
             print_run: None,
             convert_run: None,
+            scan_run: None,
+            scan_target: None,
+            scan_fakes: Vec::new(),
             props_draft: None,
             view_draft: None,
             requests: Default::default(),
@@ -841,6 +899,14 @@ impl PdfCraftApp {
             page_clipboard: None,
             page_transfer: None,
             tab_hover: None,
+            doc_windows: Vec::new(),
+            next_window_id: 1,
+            current_window: 0,
+            saved_main_active: None,
+            tab_drag: None,
+            window_geometry: Vec::new(),
+            window_geometry_next: Vec::new(),
+            overlay_window: None,
             pages_panel_rect: None,
             grid_drop: None,
             last_snapshot: None,
@@ -1595,6 +1661,23 @@ impl PdfCraftApp {
     ///
     /// This is the seed of the UI control channel (M3.9): the same verbs become `ui.set` calls.
     pub fn set_option(&mut self, key: &str, value: &str) -> Result<(), String> {
+        // Sintec.PDF (automation): the shown tab in a window of its own; "back" returns every
+        // torn-off tab to the main window.
+        if key == "tear-off" {
+            if value == "back" {
+                let ids: Vec<u64> = self.doc_windows.iter().map(|w| w.id).collect();
+                for id in ids {
+                    self.close_doc_window(id);
+                }
+                return Ok(());
+            }
+            let doc = self.active_ids().map(|(_, id)| id).ok_or("`tear-off` needs an open document")?;
+            if self.window_tab_count(0) < 2 {
+                return Err("`tear-off` needs another tab to stay in the main window".into());
+            }
+            self.tear_off_tab(doc, None);
+            return Ok(());
+        }
         let view = self.active.and_then(|i| self.views.get_mut(i));
         match (key, view) {
             ("language", _) => {
@@ -2047,9 +2130,12 @@ impl eframe::App for PdfCraftApp {
         // Scrolling and group-drag previews are transient: never resume after changing tabs,
         // opening a modal/palette, or returning to a window that lost focus.
         let blocked = self.modal_open() || self.palette_open || !ctx.input(|i| i.focused);
+        // (Each window's shown tab takes input, whichever window has the focus.)
+        let shown: Vec<bool> = (0..self.views.len()).map(|i| self.shown_anywhere(i)).collect();
         for (index, view) in self.views.iter_mut().enumerate() {
-            view.objects.set_input_blocked(blocked || self.active != Some(index));
-            if blocked || self.active != Some(index) {
+            let off = blocked || !shown.get(index).copied().unwrap_or(false);
+            view.objects.set_input_blocked(off);
+            if off {
                 view.auto_scroll.cancel();
             }
         }
@@ -2069,6 +2155,7 @@ impl eframe::App for PdfCraftApp {
         #[cfg(not(target_arch = "wasm32"))]
         self.poll_convert();
         self.poll_optimize();
+        self.poll_scan();
         self.poll_action();
         self.process_file_requests();
         #[cfg(not(target_arch = "wasm32"))]
@@ -2085,6 +2172,13 @@ impl eframe::App for PdfCraftApp {
         }
         for view in &mut self.views {
             view.begin_render_frame();
+        }
+        // Sintec.PDF: windows record where they drew their strips and panels each frame; drops
+        // read last frame's. The main window shows one of its own tabs.
+        self.window_geometry = std::mem::take(&mut self.window_geometry_next);
+        self.current_window = 0;
+        if self.active.and_then(|i| self.views.get(i)).is_some_and(|v| v.window != 0) {
+            self.active = self.views.iter().position(|v| v.window == 0);
         }
         // The window shows the active document's name (or title, if it asks for that).
         let title = self
@@ -2146,13 +2240,21 @@ impl eframe::App for PdfCraftApp {
             self.escape_to_main_view();
         }
         self.process_pending_edits();
-        // A page drag ends with the button: dropped by now (tab or Pages panel), or let go elsewhere.
-        if self.page_transfer.is_some() && !ctx.input(|i| i.pointer.primary_down()) {
-            self.page_transfer = None;
-            self.tab_hover = None;
+        // A page drag ends with the button, in the window it started in: dropped onto another
+        // window by now, or let go.
+        self.finish_page_transfer_drop(&ctx);
+        self.show_doc_windows(&ctx);
+        // The dialog or palette shows in the window it was opened from (it acts on its document).
+        let overlay = self.dialog.is_some() || self.palette_open;
+        if !overlay {
+            self.overlay_window = None;
+        } else if self.overlay_window.is_none() {
+            self.overlay_window = Some(0);
         }
-        palette::show(self, &ctx);
-        dialogs::show(self, &ctx);
+        if self.overlay_window.is_none_or(|w| w == 0) {
+            palette::show(self, &ctx);
+            dialogs::show(self, &ctx);
+        }
         self.show_progress(&ctx);
         widgets::toast(self, &ctx);
         self.finish_render_frame(&ctx);
@@ -2175,17 +2277,22 @@ impl PdfCraftApp {
         self.combine_thumbs_frame(ctx);
         // Retire hidden documents before admitting the visible document's textures, so the
         // three cache limits apply to the application, regardless of how many tabs are open.
+        // Sintec.PDF: every window's shown tab renders (torn-off windows share the textures).
+        let shown: Vec<bool> = (0..self.views.len()).map(|i| self.shown_anywhere(i)).collect();
+        let is_shown = |i: usize| shown.get(i).copied().unwrap_or(false);
         for (i, view) in self.views.iter_mut().enumerate() {
-            if Some(i) != self.active
+            if !is_shown(i)
                 && let Some(doc) = self.session.get(view.id)
             {
                 view.suspend_rendering(&doc.renderer);
             }
         }
-        if let Some(view) = self.active.and_then(|i| self.views.get_mut(i))
-            && let Some(doc) = self.session.get(view.id)
-        {
-            view.finish_render_frame(ctx, &doc.info, &doc.renderer);
+        for (i, view) in self.views.iter_mut().enumerate() {
+            if is_shown(i)
+                && let Some(doc) = self.session.get(view.id)
+            {
+                view.finish_render_frame(ctx, &doc.info, &doc.renderer);
+            }
         }
     }
 }

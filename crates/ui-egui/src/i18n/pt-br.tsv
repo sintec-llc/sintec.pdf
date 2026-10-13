@@ -2223,3 +2223,26 @@ key	Space	Espaço
 	Moved {what} to {name}	Movido para “{name}”: {what}
 	Copied {what} to {name}	Copiado para “{name}”: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Copiado para “{name}”: {what}; o original as manteve (mudou durante o arraste ou ficaria vazio)
+	Release to open it in a new window	Solte para abrir em uma nova janela
+	Release to move it to that window	Solte para mover para aquela janela
+	Scan	Digitalização
+	Scan into document	Digitalizar para o documento
+	Scan into document…	Digitalizar para o documento…
+	Page scanned	Página digitalizada
+	Put the next page on the scanner and scan it in after this one, or finish.	Coloque a próxima página no scanner e digitalize-a depois desta, ou termine.
+	Scan another page	Digitalizar outra página
+	The scanner is already in use	O scanner já está em uso
+	Waiting for the scanner…	Aguardando o scanner…
+	Couldn't scan: {e}	Não foi possível digitalizar: {e}
+	Scanning works on Windows, through its built-in scanner support	A digitalização funciona no Windows, pelo suporte a scanners integrado
+	Windows' scanner support (WIA) isn't available on this computer	O suporte a scanners do Windows (WIA) não está disponível neste computador
+	No scanner was found. Check that it is connected and switched on	Nenhum scanner encontrado. Verifique se ele está conectado e ligado
+	The scanner is busy	O scanner está ocupado
+	The scanner is offline. Check that it is connected and switched on	O scanner está offline. Verifique se ele está conectado e ligado
+	The document feeder is empty	O alimentador de documentos está vazio
+	The scanner has a paper jam	O scanner está com papel atolado
+	The scanner's cover is open	A tampa do scanner está aberta
+	The scanner's lamp is off	A lâmpada do scanner está desligada
+	The scanner reported an error. Check it and try again	O scanner relatou um erro. Verifique-o e tente novamente
+	The scanned page is too large	A página digitalizada é grande demais
+	The scan failed	A digitalização falhou

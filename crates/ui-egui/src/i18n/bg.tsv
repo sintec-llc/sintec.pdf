@@ -2184,3 +2184,26 @@ key	Space	Интервал
 	Moved {what} to {name}	Преместено в „{name}“: {what}
 	Copied {what} to {name}	Копирано в „{name}“: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Копирано в „{name}“: {what}; в изходния файл страниците останаха (той се промени по време на плъзгането или щеше да остане празен)
+	Release to open it in a new window	Пуснете, за да отворите в нов прозорец
+	Release to move it to that window	Пуснете, за да преместите в онзи прозорец
+	Scan	Сканиране
+	Scan into document	Сканиране в документа
+	Scan into document…	Сканиране в документа…
+	Page scanned	Страницата е сканирана
+	Put the next page on the scanner and scan it in after this one, or finish.	Поставете следващата страница в скенера и я сканирайте след тази или приключете.
+	Scan another page	Сканиране на още една страница
+	The scanner is already in use	Скенерът вече се използва
+	Waiting for the scanner…	Изчакване на скенера…
+	Couldn't scan: {e}	Неуспешно сканиране: {e}
+	Scanning works on Windows, through its built-in scanner support	Сканирането работи в Windows чрез вградената поддръжка на скенери
+	Windows' scanner support (WIA) isn't available on this computer	Поддръжката на скенери в Windows (WIA) не е налична на този компютър
+	No scanner was found. Check that it is connected and switched on	Не е открит скенер. Проверете дали е свързан и включен
+	The scanner is busy	Скенерът е зает
+	The scanner is offline. Check that it is connected and switched on	Скенерът е изключен от мрежата. Проверете дали е свързан и включен
+	The document feeder is empty	Подаващото устройство е празно
+	The scanner has a paper jam	В скенера има заседнала хартия
+	The scanner's cover is open	Капакът на скенера е отворен
+	The scanner's lamp is off	Лампата на скенера е изключена
+	The scanner reported an error. Check it and try again	Скенерът съобщи за грешка. Проверете го и опитайте отново
+	The scanned page is too large	Сканираната страница е твърде голяма
+	The scan failed	Сканирането не бе успешно

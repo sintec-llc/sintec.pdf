@@ -2227,3 +2227,26 @@ key	Space	Spacja
 	Moved {what} to {name}	Przeniesiono do „{name}”: {what}
 	Copied {what} to {name}	Skopiowano do „{name}”: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Skopiowano do „{name}”: {what}; oryginał je zachował (zmienił się podczas przeciągania lub zostałby pusty)
+	Release to open it in a new window	Puść, aby otworzyć w nowym oknie
+	Release to move it to that window	Puść, aby przenieść do tamtego okna
+	Scan	Skan
+	Scan into document	Skanuj do dokumentu
+	Scan into document…	Skanuj do dokumentu…
+	Page scanned	Strona zeskanowana
+	Put the next page on the scanner and scan it in after this one, or finish.	Połóż następną stronę na skanerze i zeskanuj ją po tej albo zakończ.
+	Scan another page	Skanuj kolejną stronę
+	The scanner is already in use	Skaner jest już używany
+	Waiting for the scanner…	Oczekiwanie na skaner…
+	Couldn't scan: {e}	Nie udało się zeskanować: {e}
+	Scanning works on Windows, through its built-in scanner support	Skanowanie działa w systemie Windows dzięki wbudowanej obsłudze skanerów
+	Windows' scanner support (WIA) isn't available on this computer	Obsługa skanerów w systemie Windows (WIA) nie jest dostępna na tym komputerze
+	No scanner was found. Check that it is connected and switched on	Nie znaleziono skanera. Sprawdź, czy jest podłączony i włączony
+	The scanner is busy	Skaner jest zajęty
+	The scanner is offline. Check that it is connected and switched on	Skaner jest offline. Sprawdź, czy jest podłączony i włączony
+	The document feeder is empty	Podajnik dokumentów jest pusty
+	The scanner has a paper jam	W skanerze zaciął się papier
+	The scanner's cover is open	Pokrywa skanera jest otwarta
+	The scanner's lamp is off	Lampa skanera jest wyłączona
+	The scanner reported an error. Check it and try again	Skaner zgłosił błąd. Sprawdź go i spróbuj ponownie
+	The scanned page is too large	Zeskanowana strona jest za duża
+	The scan failed	Skanowanie nie powiodło się

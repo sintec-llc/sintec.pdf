@@ -665,6 +665,15 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         app.apply_edit(e);
     }
     app.pages_panel_rect = pages_rect;
+    // Where this window's Pages panel and its thumbnails are on the screen, for page drags
+    // started in other windows.
+    let on_screen = crate::doc_windows::screen_offset(ui.ctx());
+    let window = app.current_window;
+    let pages_geometry =
+        pages_rect.map(|r| (id, r.translate(on_screen), app.views[index].panel_rows.iter().map(|row| row.translate(on_screen)).collect()));
+    if let Some(g) = app.window_geometry_next.iter_mut().find(|g| g.window == window) {
+        g.pages = pages_geometry;
+    }
     // A drag of this document's pages can leave it (into another document's panel or tab).
     if app.page_transfer.is_none()
         && let Some(pages) = app.views.get(index).and_then(|v| v.panel_drag.clone())
@@ -1136,6 +1145,7 @@ fn pages(
         ui.add_space(4.0);
     }
     page_drag(ui, t, view, &rows, dropped);
+    view.panel_rows = rows.clone();
     foreign_page_drag(ui, t, view, &rows, foreign.filter(|_| editable), foreign_drop);
     file_drop_gap(ui, t, view, &rows, editable);
 }

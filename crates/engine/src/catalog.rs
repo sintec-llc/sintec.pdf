@@ -244,15 +244,18 @@ pub static TOOL_GROUPS: &[ToolGroup] = &[
         hue: GREEN,
         badge: None,
         availability: Ready,
-        sections: &[ToolSection {
-            title: "Recognize text",
-            items: &[
-                item("In this file", "scan-text", "ocr.recognize", Ready),
-                item("In multiple files", "files", "ocr.recognize_batch", Ready),
-                item("Enhance scanned file", "sparkles", "ocr.enhance", Planned("M10")),
-                item("Correct recognized text", "text-select", "ocr.correct", Planned("M10")),
-            ],
-        }],
+        sections: &[
+            ToolSection { title: "Scan", items: &[item("Scan into document", "scan", "page.scan", Ready)] },
+            ToolSection {
+                title: "Recognize text",
+                items: &[
+                    item("In this file", "scan-text", "ocr.recognize", Ready),
+                    item("In multiple files", "files", "ocr.recognize_batch", Ready),
+                    item("Enhance scanned file", "sparkles", "ocr.enhance", Planned("M10")),
+                    item("Correct recognized text", "text-select", "ocr.correct", Planned("M10")),
+                ],
+            },
+        ],
     },
     ToolGroup {
         id: "protect",

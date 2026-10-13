@@ -2178,3 +2178,26 @@ key	Space	Пробел
 	Moved {what} to {name}	Перемещено в «{name}»: {what}
 	Copied {what} to {name}	Скопировано в «{name}»: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Скопировано в «{name}»: {what}; в исходном файле страницы остались (он изменился во время перетаскивания или остался бы пустым)
+	Release to open it in a new window	Отпустите, чтобы открыть в новом окне
+	Release to move it to that window	Отпустите, чтобы перенести в то окно
+	Scan	Скан
+	Scan into document	Сканировать в документ
+	Scan into document…	Сканировать в документ…
+	Page scanned	Страница отсканирована
+	Put the next page on the scanner and scan it in after this one, or finish.	Положите следующую страницу в сканер и отсканируйте её после этой — или завершите.
+	Scan another page	Сканировать ещё
+	The scanner is already in use	Сканер уже используется
+	Waiting for the scanner…	Ожидание сканера…
+	Couldn't scan: {e}	Не удалось отсканировать: {e}
+	Scanning works on Windows, through its built-in scanner support	Сканирование работает в Windows через встроенную поддержку сканеров
+	Windows' scanner support (WIA) isn't available on this computer	Поддержка сканеров Windows (WIA) недоступна на этом компьютере
+	No scanner was found. Check that it is connected and switched on	Сканер не найден. Проверьте, что он подключён и включён
+	The scanner is busy	Сканер занят
+	The scanner is offline. Check that it is connected and switched on	Сканер не в сети. Проверьте, что он подключён и включён
+	The document feeder is empty	Лоток подачи документов пуст
+	The scanner has a paper jam	В сканере застряла бумага
+	The scanner's cover is open	Крышка сканера открыта
+	The scanner's lamp is off	Лампа сканера выключена
+	The scanner reported an error. Check it and try again	Сканер сообщил об ошибке. Проверьте его и попробуйте ещё раз
+	The scanned page is too large	Отсканированная страница слишком велика
+	The scan failed	Сканирование не удалось

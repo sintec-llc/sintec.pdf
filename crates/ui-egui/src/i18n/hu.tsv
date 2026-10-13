@@ -2220,3 +2220,26 @@ key	Space	Szóköz
 	Moved {what} to {name}	Áthelyezve ide: „{name}”: {what}
 	Copied {what} to {name}	Másolva ide: „{name}”: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Másolva ide: „{name}”: {what}; az eredetiben megmaradtak (húzás közben megváltozott, vagy üres maradna)
+	Release to open it in a new window	Engedje el, hogy új ablakban nyíljon meg
+	Release to move it to that window	Engedje el, hogy abba az ablakba kerüljön
+	Scan	Beolvasás
+	Scan into document	Beolvasás a dokumentumba
+	Scan into document…	Beolvasás a dokumentumba…
+	Page scanned	Oldal beolvasva
+	Put the next page on the scanner and scan it in after this one, or finish.	Tegye a következő oldalt a szkennerre, és olvassa be ez után, vagy fejezze be.
+	Scan another page	Újabb oldal beolvasása
+	The scanner is already in use	A szkenner már használatban van
+	Waiting for the scanner…	Várakozás a szkennerre…
+	Couldn't scan: {e}	Nem sikerült beolvasni: {e}
+	Scanning works on Windows, through its built-in scanner support	A beolvasás Windows alatt működik, a beépített szkennertámogatással
+	Windows' scanner support (WIA) isn't available on this computer	A Windows szkennertámogatása (WIA) nem érhető el ezen a számítógépen
+	No scanner was found. Check that it is connected and switched on	Nem található szkenner. Ellenőrizze, hogy csatlakoztatva és bekapcsolva van-e
+	The scanner is busy	A szkenner foglalt
+	The scanner is offline. Check that it is connected and switched on	A szkenner offline. Ellenőrizze, hogy csatlakoztatva és bekapcsolva van-e
+	The document feeder is empty	A dokumentumadagoló üres
+	The scanner has a paper jam	Papírelakadás a szkennerben
+	The scanner's cover is open	A szkenner fedele nyitva van
+	The scanner's lamp is off	A szkenner lámpája ki van kapcsolva
+	The scanner reported an error. Check it and try again	A szkenner hibát jelzett. Ellenőrizze, és próbálja újra
+	The scanned page is too large	A beolvasott oldal túl nagy
+	The scan failed	A beolvasás nem sikerült

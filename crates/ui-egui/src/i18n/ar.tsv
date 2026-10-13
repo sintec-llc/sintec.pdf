@@ -2244,3 +2244,26 @@ key	Space	مسافة
 	Moved {what} to {name}	نُقل إلى «{name}»: {what}
 	Copied {what} to {name}	نُسخ إلى «{name}»: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	نُسخ إلى «{name}»: {what}؛ احتفظ الملف الأصلي بها (تغيّر أثناء السحب أو كان سيصبح فارغًا)
+	Release to open it in a new window	أفلِت لفتحه في نافذة جديدة
+	Release to move it to that window	أفلِت لنقله إلى تلك النافذة
+	Scan	مسح ضوئي
+	Scan into document	المسح الضوئي إلى المستند
+	Scan into document…	المسح الضوئي إلى المستند…
+	Page scanned	تم مسح الصفحة
+	Put the next page on the scanner and scan it in after this one, or finish.	ضع الصفحة التالية على الماسح وامسحها بعد هذه الصفحة، أو أنهِ.
+	Scan another page	مسح صفحة أخرى
+	The scanner is already in use	الماسح الضوئي قيد الاستخدام بالفعل
+	Waiting for the scanner…	في انتظار الماسح الضوئي…
+	Couldn't scan: {e}	تعذّر المسح الضوئي: {e}
+	Scanning works on Windows, through its built-in scanner support	يعمل المسح الضوئي على Windows من خلال دعم الماسحات المدمج فيه
+	Windows' scanner support (WIA) isn't available on this computer	دعم الماسحات في Windows (WIA) غير متاح على هذا الكمبيوتر
+	No scanner was found. Check that it is connected and switched on	لم يتم العثور على ماسح ضوئي. تحقق من أنه متصل وقيد التشغيل
+	The scanner is busy	الماسح الضوئي مشغول
+	The scanner is offline. Check that it is connected and switched on	الماسح الضوئي غير متصل. تحقق من أنه متصل وقيد التشغيل
+	The document feeder is empty	وحدة تغذية المستندات فارغة
+	The scanner has a paper jam	يوجد انحشار ورق في الماسح الضوئي
+	The scanner's cover is open	غطاء الماسح الضوئي مفتوح
+	The scanner's lamp is off	مصباح الماسح الضوئي مطفأ
+	The scanner reported an error. Check it and try again	أبلغ الماسح الضوئي عن خطأ. تحقق منه وحاول مرة أخرى
+	The scanned page is too large	الصفحة الممسوحة كبيرة جدًا
+	The scan failed	فشل المسح الضوئي

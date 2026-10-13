@@ -24,6 +24,7 @@ pub mod links;
 pub mod ocr;
 pub mod office;
 pub mod optimizer;
+pub mod scan;
 pub mod signature_image;
 mod upright_image;
 pub mod xfa;

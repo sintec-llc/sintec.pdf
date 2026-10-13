@@ -52,6 +52,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut optimize_now = false;
     let mut duplicate_now: Option<Edit> = None;
     let mut replace_now = false;
+    let mut scan_next = false;
     let mut open_revision: Option<usize> = None;
     let mut a11y_now = false;
     let mut ocr_now = false;
@@ -502,6 +503,22 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         close = true;
                     }
                     if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
+                        close = true;
+                    }
+                });
+                return;
+            }
+            Dialog::ScanMore => {
+                ui.label(egui::RichText::new(tl!("Page scanned")).font(theme::semibold(18.0)));
+                ui.add_space(8.0);
+                ui.label(tl!("Put the next page on the scanner and scan it in after this one, or finish."));
+                ui.add_space(10.0);
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if widgets::pill_button(ui, tl!("Scan another page"), true).clicked() {
+                        scan_next = true;
+                        close = true;
+                    }
+                    if widgets::pill_button(ui, tl!("Done"), false).clicked() {
                         close = true;
                     }
                 });
@@ -1175,6 +1192,9 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
         } else {
             app.discard_recovered(&keys);
         }
+    }
+    if scan_next {
+        app.scan_next();
     }
     // The pages to replace belong to the document the dialog was opened on (#167).
     if replace_now

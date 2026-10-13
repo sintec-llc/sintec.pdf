@@ -2165,3 +2165,26 @@ key	Space	Espacio
 	Moved {what} to {name}	Movido a «{name}»: {what}
 	Copied {what} to {name}	Copiado a «{name}»: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Copiado a «{name}»: {what}; el original las conserva (cambió durante el arrastre o quedaría vacío)
+	Release to open it in a new window	Suelte para abrirlo en una ventana nueva
+	Release to move it to that window	Suelte para moverlo a esa ventana
+	Scan	Escaneo
+	Scan into document	Escanear al documento
+	Scan into document…	Escanear al documento…
+	Page scanned	Página escaneada
+	Put the next page on the scanner and scan it in after this one, or finish.	Coloque la siguiente página en el escáner y escanéela después de esta, o termine.
+	Scan another page	Escanear otra página
+	The scanner is already in use	El escáner ya está en uso
+	Waiting for the scanner…	Esperando al escáner…
+	Couldn't scan: {e}	No se pudo escanear: {e}
+	Scanning works on Windows, through its built-in scanner support	El escaneo funciona en Windows, mediante su compatibilidad integrada con escáneres
+	Windows' scanner support (WIA) isn't available on this computer	La compatibilidad con escáneres de Windows (WIA) no está disponible en este equipo
+	No scanner was found. Check that it is connected and switched on	No se encontró ningún escáner. Compruebe que esté conectado y encendido
+	The scanner is busy	El escáner está ocupado
+	The scanner is offline. Check that it is connected and switched on	El escáner está desconectado. Compruebe que esté conectado y encendido
+	The document feeder is empty	El alimentador de documentos está vacío
+	The scanner has a paper jam	El escáner tiene un atasco de papel
+	The scanner's cover is open	La tapa del escáner está abierta
+	The scanner's lamp is off	La lámpara del escáner está apagada
+	The scanner reported an error. Check it and try again	El escáner informó de un error. Revíselo e inténtelo de nuevo
+	The scanned page is too large	La página escaneada es demasiado grande
+	The scan failed	El escaneo falló

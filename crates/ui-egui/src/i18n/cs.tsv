@@ -232,3 +232,26 @@ key	Space	Mezerník
 	Moved {what} to {name}	Přesunuto do „{name}“: {what}
 	Copied {what} to {name}	Zkopírováno do „{name}“: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Zkopírováno do „{name}“: {what}; v původním souboru stránky zůstaly (během přetahování se změnil nebo by zůstal prázdný)
+	Release to open it in a new window	Pusťte pro otevření v novém okně
+	Release to move it to that window	Pusťte pro přesun do toho okna
+	Scan	Sken
+	Scan into document	Skenovat do dokumentu
+	Scan into document…	Skenovat do dokumentu…
+	Page scanned	Stránka naskenována
+	Put the next page on the scanner and scan it in after this one, or finish.	Vložte do skeneru další stránku a naskenujte ji za tuto, nebo skončete.
+	Scan another page	Naskenovat další stránku
+	The scanner is already in use	Skener se už používá
+	Waiting for the scanner…	Čekání na skener…
+	Couldn't scan: {e}	Skenování se nezdařilo: {e}
+	Scanning works on Windows, through its built-in scanner support	Skenování funguje ve Windows díky jeho vestavěné podpoře skenerů
+	Windows' scanner support (WIA) isn't available on this computer	Podpora skenerů ve Windows (WIA) není na tomto počítači k dispozici
+	No scanner was found. Check that it is connected and switched on	Nebyl nalezen žádný skener. Zkontrolujte, zda je připojený a zapnutý
+	The scanner is busy	Skener je zaneprázdněn
+	The scanner is offline. Check that it is connected and switched on	Skener je offline. Zkontrolujte, zda je připojený a zapnutý
+	The document feeder is empty	Podavač dokumentů je prázdný
+	The scanner has a paper jam	Ve skeneru uvízl papír
+	The scanner's cover is open	Víko skeneru je otevřené
+	The scanner's lamp is off	Lampa skeneru je vypnutá
+	The scanner reported an error. Check it and try again	Skener ohlásil chybu. Zkontrolujte jej a zkuste to znovu
+	The scanned page is too large	Naskenovaná stránka je příliš velká
+	The scan failed	Skenování selhalo
