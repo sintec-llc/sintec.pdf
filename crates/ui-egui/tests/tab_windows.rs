@@ -133,3 +133,33 @@ fn pages_dropped_onto_a_document_in_another_window() {
     assert_eq!(h.state().active, Some(a), "the main window keeps its tab");
     assert_eq!(h.state().doc_windows.iter().find(|x| x.id == w).and_then(|x| x.active), Some(c), "the other window shows c.pdf");
 }
+
+/// While a tab is dragged its ghost follows the pointer: the card along the strip, the card and
+/// the page once pulled out. It is gone when the button comes up.
+#[test]
+fn a_dragged_tab_shows_its_ghost_under_the_pointer() {
+    let mut h = three_documents();
+    let b = h.get_by_label("b.pdf").rect().center();
+    h.hover_at(b);
+    h.run_steps(2);
+    h.drag_at(b);
+    h.run_steps(2);
+    let along = b + egui::vec2(60.0, 0.0);
+    h.hover_at(along);
+    h.run_steps(2);
+    let ghost = h.state().drag_ghost().expect("a ghost while dragging");
+    assert_eq!((ghost.title.as_str(), ghost.preview), ("b.pdf", false), "along the strip: the card only");
+    let out = egui::pos2(700.0, 500.0);
+    for k in 1..=6 {
+        h.hover_at(along + (out - along) * (k as f32 / 6.0));
+        h.run_steps(1);
+    }
+    let ghost = h.state().drag_ghost().expect("a ghost while dragging");
+    assert!(ghost.preview, "pulled out: the page too");
+    if let Ok(dir) = std::env::var("SINTEC_SHOT_DIR") {
+        h.render().unwrap().save(std::path::Path::new(&dir).join("tab-drag-ghost.png")).unwrap();
+    }
+    h.drop_at(out);
+    h.run_steps(4);
+    assert!(h.state().drag_ghost().is_none(), "gone after the drop");
+}

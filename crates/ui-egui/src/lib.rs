@@ -69,6 +69,7 @@ mod bidi;
 pub mod bulk_fields;
 mod dialogs;
 mod doc_windows;
+pub mod drag_ghost;
 mod edit_text_ui;
 mod editing;
 mod files;
@@ -635,6 +636,8 @@ pub struct PdfCraftApp {
     /// While a torn-off window is drawn: the main window's shown tab, to restore after.
     pub(crate) saved_main_active: Option<Option<usize>>,
     pub tab_drag: Option<TabDrag>,
+    /// What a tab or page drag shows under the pointer, in any window (`drag_ghost`).
+    pub(crate) drag_ghost: Option<drag_ghost::Ghost>,
     /// Last frame's and this frame's window layouts (see [`WindowGeometry`]).
     pub(crate) window_geometry: Vec<WindowGeometry>,
     pub(crate) window_geometry_next: Vec<WindowGeometry>,
@@ -911,6 +914,7 @@ impl PdfCraftApp {
             current_window: 0,
             saved_main_active: None,
             tab_drag: None,
+            drag_ghost: None,
             window_geometry: Vec::new(),
             window_geometry_next: Vec::new(),
             overlay_window: None,
@@ -2272,12 +2276,21 @@ impl eframe::App for PdfCraftApp {
         }
         self.show_progress(&ctx);
         widgets::toast(self, &ctx);
+        drag_ghost::paint(self, &ctx);
+        if self.tab_drag.is_none() && self.page_transfer.is_none() {
+            self.drag_ghost = None;
+        }
         widgets::hand_over_clickables(&ctx);
         self.finish_render_frame(&ctx);
     }
 }
 
 impl PdfCraftApp {
+    /// What a tab or page drag shows under the pointer right now, if anything is dragged.
+    pub fn drag_ghost(&self) -> Option<&drag_ghost::Ghost> {
+        self.drag_ghost.as_ref().filter(|_| self.tab_drag.is_some() || self.page_transfer.is_some())
+    }
+
     /// Back to the main view of the document: the Select tool, nothing half placed.
     pub(crate) fn escape_to_main_view(&mut self) {
         self.quick_tool = QuickTool::Select;

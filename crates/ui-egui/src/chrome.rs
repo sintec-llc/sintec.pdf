@@ -233,6 +233,11 @@ fn tab_drag(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, strip: Rect, t
     let can_tear = app.window_tab_count(window) > 1 && !ui.ctx().embed_viewports();
     let other = app.window_geometry.iter().find(|g| g.window != window && g.strip.expand2(vec2(0.0, 24.0)).contains(screen)).cloned();
     if down {
+        // The ghost: the tab under the pointer, with its page once it leaves the strip.
+        let ghost_view = app.views.iter().find(|v| v.id == drag.doc);
+        let page = ghost_view.map_or(0, |v| v.current);
+        let title = app.session.get(drag.doc).map(|d| d.display_name()).unwrap_or_default();
+        app.drag_ghost = Some(crate::drag_ghost::Ghost { screen, title, doc: drag.doc, page, pages: 0, preview: !in_strip });
         let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("tab-drag")));
         if in_strip {
             let x = match crate::doc_windows::tab_gap(tabs, p.x).and_then(|d| tabs.iter().find(|(id, _)| *id == d)) {
@@ -250,7 +255,7 @@ fn tab_drag(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, strip: Rect, t
             };
             if let Some(label) = label {
                 let galley = painter.layout_no_wrap(label.to_string(), theme::medium(12.5), t.accent_text);
-                let r = Rect::from_min_size(p + vec2(14.0, 14.0), galley.size() + vec2(16.0, 10.0));
+                let r = Rect::from_min_size(p + vec2(14.0, -16.0 - galley.size().y - 10.0), galley.size() + vec2(16.0, 10.0));
                 painter.rect_filled(r, CornerRadius::same(6), t.accent);
                 painter.galley(r.min + vec2(8.0, 5.0), galley, t.accent_text);
             }

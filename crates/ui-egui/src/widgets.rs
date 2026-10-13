@@ -85,9 +85,10 @@ pub fn hand_over_clickables(ctx: &egui::Context) {
         return;
     }
     let hovered: Vec<egui::Id> = ctx.interaction_snapshot(|s| s.hovered.iter().copied().collect());
-    let clickable = hovered.into_iter().filter_map(|id| ctx.read_response(id)).any(|r| {
-        r.enabled() && r.sense.senses_click() && r.rect.width().min(r.rect.height()) <= HAND_MAX_SIDE
-    });
+    let clickable = hovered
+        .into_iter()
+        .filter_map(|id| ctx.read_response(id))
+        .any(|r| r.enabled() && r.sense.senses_click() && r.rect.width().min(r.rect.height()) <= HAND_MAX_SIDE);
     if clickable {
         ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
     }

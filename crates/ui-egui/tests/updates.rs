@@ -172,7 +172,11 @@ fn automatic(version: &'static str, settings: &'static str) -> (Harness<'static,
         let counted = counted.clone();
         app.update_source = Some(Arc::new(move || {
             counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Ok(Release { version: version.into(), url: format!("https://github.com/sintec-llc/sintec.pdf/releases/tag/{version}"), ..Default::default() })
+            Ok(Release {
+                version: version.into(),
+                url: format!("https://github.com/sintec-llc/sintec.pdf/releases/tag/{version}"),
+                ..Default::default()
+            })
         }));
         app
     });
