@@ -153,15 +153,9 @@ pub fn convert(inputs: &[(Kind, PathBuf)]) -> Results {
 
 #[cfg(windows)]
 fn run_office(items: &[(Kind, PathBuf, PathBuf)], dir: &Path) -> Result<Results, String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let job = dir.join("job.tsv");
     std::fs::write(&job, job_lines(items)).map_err(|e| e.to_string())?;
-    let out = std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-EncodedCommand", &pdfcraft_print::spool::powershell_encoded(OFFICE_SCRIPT)])
-        .env("SINTEC_OFFICE_JOB", &job)
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
+    let out = pdfcraft_print::spool::run_powershell(OFFICE_SCRIPT, &[("SINTEC_OFFICE_JOB", job.as_os_str())])
         .map_err(|e| format!("PowerShell is not available: {e}"))?;
     let report = String::from_utf8_lossy(&out.stdout);
     Ok(items
@@ -230,6 +224,8 @@ mod tests {
 
     #[test]
     fn office_types_and_job_file() {
+        // Handed to PowerShell on standard input, read in the console code page.
+        assert!(OFFICE_SCRIPT.is_ascii());
         assert_eq!(kind_for("docx"), Some(Kind::Word));
         assert_eq!(kind_for("rtf"), Some(Kind::Word));
         assert_eq!(kind_for("xlsx"), Some(Kind::Excel));

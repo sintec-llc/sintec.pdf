@@ -465,38 +465,57 @@ try {
   exit 2
 }"#;
 
-/// `-EncodedCommand` text: the script as base64 of UTF-16LE. Inline scripts aren't subject to the
-/// execution policy that can block `.ps1` files on managed PCs.
-pub fn powershell_encoded(script: &str) -> String {
-    const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let b = [chunk.first().copied().unwrap_or(0), chunk.get(1).copied().unwrap_or(0), chunk.get(2).copied().unwrap_or(0)];
-        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
-        for i in 0..4 {
-            if i <= chunk.len() {
-                // In range: a 6-bit value indexes a 64-entry table.
-                out.push(char::from(B64[((n >> (18 - 6 * i)) & 63) as usize]));
-            } else {
-                out.push('=');
-            }
-        }
+/// Run a PowerShell script hidden (no console window). The script goes in on standard input
+/// (`-Command -`), wrapped in `& { }` so it parses as one block, as a script file would: never as a
+/// base64 `-EncodedCommand`, which antivirus behaviour engines (Kaspersky's PDM) read as malware.
+/// Inline scripts aren't subject to the execution policy that can block `.ps1` files on managed
+/// PCs. The script must be ASCII (PowerShell reads standard input in the console code page);
+/// data such as paths goes in `env`.
+#[cfg(windows)]
+pub fn run_powershell(script: &str, env: &[(&str, &std::ffi::OsStr)]) -> std::io::Result<std::process::Output> {
+    use std::io::Write;
+    use std::os::windows::process::CommandExt;
+    use std::process::Stdio;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    if !script.is_ascii() {
+        return Err(std::io::Error::other("PowerShell scripts must be ASCII"));
     }
+    // System32's PowerShell, not whatever a writable folder earlier on PATH holds.
+    let exe = std::env::var_os("SystemRoot").map_or_else(
+        || std::path::PathBuf::from("powershell.exe"),
+        |root| std::path::PathBuf::from(root).join("System32").join("WindowsPowerShell").join("v1.0").join("powershell.exe"),
+    );
+    let mut c = std::process::Command::new(exe);
+    c.args(["-NoProfile", "-NonInteractive", "-Command", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW);
+    for (k, v) in env {
+        c.env(k, v);
+    }
+    let mut child = c.spawn()?;
+    let stdin = child.stdin.take();
+    // Two newlines end the last statement; written on its own thread so a script that prints a
+    // lot before reading all of its input can't deadlock against a full output pipe.
+    let text = format!("& {{\r\n{script}\r\n}}\r\n\r\n");
+    let writer = std::thread::spawn(move || {
+        if let Some(mut stdin) = stdin {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+    });
+    let out = child.wait_with_output();
+    let _ = writer.join();
     out
 }
 
-/// Run a PowerShell script hidden (no console window), with the job file in its environment.
+/// Run a printing script hidden, with the job file in its environment.
 #[cfg(windows)]
 fn powershell(script: &str, job_file: Option<&std::path::Path>) -> std::io::Result<std::process::Output> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let mut c = std::process::Command::new("powershell.exe");
-    c.args(["-NoProfile", "-NonInteractive", "-EncodedCommand", &powershell_encoded(script)]).creation_flags(CREATE_NO_WINDOW);
-    if let Some(f) = job_file {
-        c.env("SINTEC_PRINT_JOB", f);
+    match job_file {
+        Some(f) => run_powershell(script, &[("SINTEC_PRINT_JOB", f.as_os_str())]),
+        None => run_powershell(script, &[]),
     }
-    c.output()
 }
 
 /// Print sheets rendered to images (the Windows spooler, see [`NEEDS_RASTER`]). Returns the

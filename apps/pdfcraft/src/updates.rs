@@ -178,28 +178,20 @@ pub fn fetch_installer(release: &Release) -> Result<std::path::PathBuf, String> 
     Ok(msi)
 }
 
-/// The script that waits for this process to exit, installs the MSI (one administrator prompt)
-/// and starts the app again, whether or not the installation went ahead. (Windows only; tested
-/// everywhere.)
+/// The command line for `cmd.exe` that installs the MSI (Windows Installer asks for administrator
+/// rights itself) with its log beside it, then starts the app again whether or not the
+/// installation went ahead. No PowerShell: a hidden PowerShell launching an installer is what
+/// antivirus behaviour engines (Kaspersky's PDM) flag as a trojan. `None` when a path holds a
+/// character cmd would read as syntax (`"` or `%`). (Windows only; tested everywhere.)
 #[cfg_attr(not(windows), allow(dead_code))]
-pub fn installer_script(pid: u32, msi: &str, exe: &str) -> String {
-    let q = |s: &str| s.replace('\'', "''");
-    // The installer's own log, beside the downloaded MSI, so a failed update can be traced.
+pub fn installer_command(system_root: &str, msi: &str, exe: &str) -> Option<String> {
     let log = format!("{}-install.log", msi.strip_suffix(".msi").unwrap_or(msi));
-    // Never install over a running Sintec.PDF (still asking to save after two minutes, say): with
-    // its files locked, an upgrade can leave the installation half replaced until a restart. The
-    // app is started again either way.
-    format!(
-        "$ErrorActionPreference = 'SilentlyContinue'\n\
-         Wait-Process -Id {pid} -Timeout 120\n\
-         if (-not (Get-Process -Id {pid})) {{\n\
-         \x20 Start-Process msiexec.exe -Verb RunAs -Wait -ArgumentList '/i \"{msi}\" /passive /norestart /l*v \"{log}\"'\n\
-         }}\n\
-         Start-Process '{exe}'\n",
-        msi = q(msi),
-        log = q(&log),
-        exe = q(exe)
-    )
+    let msiexec = format!("{system_root}\\System32\\msiexec.exe");
+    if [msi, exe, log.as_str(), msiexec.as_str()].iter().any(|s| s.contains(['"', '%']) || s.is_empty()) {
+        return None;
+    }
+    // `/s /c "…"`: cmd drops the outer quotes and runs the rest as written.
+    Some(format!(r#"/d /s /c ""{msiexec}" /i "{msi}" /passive /norestart /l*v "{log}" & start "" "{exe}"""#))
 }
 
 #[cfg(windows)]
@@ -207,9 +199,11 @@ fn launch_installer(msi: &std::path::Path) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let script = installer_script(std::process::id(), &msi.to_string_lossy(), &exe.to_string_lossy());
-    std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-EncodedCommand", &pdfcraft_print::spool::powershell_encoded(&script)])
+    let root = std::env::var("SystemRoot").map_err(|_| "Windows' folder (SystemRoot) is unknown".to_string())?;
+    let args = installer_command(&root, &msi.to_string_lossy(), &exe.to_string_lossy())
+        .ok_or("the installer's path can't be handed to Windows Installer here; install the downloaded file yourself")?;
+    std::process::Command::new(format!("{root}\\System32\\cmd.exe"))
+        .raw_arg(args)
         .creation_flags(CREATE_NO_WINDOW)
         .spawn()
         .map(|_| ())
@@ -298,23 +292,21 @@ mod tests {
     }
 
     #[test]
-    fn the_installer_script_waits_installs_and_restarts() {
-        let s = installer_script(
-            4242,
-            r"C:\Users\O'Neil\AppData\Local\Temp\sintec-pdf-update\sintec-pdf-0.1.3-windows-x64.msi",
+    fn the_installer_command_installs_logs_and_restarts_without_powershell() {
+        let c = installer_command(
+            r"C:\Windows",
+            r"C:\Users\O'Neil\AppData\Local\Temp\sintec-pdf-update\sintec-pdf-0.2.3-windows-x64.msi",
             r"C:\Program Files\Sintec.PDF\sintec-pdf.exe",
+        )
+        .unwrap();
+        assert_eq!(
+            c,
+            r#"/d /s /c ""C:\Windows\System32\msiexec.exe" /i "C:\Users\O'Neil\AppData\Local\Temp\sintec-pdf-update\sintec-pdf-0.2.3-windows-x64.msi" /passive /norestart /l*v "C:\Users\O'Neil\AppData\Local\Temp\sintec-pdf-update\sintec-pdf-0.2.3-windows-x64-install.log" & start "" "C:\Program Files\Sintec.PDF\sintec-pdf.exe"""#
         );
-        assert!(s.contains("Wait-Process -Id 4242 -Timeout 120"), "{s}");
-        // Only once the app has closed: never over locked files.
-        assert!(s.contains("if (-not (Get-Process -Id 4242)) {"), "{s}");
-        assert!(
-            s.contains(
-                r#"'/i "C:\Users\O''Neil\AppData\Local\Temp\sintec-pdf-update\sintec-pdf-0.1.3-windows-x64.msi" /passive /norestart /l*v "C:\Users\O''Neil\AppData\Local\Temp\sintec-pdf-update\sintec-pdf-0.1.3-windows-x64-install.log"'"#
-            ),
-            "{s}"
-        );
-        assert!(s.contains("-Verb RunAs"), "{s}");
-        assert!(s.trim_end().ends_with(r"Start-Process 'C:\Program Files\Sintec.PDF\sintec-pdf.exe'"), "{s}");
+        assert!(!c.to_ascii_lowercase().contains("powershell"));
+        // Characters cmd would read as syntax: refused rather than mangled.
+        assert!(installer_command(r"C:\Windows", r"C:\Temp\100%\x.msi", r"C:\a.exe").is_none());
+        assert!(installer_command(r"C:\Windows", r"C:\Temp\x.msi", "").is_none());
     }
 
     #[test]
