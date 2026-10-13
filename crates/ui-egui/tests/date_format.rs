@@ -19,6 +19,9 @@ fn shows(h: &Harness<'static, PdfCraftApp>, text: &str) -> bool {
 }
 
 fn retype(h: &mut Harness<'static, PdfCraftApp>, text: &str) {
+    // Preferences scroll in a short window, and scrolling animates over several frames.
+    h.get_by_role_and_label(Role::TextInput, "Pattern").scroll_to_me();
+    h.run_steps(10);
     h.get_by_role_and_label(Role::TextInput, "Pattern").click();
     h.run_steps(1);
     h.key_press_modifiers(Modifiers::COMMAND, Key::A);
@@ -36,7 +39,8 @@ fn fill_and_sign_dates_follow_the_date_format_preference_and_it_is_remembered() 
         app.set_option("dialog", "preferences").unwrap();
         app
     });
-    h.run_steps(4);
+    // Dialogs settle over a few frames (grid rows are sized from the previous one).
+    h.run_steps(8);
     assert_eq!(h.state().session.date_format(), "m/d/yyyy");
     // A valid pattern applies as it's typed, with a preview of today.
     retype(&mut h, "d \\de mmmm yyyy");
