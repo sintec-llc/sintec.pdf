@@ -2231,3 +2231,5 @@ key	Space	Spazio
 	Moved {what} to {name}	Spostato in «{name}»: {what}
 	Copied {what} to {name}	Copiato in «{name}»: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Copiato in «{name}»: {what}; l’originale le conserva (è cambiato durante il trascinamento o resterebbe vuoto)
+	Release to open it in a new window	Rilascia per aprirlo in una nuova finestra
+	Release to move it to that window	Rilascia per spostarlo in quella finestra

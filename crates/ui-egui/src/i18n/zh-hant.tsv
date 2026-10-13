@@ -2134,3 +2134,5 @@ key	Space	空格
 	Moved {what} to {name}	已移動到「{name}」：{what}
 	Copied {what} to {name}	已複製到「{name}」：{what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	已複製到「{name}」：{what}；原檔案保留了這些頁面（拖曳期間已變更，或將變為空白）
+	Release to open it in a new window	放開即可在新視窗中開啟
+	Release to move it to that window	放開即可移到那個視窗

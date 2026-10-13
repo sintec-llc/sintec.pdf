@@ -2211,3 +2211,5 @@ key	Space	空格
 	Moved {what} to {name}	已移动到“{name}”：{what}
 	Copied {what} to {name}	已复制到“{name}”：{what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	已复制到“{name}”：{what}；原文件保留了这些页面（拖动期间已更改，或将变为空）
+	Release to open it in a new window	松开即可在新窗口中打开
+	Release to move it to that window	松开即可移到那个窗口

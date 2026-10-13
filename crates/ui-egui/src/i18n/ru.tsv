@@ -2178,3 +2178,5 @@ key	Space	Пробел
 	Moved {what} to {name}	Перемещено в «{name}»: {what}
 	Copied {what} to {name}	Скопировано в «{name}»: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Скопировано в «{name}»: {what}; в исходном файле страницы остались (он изменился во время перетаскивания или остался бы пустым)
+	Release to open it in a new window	Отпустите, чтобы открыть в новом окне
+	Release to move it to that window	Отпустите, чтобы перенести в то окно

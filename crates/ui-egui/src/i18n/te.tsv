@@ -2152,3 +2152,5 @@ key	Space	స్పేస్
 	Moved {what} to {name}	«{name}»కి తరలించబడింది: {what}
 	Copied {what} to {name}	«{name}»కి కాపీ చేయబడింది: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	«{name}»కి కాపీ చేయబడింది: {what}; అసలు ఫైల్‌లో అవి ఉన్నాయి (లాగుతున్నప్పుడు మారింది లేదా ఖాళీ అయ్యేది)
+	Release to open it in a new window	కొత్త విండోలో తెరవడానికి వదలండి
+	Release to move it to that window	ఆ విండోకి తరలించడానికి వదలండి

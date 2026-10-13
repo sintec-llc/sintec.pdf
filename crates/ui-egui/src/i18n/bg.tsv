@@ -2184,3 +2184,5 @@ key	Space	Интервал
 	Moved {what} to {name}	Преместено в „{name}“: {what}
 	Copied {what} to {name}	Копирано в „{name}“: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Копирано в „{name}“: {what}; в изходния файл страниците останаха (той се промени по време на плъзгането или щеше да остане празен)
+	Release to open it in a new window	Пуснете, за да отворите в нов прозорец
+	Release to move it to that window	Пуснете, за да преместите в онзи прозорец

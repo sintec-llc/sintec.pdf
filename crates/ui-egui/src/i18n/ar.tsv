@@ -2244,3 +2244,5 @@ key	Space	مسافة
 	Moved {what} to {name}	نُقل إلى «{name}»: {what}
 	Copied {what} to {name}	نُسخ إلى «{name}»: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	نُسخ إلى «{name}»: {what}؛ احتفظ الملف الأصلي بها (تغيّر أثناء السحب أو كان سيصبح فارغًا)
+	Release to open it in a new window	أفلِت لفتحه في نافذة جديدة
+	Release to move it to that window	أفلِت لنقله إلى تلك النافذة

@@ -2222,3 +2222,5 @@ key	Space	Leertaste
 	Moved {what} to {name}	Nach „{name}“ verschoben: {what}
 	Copied {what} to {name}	Nach „{name}“ kopiert: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Nach „{name}“ kopiert: {what}; das Original behält sie (es hat sich beim Ziehen geändert oder wäre leer)
+	Release to open it in a new window	Loslassen, um es in einem neuen Fenster zu öffnen
+	Release to move it to that window	Loslassen, um es in dieses Fenster zu verschieben

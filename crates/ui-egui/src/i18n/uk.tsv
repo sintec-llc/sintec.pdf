@@ -2245,3 +2245,5 @@ key	Space	Пробіл
 	Moved {what} to {name}	Переміщено до «{name}»: {what}
 	Copied {what} to {name}	Скопійовано до «{name}»: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Скопійовано до «{name}»: {what}; у вихідному файлі сторінки залишилися (він змінився під час перетягування або лишився б порожнім)
+	Release to open it in a new window	Відпустіть, щоб відкрити в новому вікні
+	Release to move it to that window	Відпустіть, щоб перенести в те вікно

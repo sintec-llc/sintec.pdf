@@ -1,6 +1,6 @@
 //! Window chrome: tab strip (with the integrated macOS title bar), mode bar, right rail.
 
-use egui::{Align, Align2, Color32, CornerRadius, Layout, Rect, Sense, Stroke, vec2};
+use egui::{Align, Align2, Color32, CornerRadius, Layout, Rect, Sense, Stroke, pos2, vec2};
 
 use crate::canvas::{DocView, Fit, PageLayout};
 use crate::theme::{self, ThemePreference, Tokens};
@@ -22,9 +22,12 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
             }
+            let window = app.current_window;
+            let mut strip_tabs: Vec<(pdfcraft_engine::DocId, Rect)> = Vec::new();
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
-                if icons::button(ui, "house", 28.0, app.active.is_none() && !app.combine_showing(), tl!("Home")).clicked() {
+                // Home and Combine files belong to the main window.
+                if window == 0 && icons::button(ui, "house", 28.0, app.active.is_none() && !app.combine_showing(), tl!("Home")).clicked() {
                     app.active = None;
                     app.combine_tab.focused = false;
                 }
@@ -38,12 +41,12 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 // Tabs shrink to share the strip (names end in "…") and scroll only once they reach
                 // their narrowest; then arrows either side say so and step through them.
                 let mut natural: Vec<f32> = Vec::with_capacity(app.views.len() + 1);
-                for v in &app.views {
+                for v in app.views.iter().filter(|v| v.window == window) {
                     if let Some(doc) = app.session.get(v.id) {
                         natural.push(tab_natural_width(ui, &t, &doc.display_name()));
                     }
                 }
-                if app.combine_tab.open {
+                if window == 0 && app.combine_tab.open {
                     natural.push(tab_natural_width(ui, &t, tl!("Combine files")));
                 }
                 let gap = ui.spacing().item_spacing.x;
@@ -78,6 +81,9 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     let out = area.show(ui, |ui| {
                         ui.horizontal_centered(|ui| {
                             for i in 0..app.views.len() {
+                                if app.views[i].window != window {
+                                    continue;
+                                }
                                 let Some(doc) = app.session.get(app.views[i].id) else { continue };
                                 let (name, dirty) = (doc.display_name(), doc.dirty);
                                 // A tab showing the document's title names its file on hover.
@@ -87,6 +93,13 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                     response.scroll_to_me(Some(Align::Center));
                                 }
                                 if response.clicked() {
+                                    app.active = Some(i);
+                                }
+                                // Sintec.PDF: a tab dragged along the strip moves there; out of it,
+                                // into a new window; onto another window's strip, into that window.
+                                strip_tabs.push((app.views[i].id, response.rect));
+                                if response.drag_started_by(egui::PointerButton::Primary) {
+                                    app.tab_drag = Some(crate::TabDrag { doc: app.views[i].id, from_window: window });
                                     app.active = Some(i);
                                 }
                                 // Sintec.PDF: pages dragged from another document's Pages panel.
@@ -125,7 +138,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             if let Some(i) = close {
                                 app.request_close_tab(i);
                             }
-                            if app.combine_tab.open {
+                            if window == 0 && app.combine_tab.open {
                                 // After the document tabs; its index can't clash with theirs.
                                 let mut close = None;
                                 let response =
@@ -148,6 +161,16 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 if !over_tab {
                     app.tab_hover = None;
                 }
+                // Where this strip and its tabs are on the screen, for drags from other windows.
+                let on_screen = crate::doc_windows::screen_offset(ui.ctx());
+                app.window_geometry_next.retain(|g| g.window != window);
+                app.window_geometry_next.push(crate::WindowGeometry {
+                    window,
+                    strip: full.translate(on_screen),
+                    tabs: strip_tabs.iter().map(|(d, r)| (*d, r.translate(on_screen))).collect(),
+                    pages: None,
+                });
+                tab_drag(app, ui, &t, full, &strip_tabs);
                 if let Some(i) = tab_drop {
                     let remove = ui.input(|inp| inp.modifiers.shift);
                     app.drop_page_transfer(i, None, remove);
@@ -186,6 +209,66 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 });
             });
         });
+}
+
+/// Sintec.PDF: a tab being dragged in this window. While the button is held: a bar where it would
+/// go in the strip, or a label by the pointer saying what letting go does. Let go: moved in the
+/// strip, into the window whose strip it is over, or (pulled out of the strip) into a new window.
+fn tab_drag(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, strip: Rect, tabs: &[(pdfcraft_engine::DocId, Rect)]) {
+    let window = app.current_window;
+    let Some(drag) = app.tab_drag.filter(|d| d.from_window == window) else { return };
+    let (pointer, down) = ui.input(|i| (i.pointer.latest_pos(), i.pointer.primary_down()));
+    let Some(p) = pointer else {
+        if !down {
+            app.tab_drag = None;
+        }
+        return;
+    };
+    let offset = crate::doc_windows::screen_offset(ui.ctx());
+    let screen = p + offset;
+    let in_strip = strip.expand2(vec2(0.0, 24.0)).contains(p);
+    let pulled_out = !strip.expand2(vec2(0.0, 48.0)).contains(p);
+    // A window's only tab stays: tearing it off would make the same window again. Windows of
+    // their own need the platform's (not on the web, where they'd be drawn inside this one).
+    let can_tear = app.window_tab_count(window) > 1 && !ui.ctx().embed_viewports();
+    let other = app.window_geometry.iter().find(|g| g.window != window && g.strip.expand2(vec2(0.0, 24.0)).contains(screen)).cloned();
+    if down {
+        let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("tab-drag")));
+        if in_strip {
+            let x = match crate::doc_windows::tab_gap(tabs, p.x).and_then(|d| tabs.iter().find(|(id, _)| *id == d)) {
+                Some((_, r)) => r.left() - 2.0,
+                None => tabs.last().map_or(strip.left(), |(_, r)| r.right() + 2.0),
+            };
+            painter.line_segment([pos2(x, strip.top() + 5.0), pos2(x, strip.bottom() - 5.0)], Stroke::new(3.0, t.accent));
+        } else {
+            let label = if other.is_some() {
+                Some(tl!("Release to move it to that window"))
+            } else if pulled_out && can_tear {
+                Some(tl!("Release to open it in a new window"))
+            } else {
+                None
+            };
+            if let Some(label) = label {
+                let galley = painter.layout_no_wrap(label.to_string(), theme::medium(12.5), t.accent_text);
+                let r = Rect::from_min_size(p + vec2(14.0, 14.0), galley.size() + vec2(16.0, 10.0));
+                painter.rect_filled(r, CornerRadius::same(6), t.accent);
+                painter.galley(r.min + vec2(8.0, 5.0), galley, t.accent_text);
+            }
+        }
+        ui.ctx().request_repaint();
+        return;
+    }
+    // The button came up: wherever the pointer is, the drag ends here.
+    app.tab_drag = None;
+    if in_strip {
+        let before = crate::doc_windows::tab_gap(tabs, p.x);
+        app.move_tab(drag.doc, window, before);
+    } else if let Some(g) = other {
+        let before = crate::doc_windows::tab_gap(&g.tabs, screen.x);
+        app.move_tab(drag.doc, g.window, before);
+    } else if pulled_out && can_tear {
+        app.tear_off_tab(drag.doc, Some(screen));
+    }
 }
 
 /// Both theme entry points use the same choices and command path.
@@ -281,7 +364,8 @@ fn tab(
     let label = crate::bidi::visual(&label).into_owned();
     let text_w = ui.fonts_mut(|f| f.layout_no_wrap(label.clone(), font.clone(), t.text).size().x);
     let width = cap.map_or(text_w + TAB_CHROME, |cap| (text_w + TAB_CHROME).min(cap));
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, 30.0), Sense::click());
+    // Click to show, drag to move (along the strip, into a new window, onto another window).
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 30.0), Sense::click_and_drag());
     let a11y = if dirty { format!("{name} (edited)") } else { name.to_string() };
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, active, &a11y));
     let bg = if active {

@@ -2242,3 +2242,5 @@ key	Space	スペース
 	Moved {what} to {name}	「{name}」に移動しました: {what}
 	Copied {what} to {name}	「{name}」にコピーしました: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	「{name}」にコピーしました: {what}。元のファイルには残しました（ドラッグ中に変更されたか、空になるため）
+	Release to open it in a new window	離すと新しいウィンドウで開きます
+	Release to move it to that window	離すとそのウィンドウに移動します

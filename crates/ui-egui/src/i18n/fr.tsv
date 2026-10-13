@@ -2222,3 +2222,5 @@ key	Space	Espace
 	Moved {what} to {name}	Déplacé vers « {name} » : {what}
 	Copied {what} to {name}	Copié vers « {name} » : {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Copié vers « {name} » : {what} ; l’original les conserve (il a changé pendant le glissement ou serait vide)
+	Release to open it in a new window	Relâchez pour l’ouvrir dans une nouvelle fenêtre
+	Release to move it to that window	Relâchez pour le déplacer dans cette fenêtre

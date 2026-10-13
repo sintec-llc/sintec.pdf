@@ -2220,3 +2220,5 @@ key	Space	Szóköz
 	Moved {what} to {name}	Áthelyezve ide: „{name}”: {what}
 	Copied {what} to {name}	Másolva ide: „{name}”: {what}
 	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Másolva ide: „{name}”: {what}; az eredetiben megmaradtak (húzás közben megváltozott, vagy üres maradna)
+	Release to open it in a new window	Engedje el, hogy új ablakban nyíljon meg
+	Release to move it to that window	Engedje el, hogy abba az ablakba kerüljön
