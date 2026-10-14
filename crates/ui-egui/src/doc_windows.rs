@@ -219,18 +219,27 @@ impl PdfCraftApp {
             let t = theme::Tokens::get(&ctx);
             chrome::tab_strip(self, ui);
             chrome::mode_bar(self, ui);
-            if self.active.is_some() {
+            // As the main window: the docking workspace lays out the tool panels, the inspector and
+            // the page; Read mode shows the page with only the navigation panes.
+            let shown = self.active.filter(|&i| self.views.get(i).is_some_and(|v| v.window == id));
+            if shown.is_some() {
                 chrome::right_rail(self, ui);
-                if self.right.is_some() && self.mode != Mode::Read {
-                    panels::right_panel(self, ui);
+                if self.mode == Mode::Read && self.right.is_some() {
+                    egui::Panel::right("read_right_panel")
+                        .resizable(true)
+                        .default_size(330.0)
+                        .size_range(260.0..=520.0)
+                        .frame(egui::Frame::NONE)
+                        .show(ui, |ui| panels::right_panel(self, ui));
                 }
             }
-            if self.left_open && self.mode != Mode::Read {
-                panels::left_panel(self, ui);
-            }
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| {
-                if let Some(i) = self.active.filter(|&i| self.views.get(i).is_some_and(|v| v.window == id)) {
-                    crate::canvas::document_area(self, i, ui);
+                if let Some(i) = shown {
+                    if self.mode == Mode::Read {
+                        crate::canvas::document_area(self, i, ui);
+                    } else {
+                        crate::docking::show(self, ui);
+                    }
                 }
             });
             crate::widgets::page_cursor_only_on_the_page(&ctx);

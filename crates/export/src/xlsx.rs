@@ -324,7 +324,7 @@ mod tests {
     use crate::Block;
 
     fn block(text: &str, rect: [f64; 4], bold: bool) -> Block {
-        Block { text: text.into(), rect, size: 11.0, bold, italic: false, color: [0.0; 3] }
+        Block { text: text.into(), rect, size: 11.0, bold, italic: false, color: [0.0; 3], rotation: 0.0 }
     }
 
     #[test]

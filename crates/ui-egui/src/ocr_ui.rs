@@ -29,11 +29,13 @@ pub struct OcrDraft {
     pub language: String,
     /// "Downsample to" resolution.
     pub dpi: u32,
+    /// Also recognize pages that already have text (pictures on them; their text isn't added again).
+    pub text_pages: bool,
 }
 
 impl Default for OcrDraft {
     fn default() -> Self {
-        OcrDraft { pages: OcrPages::All, from: 1, to: 1, language: String::new(), dpi: 300 }
+        OcrDraft { pages: OcrPages::All, from: 1, to: 1, language: String::new(), dpi: 300, text_pages: false }
     }
 }
 
@@ -46,6 +48,11 @@ impl OcrDraft {
             self.language = LANGUAGES.iter().find(|l| l.0 == ui).map_or("en", |l| l.0).to_string();
         }
         self.language.clone()
+    }
+
+    /// The recognition settings these choices make.
+    pub fn settings(&mut self) -> OcrSettings {
+        OcrSettings { dpi: self.dpi as f32, language: self.language(), skip_text_pages: !self.text_pages }
     }
 }
 
@@ -88,10 +95,10 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
         ui.add_space(8.0);
     };
     group(ui, "Pages", &mut |ui| {
-        ui.radio_value(&mut d.pages, OcrPages::All, tl!("All pages"));
-        ui.radio_value(&mut d.pages, OcrPages::Current, tl!("Current page"));
+        widgets::radio_value(ui, &mut d.pages, OcrPages::All, tl!("All pages"));
+        widgets::radio_value(ui, &mut d.pages, OcrPages::Current, tl!("Current page"));
         ui.horizontal(|ui| {
-            ui.radio_value(&mut d.pages, OcrPages::Range, tl!("From"));
+            widgets::radio_value(ui, &mut d.pages, OcrPages::Range, tl!("From"));
             let on = d.pages == OcrPages::Range;
             ui.add_enabled(on, egui::DragValue::new(&mut d.from).range(1..=pages));
             ui.label(tl!("to"));
@@ -126,6 +133,9 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
             });
             ui.end_row();
         });
+        ui.add_space(4.0);
+        ui.add(crate::widgets::checkbox(&mut d.text_pages, tl!("Also recognize pages that already have text")))
+            .on_hover_text(tl!("Pictures on those pages are recognized too; words already in the page's text are not added again"));
     });
     if !available {
         ui.label(
@@ -163,13 +173,13 @@ impl PdfCraftApp {
             return;
         }
         let language = self.ocr_draft.language();
-        let d = &self.ocr_draft;
+        let d = &mut self.ocr_draft;
         let pages: Vec<usize> = match d.pages {
             OcrPages::All => Vec::new(),
             OcrPages::Current => vec![self.views[vi].current],
             OcrPages::Range => (d.from.saturating_sub(1)..d.to).collect(),
         };
-        let settings = OcrSettings { dpi: d.dpi as f32, language: language.clone(), ..Default::default() };
+        let settings = d.settings();
         let Some(job) = self.session.ocr_job(id, &pages, settings) else { return };
         let progress = Arc::new(Mutex::new(OcrProgress { total: job.pages.len(), ..Default::default() }));
         let p = progress.clone();
@@ -206,7 +216,7 @@ impl PdfCraftApp {
             return;
         }
         // The settings showing now, not when the folder arrives.
-        let settings = OcrSettings { dpi: self.ocr_draft.dpi as f32, language: self.ocr_draft.language(), ..Default::default() };
+        let settings = self.ocr_draft.settings();
         #[cfg(not(target_arch = "wasm32"))]
         match self.export_dir_override.clone() {
             Some(d) => self.ocr_files_into(files, settings, d.into()),

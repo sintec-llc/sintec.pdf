@@ -305,6 +305,17 @@ pub fn tr(lang: Lang, s: &str) -> &str {
     lang.catalog().plain(s).unwrap_or(s)
 }
 
+/// How the layers below say their own sentences in the current language.
+///
+/// The checker, the preflight profiles and the signature panel hand over a whole English wording
+/// — holes and all — and the document's own words apart from it, so this is all they need of us:
+/// `f.said(&i18n::words)` says the sentence here, and `in_english` says it in English. An unknown
+/// wording comes back as it stands, which is the English, so a catalog that is missing one is a
+/// sentence in English rather than a gap.
+pub fn words(wording: &str) -> String {
+    t(wording).to_owned()
+}
+
 /// Like [`tr`], for an English string that needs a disambiguating `context`.
 pub fn tr_ctx<'a>(lang: Lang, context: &str, s: &'a str) -> &'a str {
     lang.catalog().contextual(context, s).unwrap_or_else(|| tr(lang, s))
@@ -360,7 +371,23 @@ pub fn action_label(text: &str) -> String {
     {
         return fmt(t("Change {key}"), &[("key", t(key))]);
     }
+    if let Some(n) = text.strip_prefix("Delete ").and_then(|rest| rest.strip_suffix(" fields")).and_then(|n| n.parse::<u64>().ok()) {
+        return trn(current(), n, "Delete {n} field", "Delete {n} fields");
+    }
     t(text).to_owned()
+}
+
+/// A history label in the current language, out of the engine's own two parts: the wording is
+/// looked up whole and the document's own word goes into its `{}` afterwards, so a file or field
+/// name is never read as part of the wording. This is exact where [`action_label`] has to guess
+/// from the English text, and is what the engine's own labels go through.
+pub fn edit_label(label: &pdfcraft_engine::Label) -> String {
+    // A batch's wording is only the hole: it carries its name as text, which from below L7 is one
+    // of `BATCH_LABELS` and so is looked up too.
+    if let Some(name) = label.value.as_deref().filter(|_| label.wording == "{batch}") {
+        return t(name).to_owned();
+    }
+    label.said(t(label.wording))
 }
 
 /// A command label such as "Undo Insert pages from a.pdf" in the current language. A catalog
@@ -682,6 +709,11 @@ mod tests {
 
     /// Every `tl!("…")` literal in the UI source (test modules aside), unescaped.
     fn ui_literals() -> std::collections::BTreeSet<String> {
+        scan_ui_literals(false)
+    }
+
+    // Lithuanian also checks direct lookup calls and multiline literal arguments.
+    fn scan_ui_literals(expanded: bool) -> std::collections::BTreeSet<String> {
         let mut stack = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
         let mut literals = std::collections::BTreeSet::new();
         while let Some(dir) = stack.pop() {
@@ -693,8 +725,19 @@ mod tests {
                     }
                 } else if path.extension().is_some_and(|ext| ext == "rs") {
                     let source = std::fs::read_to_string(path).expect("UI source file").replace("\r\n", "\n");
+                    let source = if expanded { source.replace("crate::i18n::t(", "tl!(") } else { source };
                     let mut rest = source.split("#[cfg(test)]\nmod ").next().unwrap_or_default();
-                    while let Some((_, after)) = rest.split_once("tl!(\"") {
+                    while let Some((_, after)) = rest.split_once(if expanded { "tl!(" } else { "tl!(\"" }) {
+                        let after = if expanded {
+                            let after = after.trim_start();
+                            let Some(after) = after.strip_prefix('"') else {
+                                rest = after;
+                                continue;
+                            };
+                            after
+                        } else {
+                            after
+                        };
                         let mut escaped = false;
                         let end = after
                             .char_indices()
@@ -707,7 +750,10 @@ mod tests {
                             })
                             .expect("closed tl! literal");
                         let (raw, tail) = after.split_at(end);
-                        if tail.starts_with("\")") {
+                        let argument_end = tail.strip_prefix('"').expect("closing quote").trim_start();
+                        let literal_call =
+                            argument_end.starts_with(')') || argument_end.strip_prefix(',').is_some_and(|rest| rest.trim_start().starts_with(')'));
+                        if tail.starts_with("\")") || (expanded && literal_call) {
                             let label: String = serde_json::from_str(&format!("\"{raw}\"")).expect("UI literal escapes");
                             literals.insert(label);
                         }
