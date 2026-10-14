@@ -514,10 +514,10 @@ mod tests {
 
     #[test]
     fn translation_catalogs_require_attribution() {
-        assert!(is_asset_path("crates/ui-egui/src/i18n/ja.tsv"));
-        let p = check(&root(), &Manifest::default(), &["crates/ui-egui/src/i18n/ja.tsv".into()], &lock(&[]));
+        assert!(is_asset_path("crates/ui-egui/src/i18n/ru.tsv"));
+        let p = check(&root(), &Manifest::default(), &["crates/ui-egui/src/i18n/ru.tsv".into()], &lock(&[]));
         assert!(p.iter().any(|p| p.contains("no ATTRIBUTION.toml entry")), "{p:?}");
-        let m = Manifest { asset: vec![asset("crates/ui-egui/src/i18n/ja.tsv", "Adobe", "translation", "MIT")], ..Default::default() };
+        let m = Manifest { asset: vec![asset("crates/ui-egui/src/i18n/ru.tsv", "Adobe", "translation", "MIT")], ..Default::default() };
         assert!(check(&root(), &m, &[], &lock(&[])).iter().any(|p| p.contains("from Adobe is forbidden")));
     }
 

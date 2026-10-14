@@ -1,6 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (alpha markers removed after the gate was re-judged: no gap blocks alpha) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (gaps 5 and 14 out of scope: Sintec.PDF ships English and Russian only) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Every known shortfall, one entry each, ranked by what it costs users. This is the work list: agents
 choose from the top unless the owner says otherwise, and prefer these over new P2/P3 checklist
@@ -23,16 +23,16 @@ update the numbers.
 | 2 | Rendering is borrowed and its fidelity unmeasured | feature, spec | 110–190 | [pdf-spec-parity.md](pdf-spec-parity.md) |
 | 3 | Editing existing text is fragile on real files | feature | 100–180 | [target-app-parity.md](target-app-parity.md) |
 | 4 | No printing on Windows or the web | feature, platform | 15–30 | [hardware-parity.md](hardware-parity.md) |
-| 5 | Chinese UI shows missing-glyph boxes in releases | localization | 6–12 | [localization-parity.md](localization-parity.md) |
+| 5 | ~~Chinese UI shows missing-glyph boxes in releases~~ (out of scope: no Chinese interface) | localization | 0 | [localization-parity.md](localization-parity.md) |
 | 6 | Open-issue backlog of wrong results in shipped features | stability | 45–80 | this file |
-| 7 | OCR reads only unaccented Latin | feature | 40–75 | [file-format-parity.md](file-format-parity.md) |
+| 7 | OCR: no clean-up, editable output or Hebrew/Vietnamese | feature | 30–55 | [file-format-parity.md](file-format-parity.md) |
 | 8 | Office export weak, Office import absent | file format | 55–100 | [file-format-parity.md](file-format-parity.md) |
 | 9 | No Preflight; PDF/A partial; PDF/X and PDF/UA absent | standards | 65–115 | [pdf-spec-parity.md](pdf-spec-parity.md) |
 | 10 | Signatures: no PKCS #11, timestamp servers or online revocation | feature, hardware | 40–70 | [pdf-spec-parity.md](pdf-spec-parity.md) |
 | 11 | Accessibility: checker only, no tagging tools | feature | 40–70 | [target-app-parity.md](target-app-parity.md) |
 | 12 | No measured fidelity harness against Acrobat | quality | (in 2) | [target-app-parity.md](target-app-parity.md) |
 | 13 | Performance budgets and lazy loading of very large files | performance | 25–45 | this file |
-| 14 | Arabic not mirrored; no Hindi, Indonesian, Korean, Vietnamese | localization | 30–50 | [localization-parity.md](localization-parity.md) |
+| 14 | ~~Arabic not mirrored; no Hindi, Indonesian, Korean, Vietnamese~~ (out of scope: English and Russian only) | localization | 0 | [localization-parity.md](localization-parity.md) |
 | 15 | Forms: JavaScript object model, actions, submit, XFA depth | feature | 40–75 | [pdf-spec-parity.md](pdf-spec-parity.md) |
 | 16 | UI precision gaps (multi-select move, rulers, accelerators, windows) | UI/UX | 30–60 | [ui-parity.md](ui-parity.md) |
 | 17 | Certificate security and other protect gaps | feature, spec | 15–30 | [pdf-spec-parity.md](pdf-spec-parity.md) |
@@ -105,19 +105,10 @@ update the numbers.
 - **Impact:** Windows is most of Acrobat's market. Printing is a P0 workflow.
 - **Estimate:** 15–30 h. **Doc:** [hardware-parity.md](hardware-parity.md).
 
-### 5. Chinese UI shows missing-glyph boxes in releases
+### 5. Chinese UI shows missing-glyph boxes in releases (out of scope)
 
-- **Missing:** a Simplified Chinese (`Hans`) UI face in release builds and a working fallback.
-- **Evidence:** [#826](https://github.com/storytold/pdfcraft/issues/826),
-  [#688](https://github.com/storytold/pdfcraft/issues/688),
-  [#728](https://github.com/storytold/pdfcraft/issues/728),
-  [#758](https://github.com/storytold/pdfcraft/issues/758),
-  [#689](https://github.com/storytold/pdfcraft/issues/689) (Flatpak). `AGENTS.md` §1.1 bars Noto
-  CJK (Source Han rebranded), so craft-fonts needs another openly licensed Hans face.
-- **Impact:** the second-largest language group sees a broken interface although the catalog is 97%
-  translated.
-- **Estimate:** 6–12 h (font sourcing in craft-fonts plus the fallback chain). **Doc:**
-  [localization-parity.md](localization-parity.md).
+- **Status:** dropped on 2026-10-13. Sintec.PDF ships English and Russian only, so there is no
+  Chinese interface. Chinese file names and document text still use the craft-fonts CJK faces.
 
 ### 6. Open-issue backlog of wrong results in shipped features
 
@@ -132,16 +123,17 @@ update the numbers.
   (`AGENTS.md` §4).
 - **Estimate:** 45–80 h (≈ 0.2–0.4 h per issue). **Doc:** this file.
 
-### 7. OCR reads only unaccented Latin
+### 7. OCR: no clean-up, editable output or Hebrew/Vietnamese
 
-- **Missing:** every other script and accented Latin; editable-text output; deskew, rotation,
+- **Done (2026-10-13):** 46 languages through PaddleOCR PP-OCRv5 (accented Latin, Cyrillic,
+  Greek, Chinese, Japanese, Korean, Arabic script, Devanagari, Thai, Tamil, Telugu).
+- **Missing:** Hebrew and Vietnamese (no PP-OCRv5 model); editable-text output; deskew, rotation,
   despeckle, background and camera clean-up; MRC compression; pluggable engines; OCR in the
   browser; scanner input.
-- **Evidence:** `ocr.ocr-languages` partial ("the models read only the Latin alphabet without
-  accents"); 19 of 26 OCR features planned; [#744](https://github.com/storytold/pdfcraft/issues/744)
+- **Evidence:** 19 of 26 OCR features planned; [#744](https://github.com/storytold/pdfcraft/issues/744)
   (Dutch). Acrobat ships on-device recognition for dozens of languages.
 - **Impact:** scanned documents are a core Pro workflow outside English.
-- **Estimate:** 40–75 h, partly blocked on openly licensed models. **Doc:**
+- **Estimate:** 30–55 h. **Doc:**
   [file-format-parity.md](file-format-parity.md).
 
 ### 8. Office export weak, Office import absent
@@ -211,15 +203,10 @@ update the numbers.
   (#730).
 - **Estimate:** 25–45 h. **Doc:** this file.
 
-### 14. Arabic not mirrored; no Hindi, Indonesian, Korean, Vietnamese
+### 14. Arabic not mirrored; no Hindi, Indonesian, Korean, Vietnamese (out of scope)
 
-- **Missing:** a right-to-left layout (panels, menus, alignment), bidirectional text in the text
-  layout itself (wrapping, typed text); catalogs for Hindi, Indonesian, Korean and Vietnamese
-  (Acrobat ships Korean; it ships Arabic in its Middle East edition; it ships none of the other
-  three).
-- **Evidence:** [localization.md](localization.md) §Arabic; `misc.rtl-ui` planned.
-- **Estimate:** 30–50 h (Arabic RTL 20–35, four catalogs 10–15 plus review). **Doc:**
-  [localization-parity.md](localization-parity.md).
+- **Status:** dropped on 2026-10-13. Sintec.PDF ships English and Russian only; the Arabic catalog
+  and its right-to-left label support were removed. Right-to-left file names still display in order.
 
 ### 15. Forms: JavaScript object model, actions, submit, XFA depth
 
@@ -300,6 +287,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | Gap 7: OCR reads 46 languages; gaps 5 and 14 out of scope (Sintec.PDF ships English and Russian only) |
 | 2026-10-10 | minor | Removed the alpha markers: with the cross-app gate rule, gaps 1 and 8 are partial sub-cases, not blockers; stage alpha |
 | 2026-10-10 | minor | Marked the alpha blockers (gap 1 and the Office part of gap 8) after the core-workflow gate put the stage at pre-alpha |
 | 2026-10-10 | major | Created. Ranked 24 gaps from the 2026-10-10 re-measure, the open GitHub issues and the former ROADMAP.md §Where we're lacking and where we're going (renderer, hardening, fidelity, editing, Pro workflows, 1.0 polish), which this file replaces |

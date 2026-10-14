@@ -5,11 +5,12 @@
 //! captures what it needs, [`OcrJob::run`] works anywhere (the UI runs it on a worker thread) and
 //! [`Session::apply_ocr`] applies the result as one undoable step.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use pdfcraft_render::{PageInfo, PageRenderer, RenderConfig, RenderRequest, RequestKind};
 
-pub use pdfcraft_ocr::{CyrillicModels, LANGUAGES, Models, Ocr, OcrError, PlacedWord, Script};
+pub use pdfcraft_ocr::{LANGUAGES, Models, Ocr, OcrError, PaddleModels, PlacedWord, Script};
 
 use crate::{DocId, Edit, EditError, Session};
 
@@ -49,19 +50,15 @@ impl OcrPage {
 /// The recogniser for `language` (a [`LANGUAGES`] code), loaded once per script (it takes a
 /// moment) and shared.
 pub fn engine(language: &str) -> Result<Arc<Ocr>, String> {
-    static LATIN: Mutex<Option<Arc<Ocr>>> = Mutex::new(None);
-    static CYRILLIC: Mutex<Option<Arc<Ocr>>> = Mutex::new(None);
+    static LOADED: Mutex<Option<HashMap<Script, Arc<Ocr>>>> = Mutex::new(None);
     let script = Script::for_language(language);
-    let cell = match script {
-        Script::Latin => &LATIN,
-        Script::Cyrillic => &CYRILLIC,
-    };
-    let mut slot = cell.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(o) = slot.as_ref() {
+    let mut loaded = LOADED.lock().unwrap_or_else(|e| e.into_inner());
+    let loaded = loaded.get_or_insert_with(HashMap::new);
+    if let Some(o) = loaded.get(&script) {
         return Ok(o.clone());
     }
     let o = Arc::new(Ocr::find_for(script).map_err(|e| e.to_string())?);
-    *slot = Some(o.clone());
+    loaded.insert(script, o.clone());
     Ok(o)
 }
 

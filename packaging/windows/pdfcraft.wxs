@@ -311,8 +311,8 @@
         <File Id="OcrRecognitionLicence" Source="$(var.BinDir)\models\text-recognition.rten.LICENCE.txt" />
       </Component>
 
-      <!-- Cyrillic OCR models (PP-OCRv5, Apache-2.0, licences alongside): Russian, Ukrainian and
-           Belarusian, found by pdfcraft_ocr::CyrillicModels::find in the same folder. -->
+      <!-- PP-OCRv5 detector and East Slavic models (Apache-2.0, licences alongside): Russian,
+           Ukrainian and Belarusian, found by pdfcraft_ocr::PaddleModels::find in the same folder. -->
       <Component Id="PdfcraftOcrCyrillic" Subdirectory="models" Guid="25AC6C1B-E839-4400-A51B-A3073B4A0932">
         <File Id="OcrCyrDetectionModel" Source="$(var.BinDir)\models\pp-ocrv5_mobile_det.onnx" KeyPath="yes" />
         <File Id="OcrCyrRecognitionModel" Source="$(var.BinDir)\models\eslav_pp-ocrv5_mobile_rec.onnx" />
@@ -320,6 +320,51 @@
         <File Id="OcrCyrDetectionLicence" Source="$(var.BinDir)\models\pp-ocrv5_mobile_det.onnx.LICENCE.txt" />
         <File Id="OcrCyrRecognitionLicence" Source="$(var.BinDir)\models\eslav_pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
         <File Id="OcrCyrDictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_eslav_dict.txt.LICENCE.txt" />
+      </Component>
+
+      <!-- PP-OCRv5 recognition models and dictionaries for the other scripts (Apache-2.0, licences
+           alongside), found by pdfcraft_ocr::PaddleModels::find; they share the detector above. -->
+      <Component Id="PdfcraftOcrScripts" Subdirectory="models" Guid="0EED101A-4578-43DE-B18F-6112BB1367AB">
+        <File Id="OcrCyr2Recognition" Source="$(var.BinDir)\models\cyrillic_pp-ocrv5_mobile_rec.onnx" KeyPath="yes" />
+        <File Id="OcrCyr2Dictionary" Source="$(var.BinDir)\models\ppocrv5_cyrillic_dict.txt" />
+        <File Id="OcrCyr2RecognitionLicence" Source="$(var.BinDir)\models\cyrillic_pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
+        <File Id="OcrCyr2DictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_cyrillic_dict.txt.LICENCE.txt" />
+        <File Id="OcrLatnRecognition" Source="$(var.BinDir)\models\latin_pp-ocrv5_mobile_rec.onnx" />
+        <File Id="OcrLatnDictionary" Source="$(var.BinDir)\models\ppocrv5_latin_dict.txt" />
+        <File Id="OcrLatnRecognitionLicence" Source="$(var.BinDir)\models\latin_pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
+        <File Id="OcrLatnDictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_latin_dict.txt.LICENCE.txt" />
+        <File Id="OcrHaniRecognition" Source="$(var.BinDir)\models\pp-ocrv5_mobile_rec.onnx" />
+        <File Id="OcrHaniDictionary" Source="$(var.BinDir)\models\ppocrv5_dict.txt" />
+        <File Id="OcrHaniRecognitionLicence" Source="$(var.BinDir)\models\pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
+        <File Id="OcrHaniDictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_dict.txt.LICENCE.txt" />
+        <File Id="OcrKoreRecognition" Source="$(var.BinDir)\models\korean_pp-ocrv5_mobile_rec.onnx" />
+        <File Id="OcrKoreDictionary" Source="$(var.BinDir)\models\ppocrv5_korean_dict.txt" />
+        <File Id="OcrKoreRecognitionLicence" Source="$(var.BinDir)\models\korean_pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
+        <File Id="OcrKoreDictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_korean_dict.txt.LICENCE.txt" />
+        <File Id="OcrArabRecognition" Source="$(var.BinDir)\models\arabic_pp-ocrv5_mobile_rec.onnx" />
+        <File Id="OcrArabDictionary" Source="$(var.BinDir)\models\ppocrv5_arabic_dict.txt" />
+        <File Id="OcrArabRecognitionLicence" Source="$(var.BinDir)\models\arabic_pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
+        <File Id="OcrArabDictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_arabic_dict.txt.LICENCE.txt" />
+        <File Id="OcrDevaRecognition" Source="$(var.BinDir)\models\devanagari_pp-ocrv5_mobile_rec.onnx" />
+        <File Id="OcrDevaDictionary" Source="$(var.BinDir)\models\ppocrv5_devanagari_dict.txt" />
+        <File Id="OcrDevaRecognitionLicence" Source="$(var.BinDir)\models\devanagari_pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
+        <File Id="OcrDevaDictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_devanagari_dict.txt.LICENCE.txt" />
+        <File Id="OcrGrekRecognition" Source="$(var.BinDir)\models\el_pp-ocrv5_mobile_rec.onnx" />
+        <File Id="OcrGrekDictionary" Source="$(var.BinDir)\models\ppocrv5_el_dict.txt" />
+        <File Id="OcrGrekRecognitionLicence" Source="$(var.BinDir)\models\el_pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
+        <File Id="OcrGrekDictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_el_dict.txt.LICENCE.txt" />
+        <File Id="OcrThaiRecognition" Source="$(var.BinDir)\models\th_pp-ocrv5_mobile_rec.onnx" />
+        <File Id="OcrThaiDictionary" Source="$(var.BinDir)\models\ppocrv5_th_dict.txt" />
+        <File Id="OcrThaiRecognitionLicence" Source="$(var.BinDir)\models\th_pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
+        <File Id="OcrThaiDictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_th_dict.txt.LICENCE.txt" />
+        <File Id="OcrTamlRecognition" Source="$(var.BinDir)\models\ta_pp-ocrv5_mobile_rec.onnx" />
+        <File Id="OcrTamlDictionary" Source="$(var.BinDir)\models\ppocrv5_ta_dict.txt" />
+        <File Id="OcrTamlRecognitionLicence" Source="$(var.BinDir)\models\ta_pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
+        <File Id="OcrTamlDictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_ta_dict.txt.LICENCE.txt" />
+        <File Id="OcrTeluRecognition" Source="$(var.BinDir)\models\te_pp-ocrv5_mobile_rec.onnx" />
+        <File Id="OcrTeluDictionary" Source="$(var.BinDir)\models\ppocrv5_te_dict.txt" />
+        <File Id="OcrTeluRecognitionLicence" Source="$(var.BinDir)\models\te_pp-ocrv5_mobile_rec.onnx.LICENCE.txt" />
+        <File Id="OcrTeluDictionaryLicence" Source="$(var.BinDir)\models\ppocrv5_te_dict.txt.LICENCE.txt" />
       </Component>
     </ComponentGroup>
   </Fragment>

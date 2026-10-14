@@ -106,24 +106,24 @@ fn month_names_follow_the_date_language_or_else_the_interface_language() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.set_option("date-format", "d mmmm yyyy").unwrap();
-        app.set_option("language", "cs").unwrap();
+        app.set_option("language", "ru").unwrap();
         app.set_option("dialog", "preferences").unwrap();
         app
     });
     h.run_steps(3);
     let text = |h: &Harness<'static, PdfCraftApp>| h.state().date_text(None).unwrap();
-    assert_eq!(text(&h), h.state().session.today_text(None, Some("cs")).unwrap(), "follows the interface (Czech)");
+    assert_eq!(text(&h), h.state().session.today_text(None, Some("ru")).unwrap(), "follows the interface (Russian)");
     // The picker offers following the interface first, then the interface languages.
-    assert!(shows(&h, "Same as interface (Čeština)"));
-    h.state_mut().set_option("date-language", "es").unwrap();
+    assert!(shows(&h, "Как в интерфейсе (Русский)"));
+    h.state_mut().set_option("date-language", "en").unwrap();
     h.run_steps(2);
-    assert_eq!(text(&h), h.state().session.today_text(None, Some("es")).unwrap());
-    assert!(shows(&h, "Español"));
+    assert_eq!(text(&h), h.state().session.today_text(None, Some("en")).unwrap());
+    assert!(shows(&h, "English"));
 
     // Remembered; an unknown saved language is ignored; auto follows the interface again.
     let mut restored = PdfCraftApp::new();
     restored.restore(&h.state().persist());
-    assert_eq!(restored.session.date_language(), Some("es"));
+    assert_eq!(restored.session.date_language(), Some("en"));
     let mut fresh = PdfCraftApp::new();
     fresh.restore(r#"{"date_language": "klingon"}"#);
     assert_eq!(fresh.session.date_language(), None);
@@ -139,9 +139,9 @@ fn a_date_the_pdf_cannot_hold_is_refused_with_a_warning_first() {
         app.set_option("language", "en").unwrap();
         app.open_bytes("form.pdf", None, PDF.to_vec()).expect("opens");
         app.set_option("left", "closed").unwrap();
-        // Japanese weekday names: Fill & Sign text can't hold them yet.
+        // Russian weekday names: Fill & Sign text can't hold Cyrillic yet.
         app.set_option("date-format", "dddd").unwrap();
-        app.set_option("date-language", "ja").unwrap();
+        app.set_option("date-language", "ru").unwrap();
         app.set_option("dialog", "preferences").unwrap();
         app
     });

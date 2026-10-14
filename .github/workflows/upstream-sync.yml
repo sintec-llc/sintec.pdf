@@ -1,8 +1,10 @@
 name: Upstream sync
 
-# Weekly: merge the newest PdfCraft release tag (github.com/storytold/pdfcraft) into a
-# sync/upstream-<tag> branch and open a draft pull request, or open an issue when the merge
-# conflicts. See docs/upstream-sync.md for the rest of the process.
+# Weekly: list what upstream PdfCraft (github.com/storytold/pdfcraft) changed that we don't have
+# (security and crash fixes, and the areas where we differ: OCR, printing, Office, scanning),
+# keeping an issue open while upstream security fixes are missing; then merge the newest release
+# tag into a sync/upstream-<tag> branch and open a draft pull request, or open an issue when the
+# merge conflicts. See docs/upstream-sync.md for the rest of the process.
 on:
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC
@@ -49,6 +51,46 @@ jobs:
             echo "state=new" >>"$GITHUB_OUTPUT"
           fi
 
+      - name: List notable upstream changes
+        run: |
+          # Upstream commits we lack, leaving out ones already cherry-picked (same patch).
+          git log --no-merges --cherry-pick --right-only \
+            --format='- %s ([%h](https://github.com/storytold/pdfcraft/commit/%H), %as)' HEAD...upstream/main >missing.txt || true
+          pick() { grep -i -E "$1" missing.txt | head -n 40 || true; }
+          pick 'security|audit finding|vulnerab|cve-' >security.txt
+          pick '(^- fix|crash|panic|overflow|hang|never crash)' | grep -v -i -E 'security|audit finding' >fixes.txt || true
+          pick '(ocr|print|spool|office|word|excel|powerpoint|scan|twain|wia|m10)' >ours.txt
+          {
+            echo "### Upstream changes we don't have yet"
+            echo
+            echo "Upstream \`main\` has $(wc -l <missing.txt) commits we don't (cherry-picked ones excluded)."
+            for section in "Security:security.txt" "Crash and wrong-result fixes:fixes.txt" "OCR, printing, Office, scanning (where we differ; docs/upstream-sync.md §M10):ours.txt"; do
+              title="${section%%:*}"; file="${section##*:}"
+              echo
+              echo "**$title** ($(wc -l <"$file"))"
+              echo
+              if [ -s "$file" ]; then cat "$file"; else echo "- none"; fi
+            done
+          } >highlights.md
+          cat highlights.md >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Keep an issue open for missing upstream security fixes
+        run: |
+          title="Upstream security fixes to pick up"
+          number="$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
+          if [ ! -s security.txt ]; then
+            if [ -n "$number" ]; then gh issue close "$number" --comment "Every upstream security fix is in main now."; fi
+            exit 0
+          fi
+          {
+            echo "Upstream PdfCraft has security fixes that \`main\` doesn't (docs/upstream-sync.md: cherry-pick them right away, \`git cherry-pick -x <commit>\`):"
+            echo
+            cat security.txt
+            echo
+            echo "Updated by the weekly Upstream sync workflow; closed by it once they are all in."
+          } >security.md
+          if [ -n "$number" ]; then gh issue edit "$number" --body-file security.md; else gh issue create --title "$title" --body-file security.md; fi
+
       - name: Merge it
         id: merge
         if: steps.up.outputs.state == 'new'
@@ -82,6 +124,8 @@ jobs:
             sed 's/^/- `/; s/$/`/' conflicts.txt
             echo
             echo "Follow docs/upstream-sync.md: merge on \`sync/upstream-$TAG\`, resolve, \`cargo xtask rebrand\`, translate new strings into Russian, run the tests and build the installer."
+            echo
+            cat highlights.md
           } >body.md
           gh issue create --title "$title" --body-file body.md
 
@@ -104,6 +148,8 @@ jobs:
             echo
             echo "Before merging (docs/upstream-sync.md): CI green, including \`sintec_guard\` (Russian strings, branding);"
             echo "set our next version; build and try the installer; check upstream's changes to Windows printing, OCR and Office import (M10) against ours."
+            echo
+            cat highlights.md
           } >body.md
           gh pr create --draft --base main --head "sync/upstream-$TAG" --title "Sync upstream PdfCraft $TAG" --body-file body.md
           # Pushes made with GITHUB_TOKEN don't start other workflows; a dispatch does.

@@ -1,6 +1,15 @@
-# Russian (ru) catalog. Format: see the header of ja.tsv
-# (context <TAB> source <TAB> translation; @id, @plural and other contexts; escapes \n \t \\).
-# Plural forms (see `plural_ru` in i18n/mod.rs): one (1, 21, 31…) | few (2–4, 22–24…) | many (0, 5–20, 25…).
+# Russian (ru) catalog. Columns, separated by a TAB:  context <TAB> source <TAB> translation
+#
+#   context  empty                a plain UI string; `source` is the English text in the code
+#            @id                  a command id (e.g. file.saveAs): wins over the English text for
+#                                 that menu item, so one id can read differently from its twin
+#            @plural              `source` is "one|other" (English forms); the translation lists the
+#                                 language's forms separated by "|" (see `plural` in i18n/mod.rs)
+#            anything else        a disambiguating context passed to `tr_ctx`
+#   escapes  \n  \t  \\  inside a column. `{name}` placeholders must appear in both columns.
+#   lines starting with # and blank lines are ignored.
+#
+# Plural forms (see `plural_russian` in i18n/mod.rs): one (1, 21, 31…) | few (2–4, 22–24…) | many (0, 5–20, 25…).
 #
 # Clean-room: written from the meaning of the English labels, following common Russian desktop
 # conventions (menus are nouns or infinitives, buttons are infinitives); not taken from Adobe
@@ -2201,3 +2210,51 @@ key	Space	Пробел
 	The scanner reported an error. Check it and try again	Сканер сообщил об ошибке. Проверьте его и попробуйте ещё раз
 	The scanned page is too large	Отсканированная страница слишком велика
 	The scan failed	Сканирование не удалось
+
+# Scan & OCR ▸ Recognize Text ▸ Document language (pdfcraft_ocr::LANGUAGES, shown through i18n::t).
+	English	Английский
+	Russian	Русский
+	Ukrainian	Украинский
+	Belarusian	Белорусский
+	Kazakh	Казахский
+	Bulgarian	Болгарский
+	Serbian	Сербский
+	Macedonian	Македонский
+	Mongolian	Монгольский
+	Kyrgyz	Киргизский
+	Tajik	Таджикский
+	German	Немецкий
+	French	Французский
+	Spanish	Испанский
+	Italian	Итальянский
+	Portuguese	Португальский
+	Dutch	Нидерландский
+	Polish	Польский
+	Czech	Чешский
+	Slovak	Словацкий
+	Hungarian	Венгерский
+	Romanian	Румынский
+	Turkish	Турецкий
+	Swedish	Шведский
+	Danish	Датский
+	Norwegian	Норвежский
+	Finnish	Финский
+	Croatian	Хорватский
+	Slovenian	Словенский
+	Lithuanian	Литовский
+	Latvian	Латышский
+	Estonian	Эстонский
+	Indonesian	Индонезийский
+	Greek	Греческий
+	Chinese	Китайский
+	Japanese	Японский
+	Korean	Корейский
+	Arabic	Арабский
+	Persian	Персидский
+	Urdu	Урду
+	Hindi	Хинди
+	Marathi	Маратхи
+	Nepali	Непальский
+	Thai	Тайский
+	Tamil	Тамильский
+	Telugu	Телугу

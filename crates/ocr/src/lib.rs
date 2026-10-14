@@ -1,15 +1,15 @@
 //! pdfcraft-ocr — Scan & OCR ▸ Recognize text (L4).
 //!
-//! Latin text is read by the ocrs engine (MIT/Apache-2.0) with its pre-trained models
-//! (CC-BY-SA-4.0); Cyrillic text by PaddleOCR's PP-OCRv5 models (Apache-2.0, see [`paddle`]).
-//! Both are fetched by `cargo xtask models` (see ATTRIBUTION.toml). The caller renders a page to pixels;
+//! English is read by the ocrs engine (MIT/Apache-2.0) with its pre-trained models
+//! (CC-BY-SA-4.0); every other language by PaddleOCR's PP-OCRv5 models (Apache-2.0, see
+//! [`paddle`]): one shared text detector and a recognition model per writing system ([`Script`]).
+//! All are fetched by `cargo xtask models` (see ATTRIBUTION.toml). The caller renders a page to pixels;
 //! [`Ocr::recognize`] finds the words in them, and [`text_layer`] turns words placed in user space
 //! into page content: invisible text (rendering mode 3) over each word, so the page becomes a
 //! searchable image (Acrobat's "Searchable Image (Exact)": the image is left untouched).
 //!
-//! The ocrs models read the Latin alphabet (English and other languages written without
-//! accents); the PP-OCRv5 East Slavic model reads Russian, Ukrainian and Belarusian, and the Latin
-//! letters, digits and punctuation mixed in with them.
+//! The ocrs models read the Latin alphabet without accents (English); the PP-OCRv5 models read
+//! the languages in [`LANGUAGES`], each with the Latin letters, digits and punctuation mixed in.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -23,40 +23,155 @@ pub use pdfcraft_fonts::helvetica_width;
 pub const DETECTION_MODEL: &str = "text-detection.rten";
 pub const RECOGNITION_MODEL: &str = "text-recognition.rten";
 
-/// The Cyrillic (PP-OCRv5) model files, as named in ATTRIBUTION.toml.
-pub const CYRILLIC_DETECTION_MODEL: &str = "pp-ocrv5_mobile_det.onnx";
-pub const CYRILLIC_RECOGNITION_MODEL: &str = "eslav_pp-ocrv5_mobile_rec.onnx";
-pub const CYRILLIC_DICTIONARY: &str = "ppocrv5_eslav_dict.txt";
+/// The PP-OCRv5 text detection model every [`Script`] but [`Script::Latin`] shares, as named in
+/// ATTRIBUTION.toml.
+pub const PADDLE_DETECTION_MODEL: &str = "pp-ocrv5_mobile_det.onnx";
 
-/// The languages text can be recognised in (ISO 639-1 code, name in the language itself).
-pub const LANGUAGES: &[(&str, &str)] = &[("en", "English"), ("ru", "Русский"), ("uk", "Українська"), ("be", "Беларуская")];
+/// The languages text can be recognised in: ISO 639-1 code and English name (the interface
+/// translates it). English and Russian first, then by writing system.
+pub const LANGUAGES: &[(&str, &str)] = &[
+    ("en", "English"),
+    ("ru", "Russian"),
+    ("uk", "Ukrainian"),
+    ("be", "Belarusian"),
+    ("kk", "Kazakh"),
+    ("bg", "Bulgarian"),
+    ("sr", "Serbian"),
+    ("mk", "Macedonian"),
+    ("mn", "Mongolian"),
+    ("ky", "Kyrgyz"),
+    ("tg", "Tajik"),
+    ("de", "German"),
+    ("fr", "French"),
+    ("es", "Spanish"),
+    ("it", "Italian"),
+    ("pt", "Portuguese"),
+    ("nl", "Dutch"),
+    ("pl", "Polish"),
+    ("cs", "Czech"),
+    ("sk", "Slovak"),
+    ("hu", "Hungarian"),
+    ("ro", "Romanian"),
+    ("tr", "Turkish"),
+    ("sv", "Swedish"),
+    ("da", "Danish"),
+    ("no", "Norwegian"),
+    ("fi", "Finnish"),
+    ("hr", "Croatian"),
+    ("sl", "Slovenian"),
+    ("lt", "Lithuanian"),
+    ("lv", "Latvian"),
+    ("et", "Estonian"),
+    ("id", "Indonesian"),
+    ("el", "Greek"),
+    ("zh", "Chinese"),
+    ("ja", "Japanese"),
+    ("ko", "Korean"),
+    ("ar", "Arabic"),
+    ("fa", "Persian"),
+    ("ur", "Urdu"),
+    ("hi", "Hindi"),
+    ("mr", "Marathi"),
+    ("ne", "Nepali"),
+    ("th", "Thai"),
+    ("ta", "Tamil"),
+    ("te", "Telugu"),
+];
 
 /// The writing system a set of models reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Script {
     /// ocrs: English and other Latin-alphabet text without accents.
     Latin,
-    /// PP-OCRv5 East Slavic: Russian, Ukrainian, Belarusian (with Latin mixed in).
+    /// PP-OCRv5 East Slavic: Russian, Ukrainian, Belarusian.
+    EastSlavic,
+    /// PP-OCRv5 Cyrillic: Kazakh, Bulgarian, Serbian, Macedonian, Mongolian, Kyrgyz, Tajik.
     Cyrillic,
+    /// PP-OCRv5 Latin: European languages with accents, Turkish, Indonesian.
+    LatinAccented,
+    /// PP-OCRv5 main model: Simplified and Traditional Chinese, Japanese.
+    Chinese,
+    Korean,
+    /// Arabic, Persian, Urdu: written right to left (see [`Script::rtl`]).
+    Arabic,
+    /// Hindi, Marathi, Nepali.
+    Devanagari,
+    Greek,
+    Thai,
+    Tamil,
+    Telugu,
 }
 
 impl Script {
+    /// Every script, [`Script::Latin`] first.
+    pub const ALL: [Script; 12] = [
+        Script::Latin,
+        Script::EastSlavic,
+        Script::Cyrillic,
+        Script::LatinAccented,
+        Script::Chinese,
+        Script::Korean,
+        Script::Arabic,
+        Script::Devanagari,
+        Script::Greek,
+        Script::Thai,
+        Script::Tamil,
+        Script::Telugu,
+    ];
+
     /// The script for a [`LANGUAGES`] code; unknown codes read as Latin.
     pub fn for_language(code: &str) -> Script {
         match code {
-            "ru" | "uk" | "be" => Script::Cyrillic,
+            "ru" | "uk" | "be" => Script::EastSlavic,
+            "kk" | "bg" | "sr" | "mk" | "mn" | "ky" | "tg" => Script::Cyrillic,
+            "de" | "fr" | "es" | "it" | "pt" | "nl" | "pl" | "cs" | "sk" | "hu" | "ro" | "tr" | "sv" | "da" | "no" | "fi" | "hr" | "sl" | "lt"
+            | "lv" | "et" | "id" => Script::LatinAccented,
+            "zh" | "ja" => Script::Chinese,
+            "ko" => Script::Korean,
+            "ar" | "fa" | "ur" => Script::Arabic,
+            "hi" | "mr" | "ne" => Script::Devanagari,
+            "el" => Script::Greek,
+            "th" => Script::Thai,
+            "ta" => Script::Tamil,
+            "te" => Script::Telugu,
             _ => Script::Latin,
         }
+    }
+
+    /// The PP-OCRv5 recognition model and its character dictionary, as named in
+    /// ATTRIBUTION.toml; `None` for [`Script::Latin`] (ocrs).
+    pub fn paddle_files(self) -> Option<(&'static str, &'static str)> {
+        Some(match self {
+            Script::Latin => return None,
+            Script::EastSlavic => ("eslav_pp-ocrv5_mobile_rec.onnx", "ppocrv5_eslav_dict.txt"),
+            Script::Cyrillic => ("cyrillic_pp-ocrv5_mobile_rec.onnx", "ppocrv5_cyrillic_dict.txt"),
+            Script::LatinAccented => ("latin_pp-ocrv5_mobile_rec.onnx", "ppocrv5_latin_dict.txt"),
+            Script::Chinese => ("pp-ocrv5_mobile_rec.onnx", "ppocrv5_dict.txt"),
+            Script::Korean => ("korean_pp-ocrv5_mobile_rec.onnx", "ppocrv5_korean_dict.txt"),
+            Script::Arabic => ("arabic_pp-ocrv5_mobile_rec.onnx", "ppocrv5_arabic_dict.txt"),
+            Script::Devanagari => ("devanagari_pp-ocrv5_mobile_rec.onnx", "ppocrv5_devanagari_dict.txt"),
+            Script::Greek => ("el_pp-ocrv5_mobile_rec.onnx", "ppocrv5_el_dict.txt"),
+            Script::Thai => ("th_pp-ocrv5_mobile_rec.onnx", "ppocrv5_th_dict.txt"),
+            Script::Tamil => ("ta_pp-ocrv5_mobile_rec.onnx", "ppocrv5_ta_dict.txt"),
+            Script::Telugu => ("te_pp-ocrv5_mobile_rec.onnx", "ppocrv5_te_dict.txt"),
+        })
+    }
+
+    /// Written right to left: the recognition model reads a line left to right as it is drawn,
+    /// so its words are put back into reading order (`paddle::logical_rtl`).
+    pub fn rtl(self) -> bool {
+        self == Script::Arabic
     }
 
     /// Whether this script's model files are installed.
     pub fn available(self) -> bool {
         match self {
             Script::Latin => Models::find().is_some(),
-            Script::Cyrillic => CyrillicModels::find().is_some(),
+            _ => PaddleModels::find(self).is_some(),
         }
     }
 }
+
 /// The recognition model's alphabet, as it was trained (ocrs-models' `DEFAULT_ALPHABET`): its
 /// output classes follow this order. The ocrs crate's own copy has an `E` where the training had
 /// `€`, which made a scanned "€250" read as "E250".
@@ -120,28 +235,31 @@ impl Models {
     }
 }
 
-/// Where the three Cyrillic model files are.
+/// Where a PP-OCRv5 script's three model files are.
 #[derive(Clone, Debug, PartialEq)]
-pub struct CyrillicModels {
+pub struct PaddleModels {
+    pub script: Script,
     pub detection: PathBuf,
     pub recognition: PathBuf,
     pub dictionary: PathBuf,
 }
 
-impl CyrillicModels {
-    /// The models in `dir`, if all three files are there.
-    pub fn in_dir(dir: &Path) -> Option<CyrillicModels> {
-        let m = CyrillicModels {
-            detection: dir.join(CYRILLIC_DETECTION_MODEL),
-            recognition: dir.join(CYRILLIC_RECOGNITION_MODEL),
-            dictionary: dir.join(CYRILLIC_DICTIONARY),
+impl PaddleModels {
+    /// `script`'s models in `dir`, if all three files are there (`None` for [`Script::Latin`]).
+    pub fn in_dir(dir: &Path, script: Script) -> Option<PaddleModels> {
+        let (recognition, dictionary) = script.paddle_files()?;
+        let m = PaddleModels {
+            script,
+            detection: dir.join(PADDLE_DETECTION_MODEL),
+            recognition: dir.join(recognition),
+            dictionary: dir.join(dictionary),
         };
         (m.detection.is_file() && m.recognition.is_file() && m.dictionary.is_file()).then_some(m)
     }
 
     /// Look in the same places as [`Models::find`].
-    pub fn find() -> Option<CyrillicModels> {
-        Models::search_dirs().iter().find_map(|d| Self::in_dir(d))
+    pub fn find(script: Script) -> Option<PaddleModels> {
+        Models::search_dirs().iter().find_map(|d| Self::in_dir(d, script))
     }
 }
 
@@ -187,9 +305,9 @@ impl Ocr {
         Ok(Ocr { engine: Engine::Ocrs(Box::new(engine)) })
     }
 
-    /// Load the Cyrillic (PP-OCRv5) models.
-    pub fn load_cyrillic(models: &CyrillicModels) -> Result<Ocr, OcrError> {
-        let p = paddle::PaddleOcr::load(&models.detection, &models.recognition, &models.dictionary)?;
+    /// Load a PP-OCRv5 script's models.
+    pub fn load_paddle(models: &PaddleModels) -> Result<Ocr, OcrError> {
+        let p = paddle::PaddleOcr::load(&models.detection, &models.recognition, &models.dictionary, models.script.rtl())?;
         Ok(Ocr { engine: Engine::Paddle(Box::new(p)) })
     }
 
@@ -202,7 +320,7 @@ impl Ocr {
     pub fn find_for(script: Script) -> Result<Ocr, OcrError> {
         match script {
             Script::Latin => Self::find(),
-            Script::Cyrillic => Self::load_cyrillic(&CyrillicModels::find().ok_or(OcrError::NoModels)?),
+            _ => Self::load_paddle(&PaddleModels::find(script).ok_or(OcrError::NoModels)?),
         }
     }
 
@@ -288,7 +406,7 @@ fn num(v: f64) -> String {
 
 /// Page content that writes `words` as invisible text, each word stretched to its box so
 /// selection and search highlight the right place. Words WinAnsiEncoding can hold use `/PCHelv`
-/// (standard Helvetica); others (Cyrillic…) use the Unicode font `/PCUni` (see
+/// (standard Helvetica); others (Cyrillic, Chinese, Arabic…) use the Unicode font `/PCUni` (see
 /// `pdfcraft_edit::UNICODE_FONT`), whose codes are UTF-16 and every code 1 em wide. Marked
 /// content `/OCR` so it can be told apart from the page's own text.
 pub fn text_layer(words: &[PlacedWord]) -> Vec<u8> {
@@ -395,6 +513,44 @@ mod tests {
         // The euro sign follows the ASCII punctuation (class 44; 0 is the CTC blank), not a second E.
         assert_eq!(chars.iter().position(|&c| c == '€'), Some(43));
         assert_eq!(chars.iter().filter(|&&c| c == 'E').count(), 1);
+    }
+
+    #[test]
+    fn every_language_has_a_script_and_its_model_files() {
+        let mut codes = std::collections::HashSet::new();
+        for (code, name) in LANGUAGES {
+            assert!(codes.insert(*code) && !name.is_empty(), "{code}");
+            let script = Script::for_language(code);
+            assert_eq!(script == Script::Latin, *code == "en", "{code}");
+            if script != Script::Latin {
+                let (rec, dict) = script.paddle_files().unwrap();
+                assert!(rec.ends_with("_rec.onnx") && dict.ends_with("_dict.txt"), "{code}");
+            }
+        }
+        // Every script is reachable from some language.
+        for script in Script::ALL {
+            assert!(LANGUAGES.iter().any(|(c, _)| Script::for_language(c) == script), "{script:?}");
+        }
+        assert_eq!(Script::for_language("xx"), Script::Latin);
+        assert!(Script::Arabic.rtl() && !Script::Chinese.rtl());
+    }
+
+    #[test]
+    fn paddle_models_need_all_three_files() {
+        let dir = std::env::temp_dir().join(format!("pdfcraft-ocr-paddle-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(PaddleModels::in_dir(&dir, Script::Greek), None);
+        assert_eq!(PaddleModels::in_dir(&dir, Script::Latin), None, "ocrs is not a PaddleOCR script");
+        let (rec, dict) = Script::Greek.paddle_files().unwrap();
+        for f in [PADDLE_DETECTION_MODEL, rec] {
+            std::fs::write(dir.join(f), b"model").unwrap();
+        }
+        assert_eq!(PaddleModels::in_dir(&dir, Script::Greek), None, "no dictionary yet");
+        std::fs::write(dir.join(dict), b"a").unwrap();
+        let m = PaddleModels::in_dir(&dir, Script::Greek).unwrap();
+        assert_eq!((m.script, m.recognition.file_name().unwrap().to_str()), (Script::Greek, Some(rec)));
+        assert_eq!(PaddleModels::in_dir(&dir, Script::Thai), None, "another script's model is missing");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

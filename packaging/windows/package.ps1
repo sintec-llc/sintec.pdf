@@ -103,8 +103,18 @@ $ModelsSrc = Join-Path $Root 'assets\models'
 Invoke-Native 'cargo xtask models' { cargo xtask models $ModelsSrc }
 $ModelsStage = Join-Path $Stage 'models'
 New-Item -ItemType Directory -Force -Path $ModelsStage | Out-Null
-# Latin (ocrs) and Cyrillic (PP-OCRv5) models, each with its licence text.
-foreach ($m in 'text-detection.rten', 'text-recognition.rten', 'pp-ocrv5_mobile_det.onnx', 'eslav_pp-ocrv5_mobile_rec.onnx', 'ppocrv5_eslav_dict.txt') {
+# English (ocrs) and PP-OCRv5 models (one detector, a recognition model and a dictionary per
+# script; pdfcraft_ocr::Script), each with its licence text. Keep in step with pdfcraft.wxs.
+$OcrModels = @(
+  'text-detection.rten', 'text-recognition.rten', 'pp-ocrv5_mobile_det.onnx', 'eslav_pp-ocrv5_mobile_rec.onnx',
+  'ppocrv5_eslav_dict.txt', 'cyrillic_pp-ocrv5_mobile_rec.onnx', 'ppocrv5_cyrillic_dict.txt', 'latin_pp-ocrv5_mobile_rec.onnx',
+  'ppocrv5_latin_dict.txt', 'pp-ocrv5_mobile_rec.onnx', 'ppocrv5_dict.txt', 'korean_pp-ocrv5_mobile_rec.onnx',
+  'ppocrv5_korean_dict.txt', 'arabic_pp-ocrv5_mobile_rec.onnx', 'ppocrv5_arabic_dict.txt', 'devanagari_pp-ocrv5_mobile_rec.onnx',
+  'ppocrv5_devanagari_dict.txt', 'el_pp-ocrv5_mobile_rec.onnx', 'ppocrv5_el_dict.txt', 'th_pp-ocrv5_mobile_rec.onnx',
+  'ppocrv5_th_dict.txt', 'ta_pp-ocrv5_mobile_rec.onnx', 'ppocrv5_ta_dict.txt', 'te_pp-ocrv5_mobile_rec.onnx',
+  'ppocrv5_te_dict.txt'
+)
+foreach ($m in $OcrModels) {
   Copy-Item (Join-Path $ModelsSrc $m), (Join-Path $ModelsSrc "$m.LICENCE.txt") $ModelsStage
 }
 
