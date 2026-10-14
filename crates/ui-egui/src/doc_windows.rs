@@ -128,6 +128,14 @@ impl PdfCraftApp {
     pub(crate) fn finish_page_transfer_drop(&mut self, ctx: &Context) {
         let Some(tr) = self.page_transfer.as_ref().filter(|tr| tr.window == self.current_window) else { return };
         let from = tr.from;
+        if ctx.input(|i| i.pointer.primary_down())
+            && let Some(p) = ctx.input(|i| i.pointer.latest_pos())
+        {
+            let count = tr.pages.len();
+            let title = format!("{} · {}", crate::i18n::trn(crate::i18n::current(), count as u64, "{n} page", "{n} pages"), tr.name);
+            let page = tr.pages.first().copied().unwrap_or(0);
+            self.drag_ghost = Some(crate::drag_ghost::Ghost { screen: p + screen_offset(ctx), title, doc: from, page, pages: count, preview: true });
+        }
         if ctx.input(|i| i.pointer.primary_released())
             && let Some(p) = ctx.input(|i| i.pointer.latest_pos())
         {
@@ -225,6 +233,7 @@ impl PdfCraftApp {
                     crate::canvas::document_area(self, i, ui);
                 }
             });
+            crate::widgets::page_cursor_only_on_the_page(&ctx);
             self.process_pending_edits();
             let overlay = self.dialog.is_some() || self.palette_open;
             if overlay && self.overlay_window.is_none() {
@@ -235,6 +244,8 @@ impl PdfCraftApp {
                 dialogs::show(self, &ctx);
             }
             self.finish_page_transfer_drop(&ctx);
+            crate::drag_ghost::paint(self, &ctx);
+            crate::widgets::hand_over_clickables(&ctx);
         }
         let shown = self.active.and_then(|i| self.views.get(i)).filter(|v| v.window == id).map(|v| v.id);
         if let (Some(d), Some(w)) = (shown, self.doc_windows.iter_mut().find(|w| w.id == id)) {

@@ -13,6 +13,7 @@ fn installable(result: Result<(), &'static str>) -> (Harness<'static, PdfCraftAp
     let seen = called.clone();
     let h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
+        app.set_option("auto-update-check", "false").unwrap();
         let base = "https://github.com/sintec-llc/sintec.pdf/releases";
         app.update_source = Some(Arc::new(move || {
             Ok(Release {
@@ -101,6 +102,7 @@ fn harness(answer: Result<&str, &str>) -> Harness<'static, PdfCraftApp> {
     Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
+        app.set_option("auto-update-check", "false").unwrap();
         app.update_source = Some(source(answer));
         app
     })
@@ -157,34 +159,86 @@ fn an_up_to_date_or_failed_check_says_so() {
     h.get_by_label_contains("Couldn't check for updates: couldn't reach GitHub");
 }
 
-#[test]
-fn nothing_is_asked_until_the_user_checks() {
-    // No check at start (the owner's decision): the source is only called from the command.
+/// A harness whose source answers `version` and counts the calls; the session clock reads [`NOW`]
+/// and the settings are `settings` (as saved by an earlier run).
+fn automatic(version: &'static str, settings: &'static str) -> (Harness<'static, PdfCraftApp>, Arc<std::sync::atomic::AtomicUsize>) {
     let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let counted = calls.clone();
-    let mut h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(move |_cc| {
+    let h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
-        // Settings from a build that had the startup option are ignored.
-        app.restore(r#"{"check_updates_at_start": true}"#);
+        app.restore(settings);
+        app.session = std::mem::take(&mut app.session).with_clock(|| NOW);
         let counted = counted.clone();
         app.update_source = Some(Arc::new(move || {
             counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(Release {
-                version: "v99.0.0".into(),
-                url: "https://github.com/sintec-llc/sintec.pdf/releases/tag/v99.0.0".into(),
+                version: version.into(),
+                url: format!("https://github.com/sintec-llc/sintec.pdf/releases/tag/{version}"),
                 ..Default::default()
             })
         }));
         app
     });
+    (h, calls)
+}
+
+const NOW: i64 = 1_800_000_000;
+
+#[test]
+fn a_newer_version_found_by_itself_pops_up() {
+    let (mut h, calls) = automatic("v99.0.0", "{}");
     settle(&mut h);
-    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1, "asked once at start");
+    h.get_by_label_contains("Sintec.PDF 99.0.0 is available");
+    assert_eq!(h.state().update_last_check, NOW, "the time is remembered");
+    // Later: not offered again in this run, even when the twelve hours pass.
+    h.get_by_label("Later").click();
+    settle(&mut h);
     assert!(h.query_by_label_contains("is available").is_none());
-    h.state_mut().execute("help.check_updates");
+    let saved = h.state().persist();
+    assert!(saved.contains(&format!("\"update_last_check\":{NOW}")), "{saved}");
+}
+
+#[test]
+fn nothing_pops_up_when_up_to_date_failing_skipped_or_recently_checked() {
+    // Up to date: asked, but quiet.
+    let (mut h, calls) = automatic("v0.0.1", "{}");
     settle(&mut h);
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert!(h.query_by_label_contains("is available").is_none() && h.query_by_label_contains("up to date").is_none());
+    // Skipped version: asked, but not offered.
+    let (mut h, calls) = automatic("v99.0.0", r#"{"update_skipped": "v99.0.0"}"#);
+    settle(&mut h);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert!(h.query_by_label_contains("is available").is_none());
+    // Checked an hour ago (an earlier run): not asked at all.
+    let (mut h, calls) = automatic("v99.0.0", r#"{"update_last_check": 1799996400}"#);
+    settle(&mut h);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    // Turned off in Preferences: not asked.
+    let (mut h, calls) = automatic("v99.0.0", r#"{"auto_update_check": false}"#);
+    settle(&mut h);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    // The command still asks, and shows a skipped version when the user asks.
+    h.state_mut().execute("help.check_updates");
+    settle(&mut h);
     h.get_by_label_contains("Sintec.PDF 99.0.0 is available");
+}
+
+#[test]
+fn skip_this_version_is_remembered() {
+    let (mut h, _) = automatic("v99.0.0", "{}");
+    settle(&mut h);
+    h.get_by_label("Skip this version").click();
+    settle(&mut h);
+    assert_eq!(h.state().update_skipped.as_deref(), Some("v99.0.0"));
+    let mut restored = PdfCraftApp::new();
+    restored.restore(&h.state().persist());
+    assert_eq!(restored.update_skipped.as_deref(), Some("v99.0.0"));
+    // Hostile settings are ignored.
+    restored.restore(&format!(r#"{{"update_skipped": "{}", "update_last_check": -5, "auto_update_check": "yes"}}"#, "v".repeat(500)));
+    assert_eq!((restored.update_skipped, restored.update_last_check, restored.auto_update_check), (None, 0, true));
 }
 
 #[test]

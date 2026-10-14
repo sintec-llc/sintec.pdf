@@ -27,11 +27,23 @@ pub struct ExportDraft {
     pub format: ImageFormat,
     /// Export all images ▸ skip images with fewer pixels than this on their shorter side.
     pub min_side: u32,
+    /// Sintec.PDF: the pages chosen in the Pages panel (0-based), which replace the range.
+    pub selection: Option<Vec<usize>>,
 }
 
 impl Default for ExportDraft {
     fn default() -> Self {
-        Self { dpi: 150.0, range: PageRange::default(), format: ImageFormat::Png, min_side: 0 }
+        Self { dpi: 150.0, range: PageRange::default(), format: ImageFormat::Png, min_side: 0, selection: None }
+    }
+}
+
+impl ExportDraft {
+    /// The pages to export from a document of `count` pages.
+    pub fn pages(&self, count: usize) -> Vec<usize> {
+        match &self.selection {
+            Some(sel) => sel.iter().copied().filter(|p| *p < count).collect(),
+            None => self.range.pages(count),
+        }
     }
 }
 
@@ -107,11 +119,16 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: E
     }
     ui.add_space(6.0);
     ui.label(egui::RichText::new(tl!("Pages")).font(theme::semibold(12.5)));
-    d.range.ui(ui, count);
+    match &d.selection {
+        Some(sel) => {
+            ui.label(crate::i18n::fmt(tl!("Selected pages: {pages}"), &[("pages", &crate::files::page_ranges(sel))]));
+        }
+        None => d.range.ui(ui, count),
+    }
     ui.add_space(12.0);
     let (mut apply, mut cancel) = (false, false);
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-        let ok = !d.range.pages(count).is_empty();
+        let ok = !d.pages(count).is_empty();
         if ui.add_enabled_ui(ok, |ui| widgets::pill_button(ui, tl!("Export"), true)).inner.clicked() {
             apply = true;
         }
@@ -223,8 +240,12 @@ impl PdfCraftApp {
         let Some((_, id)) = self.active_ids() else { return };
         let Some(doc) = self.session.get(id) else { return };
         let src = doc.export_source();
-        let stem = doc.name.trim_end_matches(".pdf").trim_end_matches(".PDF").to_string();
-        let pages = self.export_draft.range.pages(src.pages);
+        let mut stem = doc.name.trim_end_matches(".pdf").trim_end_matches(".PDF").to_string();
+        let pages = self.export_draft.pages(src.pages);
+        // Pages chosen in the Pages panel: the text file says which ("отчёт (стр. 2, 5–7).txt").
+        if self.export_draft.selection.is_some() && kind == ExportKind::Text {
+            stem = format!("{stem} ({})", crate::i18n::fmt(tl!("p. {pages}"), &[("pages", &crate::files::page_ranges(&pages))]));
+        }
         let dpi = self.export_draft.dpi;
         let format = self.export_draft.format;
         let min_side = self.export_draft.min_side;

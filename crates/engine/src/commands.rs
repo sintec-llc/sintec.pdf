@@ -303,6 +303,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("optimize.advanced", "Optimize PDF…", FILE, None, Document, "settings-2"),
     c("export.text", "Export to text…", FILE, None, Document, "type"),
     c("export.docx", "Export to Word…", FILE, None, Document, "file-text"),
+    c("export.xlsx", "Export to Excel…", FILE, None, Document, "grid-3x3"),
     c("export.html", "Export to HTML…", FILE, None, Document, "file-symlink"),
     c("export.rtf", "Export to RTF…", FILE, None, Document, "file-text"),
     c("app.preferences", "Preferences…", EDIT, Some(Shortcut::cmd(",")), Nothing, "settings"),

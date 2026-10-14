@@ -60,6 +60,40 @@ pub fn ghost_button(ui: &mut egui::Ui, icon: &str, label: &str) -> Response {
 }
 
 /// A search-field lookalike that opens the command palette.
+/// The largest a widget's shorter side may be for its hover to show the pointing hand: buttons,
+/// rows, tabs, cards and thumbnails, not the page canvas or a modal's backdrop, which take clicks
+/// over a whole area.
+const HAND_MAX_SIDE: f32 = 200.0;
+
+/// Called once the page has drawn: the document tools set their cursor (I-beam, crosshair…)
+/// from the pointer's position on the page, but a dialog, its backdrop, a menu or a toast may
+/// cover the page there. Over anything above the window's panels the page's cursor is dropped,
+/// so what is on top decides.
+pub fn page_cursor_only_on_the_page(ctx: &egui::Context) {
+    let Some(pos) = ctx.pointer_hover_pos() else { return };
+    if ctx.layer_id_at(pos).is_some_and(|l| l.order != egui::Order::Background) && ctx.dragged_id().is_none() {
+        ctx.set_cursor_icon(egui::CursorIcon::Default);
+    }
+}
+
+/// The pointing hand over anything clickable (Sintec.PDF). egui shows it only over its own
+/// `Button`; checkboxes, combo boxes, selectable rows and the app's painted widgets (tabs, cards,
+/// thumbnails) kept the arrow. Called once a window has drawn everything: a cursor a widget chose
+/// itself (text, resize, hand tool) wins, and nothing changes while something is dragged.
+pub fn hand_over_clickables(ctx: &egui::Context) {
+    if ctx.output(|o| o.cursor_icon) != egui::CursorIcon::Default || ctx.dragged_id().is_some() {
+        return;
+    }
+    let hovered: Vec<egui::Id> = ctx.interaction_snapshot(|s| s.hovered.iter().copied().collect());
+    let clickable = hovered
+        .into_iter()
+        .filter_map(|id| ctx.read_response(id))
+        .any(|r| r.enabled() && r.sense.senses_click() && r.rect.width().min(r.rect.height()) <= HAND_MAX_SIDE);
+    if clickable {
+        ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+}
+
 pub fn search_box(ui: &mut egui::Ui, placeholder: &str, width: f32) -> Response {
     let t = Tokens::get(ui.ctx());
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 32.0), Sense::click());

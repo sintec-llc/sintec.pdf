@@ -752,17 +752,35 @@ impl PdfCraftApp {
     }
 
     /// Export all comments / form data: the format follows the file name's extension.
-    /// Export a PDF ▸ Word, HTML or RTF: ask where (`save_override` in tests), then write.
+    /// Export a PDF ▸ Word, Excel, HTML or RTF: ask where (`save_override` in tests), then write.
     pub fn export_office_dialog(&mut self, format: pdfcraft_engine::compare::OfficeFormat) {
+        self.export_office_to(format, None);
+    }
+
+    /// Sintec.PDF: Pages panel ▸ Export to: the selected pages (or the page clicked) only, to a
+    /// file named after them ("отчёт (стр. 2, 5–7).docx").
+    pub fn export_selected_pages(&mut self, format: pdfcraft_engine::compare::OfficeFormat) {
+        let Some((i, _)) = self.active_ids() else { return };
+        let mut pages = self.views[i].target_pages();
+        pages.sort_unstable();
+        pages.dedup();
+        self.export_office_to(format, Some(pages));
+    }
+
+    fn export_office_to(&mut self, format: pdfcraft_engine::compare::OfficeFormat, only: Option<Vec<usize>>) {
         // What's typed in a form field is part of the document (#166).
         if !self.commit_form_typing() {
             return;
         }
         let Some((_, id)) = self.active_ids() else { return };
         let Some(doc) = self.session.get(id) else { return };
-        let stem = doc.name.trim_end_matches(".pdf").trim_end_matches(".PDF").to_string();
+        let mut stem = doc.name.trim_end_matches(".pdf").trim_end_matches(".PDF").to_string();
+        if let Some(only) = &only {
+            stem = format!("{stem} ({})", crate::i18n::fmt(tl!("p. {pages}"), &[("pages", &page_ranges(only))]));
+        }
         let ext = format.extension();
-        let bytes = doc.export_office(format);
+        // Excel sheets are named in the interface language ("Страница 1").
+        let bytes = doc.export_office_pages(format, tl!("Page"), only.as_deref());
         #[cfg(not(target_arch = "wasm32"))]
         {
             let write = move |app: &mut Self, path: std::path::PathBuf| match crate::editing::write_atomically(&path.to_string_lossy(), &bytes) {

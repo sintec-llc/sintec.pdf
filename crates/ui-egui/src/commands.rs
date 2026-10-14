@@ -345,8 +345,14 @@ impl PdfCraftApp {
                 };
                 self.apply_edit(Edit::RemoveMarks { kind });
             }
-            "export.image" => self.dialog = Some(Dialog::Export(crate::export_ui::ExportKind::Image)),
-            "export.text" => self.dialog = Some(Dialog::Export(crate::export_ui::ExportKind::Text)),
+            "export.image" => {
+                self.export_draft.selection = None;
+                self.dialog = Some(Dialog::Export(crate::export_ui::ExportKind::Image));
+            }
+            "export.text" => {
+                self.export_draft.selection = None;
+                self.dialog = Some(Dialog::Export(crate::export_ui::ExportKind::Text));
+            }
             "a11y.check" => self.start_accessibility_check(),
             "ocr.recognize" => self.dialog = Some(Dialog::RecognizeText),
             "tools.js_console" => self.dialog = Some(Dialog::JsConsole),
@@ -373,7 +379,10 @@ impl PdfCraftApp {
             "a11y.report" => self.show_accessibility_report(),
             "a11y.alt_text" => self.start_alt_text(),
             "a11y.reading_options" => self.dialog = Some(Dialog::Properties(crate::PropsTab::Advanced)),
-            "export.all_images" => self.dialog = Some(Dialog::Export(crate::export_ui::ExportKind::AllImages)),
+            "export.all_images" => {
+                self.export_draft.selection = None;
+                self.dialog = Some(Dialog::Export(crate::export_ui::ExportKind::AllImages));
+            }
             "edit.text" => {
                 self.quick_tool = crate::QuickTool::AddText;
                 self.left = crate::LeftPanel::Tool("edit");
@@ -495,6 +504,7 @@ impl PdfCraftApp {
             "form.export_data" => self.export_data_dialog(false, true),
             "form.merge_data" => self.merge_data_dialog(),
             "export.docx" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Docx),
+            "export.xlsx" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Xlsx),
             "export.html" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Html),
             "export.rtf" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Rtf),
             "form.prepare" => {
