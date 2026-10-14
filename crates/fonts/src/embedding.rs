@@ -15,6 +15,28 @@ pub fn face_key(name: &str) -> String {
     name.rsplit('+').next().unwrap_or(name).chars().filter(char::is_ascii_alphanumeric).flat_map(char::to_lowercase).collect()
 }
 
+/// Sintec.PDF: a PDF font's name as a family key: no subset tag (`ABCDEF+`), no style or foundry suffix
+/// (`,Bold`, `-BoldItalicMT`, `PSMT`), lower-case letters and digits only.
+/// `ABCDEF+TimesNewRomanPS-BoldItalicMT` → `timesnewroman`.
+pub fn family_key(name: &str) -> String {
+    let name = name.rsplit('+').next().unwrap_or(name);
+    // The family is what precedes the style part (`-Bold`, `,Italic`).
+    let family = name.split([',', '-']).next().unwrap_or(name);
+    let mut key: String = family.chars().filter(char::is_ascii_alphanumeric).flat_map(char::to_lowercase).collect();
+    for suffix in ["psmt", "mt", "ps", "regular", "roman", "bolditalic", "boldoblique", "bold", "italic", "oblique"] {
+        // "TimesNewRoman" keeps its "roman"; a bare suffix only comes off a longer name.
+        if suffix == "roman" && key.starts_with("timesnew") {
+            continue;
+        }
+        if key.len() > suffix.len() + 2
+            && let Some(stripped) = key.strip_suffix(suffix)
+        {
+            key = stripped.to_string();
+        }
+    }
+    key
+}
+
 /// Full, approved faces of the source family. This never silently selects another family.
 pub fn matching_faces(name: &str) -> Vec<&'static crate::CraftFont> {
     let key = face_key(name);
@@ -43,8 +65,14 @@ pub fn names(bytes: &[u8]) -> Result<(String, String), String> {
     Ok((family, postscript))
 }
 
-/// A selected external font is document input. Require its own open-licence declaration;
-/// never turn a proprietary system-interface fallback into an exported PDF font.
+/// A selected external font is document input.
+///
+/// Sintec.PDF: an installed font may be embedded when its own embedding permission (OS/2
+/// `fsType`, checked by [`validate`]) allows editable embedding, as office suites and Acrobat
+/// embed them. Restricted and preview-and-print-only fonts are refused there; Adobe-authored
+/// faces and the families the asset policy excludes are refused here. Upstream PdfCraft also
+/// requires an open-licence declaration in the name table, which leaves out the system fonts
+/// (Arial, Times New Roman, Calibri…) that edited documents need as substitutes.
 pub fn validate_document_input(bytes: &[u8]) -> Result<(), String> {
     use skrifa::string::StringId;
     let (family, _) = names(bytes)?;
@@ -58,14 +86,43 @@ pub fn validate_document_input(bytes: &[u8]) -> Result<(), String> {
     if attribution.to_ascii_lowercase().contains("adobe") {
         return Err("Adobe-authored font assets are excluded by the project's asset policy".into());
     }
-    let license: String = f.localized_strings(StringId::LICENSE_DESCRIPTION).map(|s| s.to_string()).collect();
-    if !["SIL OPEN FONT", "SIL Open Font", "Apache License", "Ubuntu Font Licence", "Bitstream Vera", "MIT License"]
-        .iter()
-        .any(|l| license.contains(l))
-    {
-        return Err("select an openly licensed font whose name table declares its licence (OFL, Apache, Ubuntu, Bitstream Vera or MIT)".into());
-    }
     Ok(())
+}
+
+/// Sintec.PDF: what a face looks like, for matching it to a PDF's font.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FaceStyle {
+    /// OS/2 weight class (400 regular, 700 bold).
+    pub weight: u16,
+    pub italic: bool,
+    pub monospace: bool,
+    /// From the PANOSE serif style when the face declares it.
+    pub serif: Option<bool>,
+    /// Whether it draws Russian (А–я, Ё, ё).
+    pub cyrillic: bool,
+}
+
+/// The face's style, read from its OS/2, post and cmap tables (defaults where they're missing).
+pub fn style_of(bytes: &[u8]) -> Result<FaceStyle, String> {
+    let f = FontRef::new(bytes).map_err(|e| e.to_string())?;
+    let os2 = f.os2().ok();
+    let weight = os2.as_ref().map_or(400, |t| t.us_weight_class());
+    // fsSelection bit 0 is ITALIC, bit 9 OBLIQUE; the head table's macStyle bit 1 is italic too.
+    let italic = os2.as_ref().is_some_and(|t| t.fs_selection().bits() & (1 | 1 << 9) != 0) || f.head().is_ok_and(|h| h.mac_style().bits() & 2 != 0);
+    let monospace = f.post().is_ok_and(|p| p.is_fixed_pitch() != 0);
+    // PANOSE byte 0 is the family kind (2 = Latin text) and byte 1 the serif style: 11–13 are
+    // sans serif, 2–10 serifs, 0–1 any/no fit.
+    let serif = os2.as_ref().and_then(|t| {
+        let p = t.panose_10();
+        match (p.first().copied(), p.get(1).copied()) {
+            (Some(2), Some(2..=10)) => Some(true),
+            (Some(2), Some(11..=13)) => Some(false),
+            _ => None,
+        }
+    });
+    let cmap = f.charmap();
+    let cyrillic = ['А', 'Я', 'а', 'я', 'Ё', 'ё', 'Ж', 'ж'].iter().all(|&c| cmap.map(c).is_some_and(|g| g.to_u32() != 0));
+    Ok(FaceStyle { weight, italic, monospace, serif, cyrillic })
 }
 
 /// Validate before allocating any PDF objects, so an invalid font cannot partly mutate a doc.

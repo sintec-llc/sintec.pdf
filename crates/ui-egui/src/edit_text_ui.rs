@@ -717,6 +717,10 @@ pub(crate) fn page_input(
     ui.ctx().set_cursor_icon(if on_edge { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::Text });
     if resp.clicked() {
         view.image_selection = None;
+        // Sintec.PDF: start looking for installed fonts now, so a substitute is ready if the
+        // typed text needs one (see `font_substitute`).
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = crate::files::installed_font_files(ui.ctx());
         let l = &lines[hit];
         let source_lines = doc.text_lines(page);
         let text = l.editor_text.clone();

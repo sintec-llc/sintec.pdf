@@ -370,6 +370,47 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
     {
         let mut ed = ed;
         let mut changed = false;
+        // Sintec.PDF: which font the paragraph is in, what of it the document carries, and
+        // whether this computer has it; Replace font… offers the closest installed faces.
+        let doc_id = app.views[i].id;
+        let source = app.session.get(doc_id).and_then(|d| {
+            let b = d.text_blocks(ed.page).into_iter().nth(ed.block)?;
+            let line = b.lines.first().and_then(|li| d.text_lines(ed.page).into_iter().nth(*li))?;
+            d.font_facts(ed.page, &line.font).map(|f| (f, b.bold, b.italic))
+        });
+        let mut replace = false;
+        if let Some((facts, bold, italic)) = &source {
+            let carried = if facts.embedded && !facts.subset {
+                tl!("embedded")
+            } else if facts.embedded {
+                tl!("embedded in part")
+            } else {
+                tl!("not embedded")
+            };
+            #[cfg(not(target_arch = "wasm32"))]
+            let on_system = crate::files::installed_font_files(ui.ctx()).map(|fonts| {
+                let want =
+                    pdfcraft_engine::text_fonts::Wanted { base_font: facts.base_font.clone(), bold: *bold, italic: *italic, ..Default::default() };
+                fonts.iter().any(|f| pdfcraft_engine::text_fonts::family_match(&want, f) == pdfcraft_engine::text_fonts::Match::Exact)
+            });
+            #[cfg(target_arch = "wasm32")]
+            let on_system: Option<bool> = {
+                let _ = (bold, italic);
+                None
+            };
+            let system = match on_system {
+                Some(true) => format!(", {}", tl!("installed")),
+                Some(false) => format!(", {}", tl!("not installed")),
+                None => String::new(),
+            };
+            ui.label(egui::RichText::new(format!("{} — {carried}{system}", facts.base_font)).small().color(t.text_muted)).on_hover_text(tl!(
+                "The paragraph's font as the PDF names it, how much of it the document carries, and whether this computer has it."
+            ));
+            replace = ui.button(tl!("Replace font…")).clicked();
+        }
+        if replace {
+            app.offer_for_paragraph(doc_id, ed.page, ed.block, &ed.text.clone());
+        }
         let font_choices = app.session.get(app.views[i].id).map(|d| d.text_editor_fonts(ed.page)).unwrap_or_default();
         egui::ComboBox::from_id_salt("document-font-resource")
             .selected_text(
@@ -391,11 +432,24 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
         egui::ComboBox::from_id_salt("installed-document-font").selected_text(tl!("Installed fonts…")).show_ui(ui, |ui| {
             if let Some(fonts) = crate::files::installed_font_files(ui.ctx()) {
                 if fonts.is_empty() {
-                    ui.label(tl!("No openly licensed document fonts found. Load a font file."));
+                    ui.label(tl!("No embeddable installed fonts found. Load a font file."));
                 }
-                for font in fonts {
-                    if ui.selectable_label(false, &font.face).clicked() {
-                        app.use_paths(crate::files::FilePurpose::TextFont { page: ed.page }, &[font.path]);
+                // The closest to the paragraph's font first.
+                let want = source.as_ref().map(|(f, bold, italic)| pdfcraft_engine::text_fonts::Wanted {
+                    base_font: f.base_font.clone(),
+                    bold: *bold,
+                    italic: *italic,
+                    serif: f.serif,
+                    monospace: f.monospace,
+                    sample: ed.text.clone(),
+                });
+                let ordered: Vec<&pdfcraft_engine::text_fonts::FontFile> = match &want {
+                    Some(w) => pdfcraft_engine::text_fonts::rank(w, &fonts),
+                    None => fonts.iter().collect(),
+                };
+                for font in ordered {
+                    if ui.selectable_label(false, font.display()).clicked() {
+                        app.use_paths(crate::files::FilePurpose::TextFont { page: ed.page }, std::slice::from_ref(&font.path));
                     }
                 }
             } else {

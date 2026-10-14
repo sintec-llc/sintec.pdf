@@ -98,3 +98,27 @@ fn contextual_arabic_marks_ligatures_and_mixed_bidi_keep_logical_text_after_reop
     }
     exercise(font.bytes.to_vec(), "سَلَام 123", "NotoSansArabic-Regular");
 }
+
+/// Sintec.PDF: a face loaded into the page draws the characters the paragraph's own font can't
+/// (here a Cyrillic letter in a Helvetica paragraph), instead of the generated Japanese
+/// fallback, which builds without craft-fonts don't have; the rest keeps its font.
+#[test]
+fn a_loaded_substitute_draws_what_the_source_font_lacks() {
+    let mut s = Session::new();
+    let id = s.open("source.pdf", None, document(), None).unwrap();
+    let facts = s.get(id).unwrap().font_facts(0, "F1").unwrap();
+    assert_eq!(facts.base_font, "Helvetica");
+    assert!(!facts.embedded && !facts.completed);
+    let edit = Edit::EditTextBlock { page: 0, block: 0, text: "Source Ж".into(), style: BlockStyle::default() };
+    if pdfcraft_fonts::CRAFT_FONTS.is_empty() {
+        let e = s.apply(id, edit.clone()).unwrap_err().to_string();
+        assert!(e.contains("fallback font"), "{e}");
+    }
+    let font = support::font_fixture::cff_font();
+    s.apply(id, Edit::RegisterTextFont { page: 0, bytes: Arc::new(font) }).unwrap();
+    s.apply(id, edit).unwrap();
+    let lines = s.get(id).unwrap().text_lines(0);
+    assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<String>().replace(' ', ""), "SourceЖ");
+    assert!(lines.iter().any(|l| l.base_font == "Helvetica"), "{lines:?}");
+    assert!(lines.iter().any(|l| l.base_font == "RectFont-Regular" && l.text.contains('Ж')), "{lines:?}");
+}

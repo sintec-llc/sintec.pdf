@@ -80,10 +80,11 @@ pub fn cff_font() -> Vec<u8> {
     be32(&mut cmap, 12);
     be16(&mut cmap, 12);
     be16(&mut cmap, 0);
-    be32(&mut cmap, 40);
+    be32(&mut cmap, 52);
     be32(&mut cmap, 0);
-    be32(&mut cmap, 2);
-    for (cp, gid) in [(32, 1), (65, 2)] {
+    be32(&mut cmap, 3);
+    // Sintec.PDF: Ж too, for substitution tests (a Cyrillic letter the source font lacks).
+    for (cp, gid) in [(32, 1), (65, 2), (0x416, 2)] {
         be32(&mut cmap, cp);
         be32(&mut cmap, cp);
         be32(&mut cmap, gid);

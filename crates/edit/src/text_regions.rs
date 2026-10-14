@@ -161,6 +161,25 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
     blocks
 }
 
+/// Sintec.PDF: the full face loaded into the page (`PCFull…`, see `register_text_font`) that
+/// best stands in for `source` and can show `s`: the same family first, then the same weight and
+/// slant. `None` when no loaded face can show it.
+fn registered_substitute(metrics: &std::collections::BTreeMap<String, Metrics>, source: &TextLine, s: &str) -> Option<String> {
+    let family = pdfcraft_fonts::embedding::family_key(&source.base_font);
+    metrics
+        .iter()
+        .filter(|(name, m)| name.starts_with("PCFull") && source_encodes(m, s))
+        .max_by_key(|(_, m)| {
+            let base = m.base_font.to_ascii_lowercase();
+            let same_family = pdfcraft_fonts::embedding::family_key(&m.base_font) == family;
+            let bold = base.contains("bold") || base.contains("black") || base.contains("heavy");
+            let italic = base.contains("italic") || base.contains("oblique");
+            // The map is ordered by name, so ties resolve the same way every time.
+            (same_family, bold == source.bold, italic == source.italic)
+        })
+        .map(|(name, _)| name.clone())
+}
+
 /// Shape in the source or an explicitly registered matching full face. Never use interface fonts.
 fn shape_source(
     doc: &Document,
@@ -378,6 +397,10 @@ pub(super) fn rewrite_styled_block(
                     full_faces.insert(key, name.clone());
                     name
                 }
+            } else if let Some(name) = registered_substitute(&metrics, source, &s) {
+                // Sintec.PDF: a face loaded for this page (an installed font chosen as the
+                // substitute) shows what the source font can't, before any generated fallback.
+                name
             } else {
                 let family = source_family(&source.base_font);
                 if needs_type3(&s) {

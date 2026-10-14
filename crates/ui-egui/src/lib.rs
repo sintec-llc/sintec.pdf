@@ -84,6 +84,7 @@ pub mod file_watch;
 mod files;
 pub mod fill_sign;
 pub mod folders_ui;
+mod font_substitute;
 pub mod forms_ui;
 mod home;
 mod icon_data;
@@ -563,6 +564,8 @@ pub struct PdfCraftApp {
     pub auto_update_check: bool,
     /// The release the user chose to skip: not offered by the automatic check.
     pub update_skipped: Option<String>,
+    /// Sintec.PDF: substitute fonts for edited text, and the Font substitution dialog.
+    pub fonts: font_substitute::FontSubstitutes,
     /// When updates were last checked (Unix seconds; kept with the settings).
     pub update_last_check: i64,
     pub(crate) updates: updates::Updates,
@@ -938,6 +941,7 @@ impl PdfCraftApp {
             update_started: false,
             auto_update_check: true,
             update_skipped: None,
+            fonts: Default::default(),
             update_last_check: 0,
             updates: updates::Updates::default(),
             printer_source: None,

@@ -31,6 +31,16 @@ impl PdfCraftApp {
     /// Apply an edit to the active document. Returns `true` on success; failures are shown.
     pub fn apply_edit(&mut self, edit: Edit) -> bool {
         let Some((i, id)) = self.active_ids() else { return false };
+        // Sintec.PDF: text that needs glyphs the document's font lacks gets a substitute first,
+        // or waits for the Font substitution dialog.
+        let edit = if matches!(edit, Edit::EditTextBlock { .. }) {
+            match self.prepare_text_edit(id, edit) {
+                crate::font_substitute::Prepared::Apply(edit) => edit,
+                crate::font_substitute::Prepared::Wait => return false,
+            }
+        } else {
+            edit
+        };
         let label = edit.label();
         let (form_before, page_count_before, had_xfa) = if let Some(d) = self.session.get(id) {
             (Some(std::sync::Arc::clone(&d.form)), d.info.pages.len(), d.xfa.is_some())
@@ -149,6 +159,9 @@ impl PdfCraftApp {
             }
             Err(e) => {
                 let message = if matches!(edit, Edit::MoveObjects { .. }) { crate::object_ui::move_error(&e) } else { e.to_string() };
+                if self.offer_after_failure(id, &edit, &message) {
+                    return false;
+                }
                 self.notify_fmt("{label} failed: {e}", &[("label", &crate::i18n::edit_label(&label)), ("e", &message)]);
                 false
             }

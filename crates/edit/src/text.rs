@@ -117,6 +117,58 @@ pub fn text_editor_fonts(doc: &Document, page: usize) -> Result<Vec<TextEditorFo
     Ok(result)
 }
 
+/// Sintec.PDF: what a page's font resource is, for finding a substitute when the text being
+/// edited needs one.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FontFacts {
+    /// `/BaseFont` without the subset tag.
+    pub base_font: String,
+    pub bold: bool,
+    pub italic: bool,
+    /// The program is in the file (`FontFile`, `FontFile2` or `FontFile3`).
+    pub embedded: bool,
+    /// Only some glyphs are in the file (`ABCDEF+Name`).
+    pub subset: bool,
+    /// The descriptor's Serif flag, when it has flags; FixedPitch.
+    pub serif: Option<bool>,
+    pub monospace: bool,
+    /// A full face of the same family is already loaded into the page (`PCFull…`).
+    pub completed: bool,
+}
+
+/// [`FontFacts`] for the font resource `resource` of page `page`.
+pub fn font_facts(doc: &Document, page: usize, resource: &str) -> Result<FontFacts, EditError> {
+    let p = page_dict(doc, page)?;
+    let resources = p.dict.get(b"Resources").and_then(|o| doc.dict(o)).unwrap_or_default();
+    let fonts = resources.get(b"Font").and_then(|o| doc.dict(o)).unwrap_or_default();
+    let font = fonts.get(resource.as_bytes()).and_then(|f| doc.dict(f)).ok_or_else(|| EditError::Invalid(format!("no font resource {resource}")))?;
+    let m = Metrics::from_dict(doc, &font);
+    // A composite font's descriptor sits on its descendant.
+    let descendant =
+        font.get(b"DescendantFonts").map(|d| doc.resolve(d)).and_then(|d| d.as_array().and_then(|a| a.first().cloned())).and_then(|d| doc.dict(&d));
+    let descriptor = font.get(b"FontDescriptor").or_else(|| descendant.as_ref().and_then(|d| d.get(b"FontDescriptor"))).and_then(|d| doc.dict(d));
+    let embedded = descriptor.as_ref().is_some_and(|d| [b"FontFile".as_slice(), b"FontFile2", b"FontFile3"].iter().any(|k| d.get(k).is_some()));
+    let flags = descriptor.as_ref().and_then(|d| d.get(b"Flags")).map(|f| doc.resolve(f)).and_then(|f| f.as_f64()).filter(|f| f.is_finite());
+    // Flags (ISO 32000-2 table 121): bit 1 FixedPitch, bit 2 Serif.
+    let flags = flags.map(|f| f.clamp(0.0, f64::from(u32::MAX)) as u32);
+    let base_font = m.base_font.rsplit('+').next().unwrap_or_default().to_string();
+    let key = pdfcraft_fonts::embedding::family_key(&base_font);
+    let completed = fonts.iter().any(|(name, f)| {
+        name.starts_with(b"PCFull")
+            && doc.dict(f).is_some_and(|d| pdfcraft_fonts::embedding::family_key(&Metrics::from_dict(doc, &d).base_font) == key)
+    });
+    Ok(FontFacts {
+        base_font,
+        bold: m.bold,
+        italic: m.italic,
+        embedded,
+        subset: m.subset,
+        serif: flags.map(|f| f & 2 != 0),
+        monospace: flags.is_some_and(|f| f & 1 != 0),
+        completed,
+    })
+}
+
 /// Load an explicit full face into this page's resources. Nothing on the page is replaced;
 /// the new resource can complete matching source subsets or be chosen in a text style.
 pub fn register_text_font(doc: &mut Document, page: usize, bytes: &[u8]) -> Result<String, EditError> {

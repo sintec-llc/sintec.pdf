@@ -2020,7 +2020,6 @@ signature pad	Type	Ввести
 	Installed fonts…	Установленные шрифты…
 	Keep source fonts	Сохранить исходные шрифты
 	Load font…	Загрузить шрифт…
-	No openly licensed document fonts found. Load a font file.	Шрифты с открытой лицензией не найдены. Загрузите файл шрифта.
 
 	Thai and Arabic use regular fallback fonts when available.	Для тайского и арабского текста используются доступные резервные шрифты обычного начертания.
 	Copy Image	Копировать изображение
@@ -2434,3 +2433,27 @@ animation effects	Off	Выкл
 	The linked PDF opened, but its named destination was not applied.	Связанный PDF открыт, но его именованное назначение не применено.
 	The linked PDF opened, but its page destination was out of range.	Связанный PDF открыт, но страница назначения вне допустимого диапазона.
 	Local cross-PDF links require the desktop app	Локальные ссылки между PDF работают только в настольном приложении
+
+# Sintec.PDF 0.2.6: font substitution
+	Font substitution	Замена шрифта
+	The document carries only some characters of the font {font}, and the text needs others.	В документе есть только часть символов шрифта {font}, а для текста нужны и другие.
+	The font {font} isn't installed on this computer, and the document carries only some of its characters.	Шрифт {font} не установлен на этом компьютере, а в документе есть только часть его символов.
+	Finding installed fonts…	Поиск установленных шрифтов…
+	No installed font can show this text.	Ни один установленный шрифт не может показать этот текст.
+	Replace with	Заменить на
+	Set the whole paragraph in this font	Набрать этим шрифтом весь абзац
+	Otherwise only the characters the document lacks are drawn in it.	Иначе этим шрифтом рисуются только символы, которых нет в документе.
+	Keep the original font	Оставить исходный шрифт
+	same font	тот же шрифт
+	usual substitute	обычная замена
+	The text wasn't changed.	Текст не изменён.
+	embedded	встроен
+	embedded in part	встроен частично
+	not embedded	не встроен
+	installed	установлен
+	not installed	не установлен
+	The paragraph's font as the PDF names it, how much of it the document carries, and whether this computer has it.	Шрифт абзаца, как его называет PDF: сколько его встроено в документ и есть ли он на этом компьютере.
+	Replace font…	Заменить шрифт…
+	No embeddable installed fonts found. Load a font file.	Не найдено установленных шрифтов, которые можно встроить. Загрузите файл шрифта.
+
+	The font {font} isn't installed on this computer and isn't embedded in the document.	Шрифт {font} не установлен на этом компьютере и не встроен в документ.

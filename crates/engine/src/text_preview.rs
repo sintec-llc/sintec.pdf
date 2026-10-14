@@ -53,6 +53,12 @@ impl Document {
         self.editor.as_ref().and_then(|e| pdfcraft_edit::text::text_editor_fonts(&e.cos, page).ok()).unwrap_or_default()
     }
 
+    /// Sintec.PDF: what the font of page `page`'s resource `resource` is (see
+    /// [`pdfcraft_edit::text::FontFacts`]); `None` when it can't be read.
+    pub fn font_facts(&self, page: usize, resource: &str) -> Option<pdfcraft_edit::text::FontFacts> {
+        self.editor.as_ref().and_then(|e| pdfcraft_edit::text::font_facts(&e.cos, page, resource).ok())
+    }
+
     /// Preparing the background never changes working bytes, dirty state or undo history.
     pub fn text_edit_preview(&self, page: usize, block: usize) -> Result<TextEditPreview, String> {
         guard(|| {
