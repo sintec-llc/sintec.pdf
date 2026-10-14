@@ -24,6 +24,14 @@ function Assert-Equal($Actual, $Expected, [string] $What) {
   if ($Actual -cne $Expected) { throw "$What`: expected '$Expected', got '$Actual'" }
 }
 
+function Assert-NoRow([string] $Sql, [string] $What) {
+  $view = $Database.OpenView($Sql)
+  try {
+    [void] $view.Execute()
+    if ($view.Fetch()) { throw "Unexpected MSI row ($What): $Sql" }
+  } finally { [void] $view.Close() }
+}
+
 # Plain (non-advertised) shortcuts to sintec-pdf.exe, each in its own component; the desktop one is
 # gated by INSTALLDESKTOPSHORTCUT, which defaults to 1 and is secure so the UI choice reaches the
 # elevated install.
