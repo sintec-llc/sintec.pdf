@@ -160,6 +160,7 @@ impl crate::Document {
     /// form XObjects draw.
     pub fn export_pages(&self) -> Vec<pdfcraft_export::Page> {
         let Some(cos) = self.editor.as_ref().map(|e| &e.cos) else { return Vec::new() };
+        let mut renderer: Option<pdfcraft_render::PageRenderer> = None;
         self.info
             .pages
             .iter()
@@ -175,7 +176,7 @@ impl crate::Document {
                 let crop_width = f64::from(info.crop[2] - info.crop[0]);
                 let display_width = f64::from(if info.rotation % 180 == 0 { info.width } else { info.height });
                 let unit = if crop_width > 0.0 && crop_width.is_finite() && display_width.is_finite() { display_width / crop_width } else { 1.0 };
-                let blocks = pdfcraft_edit::reading_blocks(cos, i)
+                let blocks: Vec<pdfcraft_export::Block> = pdfcraft_edit::reading_blocks(cos, i)
                     .unwrap_or_default()
                     .into_iter()
                     .filter(|b| !b.text.trim().is_empty())
@@ -192,6 +193,7 @@ impl crate::Document {
                         }
                     })
                     .collect();
+                let blocks = pdfcraft_export::join_fragments(blocks);
                 let images = pdfcraft_edit::reading_images(cos, i)
                     .unwrap_or_default()
                     .iter()
@@ -206,7 +208,46 @@ impl crate::Document {
                         })
                     })
                     .collect();
-                pdfcraft_export::Page { width: info.width as f64, height: info.height as f64, blocks, images }
+                // Sintec.PDF: the page's lines and words, for ruled tables. Words, not text lines:
+                // a line runs on across a table's cells. Only pages that draw a grid's worth of
+                // lines get their words read (that renders the page's text); a word's style is
+                // that of the text line it sits in.
+                let rules: Vec<[f64; 4]> = pdfcraft_edit::ruling_segments(cos, i).unwrap_or_default().into_iter().map(&visible_rect).collect();
+                let lines = if rules.len() >= 4 {
+                    let styled: Vec<pdfcraft_edit::TextLine> = pdfcraft_edit::reading_text_lines(cos, i).unwrap_or_default();
+                    let r = renderer.get_or_insert_with(|| {
+                        let config = pdfcraft_render::RenderConfig { password: self.password.as_deref().map(Arc::from), ..Default::default() };
+                        pdfcraft_render::PageRenderer::new(self.bytes.clone(), config)
+                    });
+                    let res = r.render(pdfcraft_render::RenderRequest {
+                        page: i,
+                        kind: pdfcraft_render::RequestKind::Text,
+                        scale: 1.0,
+                        ..Default::default()
+                    });
+                    res.text
+                        .map(|t| crate::js::page_words(&t, info))
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(text, rect)| {
+                            let (cx, cy) = ((rect[0] + rect[2]) / 2.0, (rect[1] + rect[3]) / 2.0);
+                            let line = styled.iter().find(|l| cx >= l.rect[0] && cx <= l.rect[2] && cy >= l.rect[1] && cy <= l.rect[3]);
+                            let f = line.map(|l| l.base_font.to_ascii_lowercase()).unwrap_or_default();
+                            pdfcraft_export::Block {
+                                text,
+                                rect: visible_rect(rect),
+                                size: line.map_or((rect[3] - rect[1]) * 0.8, |l| l.size) * unit,
+                                bold: line.is_some_and(|l| l.bold) || f.contains("bold") || f.contains("black") || f.contains("heavy"),
+                                italic: line.is_some_and(|l| l.italic) || f.contains("italic") || f.contains("oblique"),
+                                color: line.map_or([0.0; 3], |l| l.color),
+                                rotation: 0.0,
+                            }
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                pdfcraft_export::Page { width: info.width as f64, height: info.height as f64, blocks, images, rules, lines }
             })
             .collect()
     }

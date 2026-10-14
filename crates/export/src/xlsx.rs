@@ -25,6 +25,11 @@ const MAX_DIGITS: usize = 15;
 const PLAIN: u8 = 0;
 const BOLD: u8 = 1;
 const HEADING: u8 = 2;
+/// A ruled table's cells: thin borders, text wrapped and top-aligned (plain, bold).
+const GRID: u8 = 3;
+const GRID_BOLD: u8 = 4;
+/// Points per line of a wrapped cell (Calibri 11).
+const LINE_HEIGHT: f64 = 15.0;
 
 /// A cell's value.
 #[derive(Clone, Debug, PartialEq)]
@@ -38,8 +43,10 @@ enum Value {
 struct Sheet {
     /// Rows of (column, value, style).
     rows: Vec<Vec<(usize, Value, u8)>>,
-    /// Merged ranges: (row, first column, last column), all 0-based.
-    merges: Vec<(usize, usize, usize)>,
+    /// Merged ranges: (first row, last row, first column, last column), all 0-based.
+    merges: Vec<(usize, usize, usize, usize)>,
+    /// Rows given a height (points): rows with multi-line cells.
+    heights: Vec<(usize, f64)>,
     /// Widest text per column, in characters.
     widths: Vec<usize>,
 }
@@ -207,14 +214,34 @@ pub fn xlsx(pages: &[Page], title: &str, page_label: &str) -> Vec<u8> {
                 for row in &t.rows {
                     let mut cells = Vec::new();
                     let mut col = 0usize;
+                    let mut lines = 1usize;
                     for cell in row {
-                        if !cell.text.is_empty() {
-                            cells.push((col, value(&cell.text), if cell.bold { BOLD } else { PLAIN }));
+                        let span = cell.span.max(1);
+                        let style = match (t.ruled, cell.bold) {
+                            (true, true) => GRID_BOLD,
+                            (true, false) => GRID,
+                            (false, true) => BOLD,
+                            (false, false) => PLAIN,
+                        };
+                        if !cell.text.is_empty() && !cell.continued {
+                            cells.push((col, value(&cell.text), style));
+                            lines = lines.max(cell.text.lines().count());
+                        } else if t.ruled {
+                            // Empty cells of a ruled table still carry its borders.
+                            cells.push((col, Value::Text(String::new()), style));
                         }
-                        if cell.span > 1 {
-                            sheet.merges.push((sheet.rows.len(), col, col + cell.span - 1));
+                        if t.ruled {
+                            // Every grid cell a merged cell covers carries the borders too.
+                            cells.extend((col + 1..col + span).map(|c| (c, Value::Text(String::new()), style)));
                         }
-                        col += cell.span.max(1);
+                        let r = sheet.rows.len();
+                        if (span > 1 || cell.rowspan > 1) && !cell.continued {
+                            sheet.merges.push((r, r + cell.rowspan.max(1) - 1, col, col + span - 1));
+                        }
+                        col += span;
+                    }
+                    if lines > 1 {
+                        sheet.heights.push((sheet.rows.len(), (lines as f64 * LINE_HEIGHT).min(409.0)));
                     }
                     sheet.push_row(cells);
                 }
@@ -290,7 +317,10 @@ fn sheet_xml(sheet: &Sheet) -> String {
         if row.is_empty() {
             continue;
         }
-        x.push_str(&format!("<row r=\"{}\">", r + 1));
+        match sheet.heights.iter().find(|h| h.0 == r) {
+            Some((_, ht)) => x.push_str(&format!("<row r=\"{}\" ht=\"{ht}\" customHeight=\"1\">", r + 1)),
+            None => x.push_str(&format!("<row r=\"{}\">", r + 1)),
+        }
         for (col, v, style) in row {
             let reference = format!("{}{}", column_name(*col), r + 1);
             let s = if *style == PLAIN { String::new() } else { format!(" s=\"{style}\"") };
@@ -306,8 +336,8 @@ fn sheet_xml(sheet: &Sheet) -> String {
     x.push_str("</sheetData>");
     if !sheet.merges.is_empty() {
         x.push_str(&format!("<mergeCells count=\"{}\">", sheet.merges.len()));
-        for (r, a, b) in &sheet.merges {
-            x.push_str(&format!("<mergeCell ref=\"{}{2}:{}{2}\"/>", column_name(*a), column_name(*b), r + 1));
+        for (r0, r1, a, b) in &sheet.merges {
+            x.push_str(&format!("<mergeCell ref=\"{}{}:{}{}\"/>", column_name(*a), r0 + 1, column_name(*b), r1 + 1));
         }
         x.push_str("</mergeCells>");
     }
@@ -315,8 +345,9 @@ fn sheet_xml(sheet: &Sheet) -> String {
     x
 }
 
-/// Fonts: the body, bold, a bold heading. Cell formats 0, 1, 2 use them in that order.
-const STYLES: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"3\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"14\"/><name val=\"Calibri\"/></font></fonts><fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills><borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"3\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/><xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/></cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles></styleSheet>";
+/// Fonts: the body, bold, a bold heading. Cell formats 0, 1, 2 use them in that order; 3 and 4
+/// are the body and bold with thin borders, wrapped and top-aligned (ruled tables).
+const STYLES: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"3\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"14\"/><name val=\"Calibri\"/></font></fonts><fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills><borders count=\"2\"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style=\"thin\"><color auto=\"1\"/></left><right style=\"thin\"><color auto=\"1\"/></right><top style=\"thin\"><color auto=\"1\"/></top><bottom style=\"thin\"><color auto=\"1\"/></bottom><diagonal/></border></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"5\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/><xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"1\" xfId=\"0\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"top\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"1\" xfId=\"0\" applyFont=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"top\" wrapText=\"1\"/></xf></cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles></styleSheet>";
 
 #[cfg(test)]
 mod tests {
@@ -388,7 +419,7 @@ mod tests {
             blocks.push(block(qty, [150.0, y, 180.0, y + 12.0], false));
             blocks.push(block(price, [250.0, y, 300.0, y + 12.0], false));
         }
-        let page = Page { width: 612.0, height: 792.0, blocks, images: Vec::new() };
+        let page = Page { width: 612.0, height: 792.0, blocks, images: Vec::new(), ..Default::default() };
         let bytes = xlsx(&[page.clone(), page], "Report", "Page");
         assert!(bytes.starts_with(b"PK\x03\x04"));
         let sheets = crate::tests_support::unzip(&bytes);
@@ -408,6 +439,7 @@ mod tests {
                 height: 100.0,
                 blocks: vec![block(&format!("p{i} \u{1}<&>"), [0.0, 0.0, 50.0, 10.0], false)],
                 images: Vec::new(),
+                ..Default::default()
             })
             .collect();
         let files = crate::tests_support::unzip(&xlsx(&pages, "t", "Page"));

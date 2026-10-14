@@ -1068,6 +1068,11 @@ pub(crate) fn form_call(
     })
 }
 
+/// Sintec.PDF: [`reading_lines`] for other crates (Export reads table cells from lines).
+pub fn reading_text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError> {
+    reading_lines(doc, page)
+}
+
 /// The lines a page shows as it reads, including text drawn by form XObjects (which
 /// [`text_lines`] leaves out because it can only rewrite the page's own streams). Lines from a
 /// form carry a stream number past the page's streams, one per form drawn.
