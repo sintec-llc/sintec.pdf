@@ -686,6 +686,15 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     }
     match page_menu {
         Some(PageMenu::ExtractSaveAs) => app.extract_save_as(),
+        Some(PageMenu::Export(PageExport::Office(format))) => app.export_selected_pages(format),
+        Some(PageMenu::Export(kind @ (PageExport::Image | PageExport::Text))) => {
+            let mut pages = app.views[index].target_pages();
+            pages.sort_unstable();
+            pages.dedup();
+            app.export_draft.selection = Some(pages);
+            let kind = if kind == PageExport::Image { crate::export_ui::ExportKind::Image } else { crate::export_ui::ExportKind::Text };
+            app.dialog = Some(crate::Dialog::Export(kind));
+        }
         Some(PageMenu::Extract { delete }) => {
             app.extract_draft = crate::ExtractDraft { separate: false, delete, ..Default::default() };
             app.dialog = Some(crate::Dialog::Extract);
@@ -987,10 +996,20 @@ pub(crate) enum PageMenu {
     Extract { delete: bool },
     /// Sintec.PDF: save the selection as a new PDF file (Save As).
     ExtractSaveAs,
+    /// Sintec.PDF: export the selection to another format.
+    Export(PageExport),
     /// Rotate the selection by `degrees` clockwise.
     Rotate { degrees: i64 },
     /// A blank page the size of `page`, before or after it.
     InsertBlank { page: usize, before: bool },
+}
+
+/// Sintec.PDF: what Pages ▸ Export to makes of the selected pages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PageExport {
+    Office(pdfcraft_engine::compare::OfficeFormat),
+    Image,
+    Text,
 }
 
 /// The page thumbnails. A click goes to the page; ⌘/Ctrl-click and ⇧-click pick several pages
@@ -1102,6 +1121,22 @@ fn pages(
                     *menu = Some(PageMenu::Extract { delete: true });
                     ui.close();
                 }
+                ui.menu_button(tl!("Export to"), |ui| {
+                    use pdfcraft_engine::compare::OfficeFormat as F;
+                    for (label, target) in [
+                        (tl!("Word (.docx)…"), PageExport::Office(F::Docx)),
+                        (tl!("Excel (.xlsx)…"), PageExport::Office(F::Xlsx)),
+                        (tl!("HTML…"), PageExport::Office(F::Html)),
+                        (tl!("RTF…"), PageExport::Office(F::Rtf)),
+                        (tl!("Image…"), PageExport::Image),
+                        (tl!("Text…"), PageExport::Text),
+                    ] {
+                        if ui.button(label).clicked() {
+                            *menu = Some(PageMenu::Export(target));
+                            ui.close();
+                        }
+                    }
+                });
                 ui.separator();
                 if ui.add_enabled(editable, egui::Button::new(tl!("Cut"))).clicked() {
                     view.pending_action = Some(crate::canvas::ViewAction::CopyPages { cut: true });

@@ -37,7 +37,7 @@ pub enum RedactError {
     Unreadable(usize),
     #[error("redaction could not be verified: {0} item(s) were still found under the marks, so nothing was changed")]
     Residue(usize),
-    #[error("page {0} has vertical-writing text under a redaction mark, which PdfCraft cannot remove yet, so nothing was changed")]
+    #[error("page {0} has vertical-writing text under a redaction mark, which Sintec.PDF cannot remove yet, so nothing was changed")]
     VerticalText(usize),
     #[error(transparent)]
     Edit(#[from] pdfcraft_edit::EditError),

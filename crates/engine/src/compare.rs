@@ -199,7 +199,17 @@ impl crate::Document {
 
     /// [`Document::export_office`] with the word Excel sheets are named with ("Страница 1"…).
     pub fn export_office_named(&self, format: OfficeFormat, page_label: &str) -> Vec<u8> {
-        let pages = self.export_pages();
+        self.export_office_pages(format, page_label, None)
+    }
+
+    /// Sintec.PDF: [`Document::export_office_named`] for some pages only (0-based, in the order
+    /// given; pages past the end are skipped). `None` exports every page.
+    pub fn export_office_pages(&self, format: OfficeFormat, page_label: &str, only: Option<&[usize]>) -> Vec<u8> {
+        let mut pages = self.export_pages();
+        if let Some(only) = only {
+            let mut all: Vec<Option<pdfcraft_export::Page>> = pages.into_iter().map(Some).collect();
+            pages = only.iter().filter_map(|&i| all.get_mut(i).and_then(Option::take)).collect();
+        }
         let title = self.info.title.clone().unwrap_or_else(|| self.name.trim_end_matches(".pdf").to_string());
         match format {
             OfficeFormat::Docx => pdfcraft_export::docx(&pages, &title),

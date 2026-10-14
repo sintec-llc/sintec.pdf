@@ -1047,7 +1047,7 @@ fn fixture_with_info() -> Vec<u8> {
         b"<< /Length 44 >>\nstream\nBT /F1 14 Tf 20 250 Td (Contract text) Tj ET\nendstream",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
         b"<< /Type /Annot /Subtype /Widget /FT /Sig /T (Approval) /Rect [150 20 280 70] /P 3 0 R /F 4 >>",
-        b"<< /Producer (PdfCraft) /CreationDate (D:20260101000000Z) >>",
+        b"<< /Producer (Sintec.PDF) /CreationDate (D:20260101000000Z) >>",
     ];
     let mut out = b"%PDF-1.7\n".to_vec();
     let mut offsets = Vec::new();
