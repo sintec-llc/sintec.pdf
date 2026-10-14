@@ -134,6 +134,35 @@ pub struct FontFacts {
     pub monospace: bool,
     /// A full face of the same family is already loaded into the page (`PCFull…`).
     pub completed: bool,
+    /// What the embedded program says it is (its name table and OS/2), which PDFs often hide
+    /// behind a made-up `/BaseFont` such as `CIDFont+F1`: family, PostScript name, weight class,
+    /// italic, and serif when its PANOSE says.
+    pub program_family: Option<String>,
+    pub program_postscript: Option<String>,
+    pub program_weight: Option<u16>,
+    pub program_italic: Option<bool>,
+    pub program_serif: Option<bool>,
+}
+
+impl FontFacts {
+    /// The family to match: the program's own, else the `/BaseFont`.
+    pub fn family(&self) -> &str {
+        self.program_family.as_deref().unwrap_or(&self.base_font)
+    }
+
+    /// Bold: from the program's weight when it has one, else the PDF's flags and name.
+    pub fn is_bold(&self) -> bool {
+        self.program_weight.map_or(self.bold, |w| w >= 600)
+    }
+
+    pub fn is_italic(&self) -> bool {
+        self.program_italic.unwrap_or(self.italic)
+    }
+
+    /// Serif: the program's PANOSE, else the descriptor's flag (which producers often get wrong).
+    pub fn is_serif(&self) -> Option<bool> {
+        self.program_serif.or(self.serif)
+    }
 }
 
 /// [`FontFacts`] for the font resource `resource` of page `page`.
@@ -152,7 +181,10 @@ pub fn font_facts(doc: &Document, page: usize, resource: &str) -> Result<FontFac
     // Flags (ISO 32000-2 table 121): bit 1 FixedPitch, bit 2 Serif.
     let flags = flags.map(|f| f.clamp(0.0, f64::from(u32::MAX)) as u32);
     let base_font = m.base_font.rsplit('+').next().unwrap_or_default().to_string();
-    let key = pdfcraft_fonts::embedding::family_key(&base_font);
+    let program = pdfcraft_fonts::pdf::embedded_sfnt(doc, &font);
+    let names = program.as_deref().and_then(pdfcraft_fonts::embedding::program_names);
+    let style = program.as_deref().and_then(|b| pdfcraft_fonts::embedding::style_of(b).ok());
+    let key = pdfcraft_fonts::embedding::family_key(names.as_ref().map_or(&base_font, |n| &n.0));
     let completed = fonts.iter().any(|(name, f)| {
         name.starts_with(b"PCFull")
             && doc.dict(f).is_some_and(|d| pdfcraft_fonts::embedding::family_key(&Metrics::from_dict(doc, &d).base_font) == key)
@@ -164,9 +196,26 @@ pub fn font_facts(doc: &Document, page: usize, resource: &str) -> Result<FontFac
         embedded,
         subset: m.subset,
         serif: flags.map(|f| f & 2 != 0),
-        monospace: flags.is_some_and(|f| f & 1 != 0),
+        monospace: flags.is_some_and(|f| f & 1 != 0) || style.is_some_and(|s| s.monospace),
         completed,
+        program_family: names.as_ref().map(|n| n.0.clone()),
+        program_postscript: names.map(|n| n.1),
+        program_weight: style.map(|s| s.weight),
+        program_italic: style.map(|s| s.italic),
+        program_serif: style.and_then(|s| s.serif),
     })
+}
+
+/// Sintec.PDF: the first character of `text` (spaces and line breaks aside) that page `page`'s
+/// font resource `resource` can't encode, so new text would need another font for it. `None`
+/// when it can show all of it.
+pub fn first_unencodable(doc: &Document, page: usize, resource: &str, text: &str) -> Result<Option<char>, EditError> {
+    let p = page_dict(doc, page)?;
+    let resources = p.dict.get(b"Resources").and_then(|o| doc.dict(o)).unwrap_or_default();
+    let fonts = resources.get(b"Font").and_then(|o| doc.dict(o)).unwrap_or_default();
+    let font = fonts.get(resource.as_bytes()).and_then(|f| doc.dict(f)).ok_or_else(|| EditError::Invalid(format!("no font resource {resource}")))?;
+    let m = Metrics::from_dict(doc, &font);
+    Ok(text.chars().filter(|c| !c.is_whitespace()).find(|c| m.encode(&c.to_string()).is_none()))
 }
 
 /// Load an explicit full face into this page's resources. Nothing on the page is replaced;

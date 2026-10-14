@@ -164,20 +164,35 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
 /// Sintec.PDF: the full face loaded into the page (`PCFull…`, see `register_text_font`) that
 /// best stands in for `source` and can show `s`: the same family first, then the same weight and
 /// slant. `None` when no loaded face can show it.
-fn registered_substitute(metrics: &std::collections::BTreeMap<String, Metrics>, source: &TextLine, s: &str) -> Option<String> {
-    let family = pdfcraft_fonts::embedding::family_key(&source.base_font);
+fn registered_substitute(metrics: &std::collections::BTreeMap<String, Metrics>, source: &SourceFace, s: &str) -> Option<String> {
+    let family = &source.family;
     metrics
         .iter()
         .filter(|(name, m)| name.starts_with("PCFull") && source_encodes(m, s))
         .max_by_key(|(_, m)| {
             let base = m.base_font.to_ascii_lowercase();
-            let same_family = pdfcraft_fonts::embedding::family_key(&m.base_font) == family;
+            let same_family = pdfcraft_fonts::embedding::family_key(&m.base_font) == *family;
             let bold = base.contains("bold") || base.contains("black") || base.contains("heavy");
             let italic = base.contains("italic") || base.contains("oblique");
             // The map is ordered by name, so ties resolve the same way every time.
             (same_family, bold == source.bold, italic == source.italic)
         })
         .map(|(name, _)| name.clone())
+}
+
+/// Sintec.PDF: a source font as it really is: its program's family key, weight and slant
+/// (`CIDFont+F1` may be Calibri Bold), else what its PDF dictionary says.
+struct SourceFace {
+    family: String,
+    bold: bool,
+    italic: bool,
+}
+
+fn source_face(doc: &Document, page: usize, line: &TextLine) -> SourceFace {
+    match font_facts(doc, page, &line.font) {
+        Ok(f) => SourceFace { family: pdfcraft_fonts::embedding::family_key(f.family()), bold: f.is_bold() || line.bold, italic: f.is_italic() || line.italic },
+        Err(_) => SourceFace { family: pdfcraft_fonts::embedding::family_key(&line.base_font), bold: line.bold, italic: line.italic },
+    }
 }
 
 /// Shape in the source or an explicitly registered matching full face. Never use interface fonts.
@@ -362,6 +377,7 @@ pub(super) fn rewrite_styled_block(
     let mut substituted = None;
     let mut fallback_names: std::collections::BTreeMap<(String, char), String> = std::collections::BTreeMap::new();
     let mut full_faces: HashMap<String, String> = HashMap::new();
+    let mut faces: HashMap<String, SourceFace> = HashMap::new();
     for (range, index) in styled_spans {
         let source = lines.get(index).unwrap_or(first);
         for ch in draft.get(range).unwrap_or_default().chars() {
@@ -397,7 +413,10 @@ pub(super) fn rewrite_styled_block(
                     full_faces.insert(key, name.clone());
                     name
                 }
-            } else if let Some(name) = registered_substitute(&metrics, source, &s) {
+            } else if let Some(name) = {
+                let face = faces.entry(source.font.clone()).or_insert_with(|| source_face(doc, page, source));
+                registered_substitute(&metrics, face, &s)
+            } {
                 // Sintec.PDF: a face loaded for this page (an installed font chosen as the
                 // substitute) shows what the source font can't, before any generated fallback.
                 name

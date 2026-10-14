@@ -59,6 +59,12 @@ impl Document {
         self.editor.as_ref().and_then(|e| pdfcraft_edit::text::font_facts(&e.cos, page, resource).ok())
     }
 
+    /// Sintec.PDF: the first character of `text` that page `page`'s font `resource` can't show
+    /// (see [`pdfcraft_edit::text::first_unencodable`]).
+    pub fn first_unencodable(&self, page: usize, resource: &str, text: &str) -> Option<char> {
+        self.editor.as_ref().and_then(|e| pdfcraft_edit::text::first_unencodable(&e.cos, page, resource, text).ok()).flatten()
+    }
+
     /// Preparing the background never changes working bytes, dirty state or undo history.
     pub fn text_edit_preview(&self, page: usize, block: usize) -> Result<TextEditPreview, String> {
         guard(|| {

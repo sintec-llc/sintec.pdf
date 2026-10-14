@@ -143,6 +143,20 @@ pub struct Wanted {
 }
 
 impl Wanted {
+    /// What to look for to stand in for a PDF font: its program's own family, weight and slant
+    /// when it carries them (PDFs often name their fonts `CIDFont+F1`), else what the PDF says;
+    /// `bold` and `italic` ask for that style of it instead.
+    pub fn from_facts(facts: &pdfcraft_edit::text::FontFacts, bold: Option<bool>, italic: Option<bool>, sample: &str) -> Wanted {
+        Wanted {
+            base_font: facts.family().to_string(),
+            bold: bold.unwrap_or_else(|| facts.is_bold()),
+            italic: italic.unwrap_or_else(|| facts.is_italic()),
+            serif: facts.is_serif(),
+            monospace: facts.monospace,
+            sample: sample.to_string(),
+        }
+    }
+
     /// Serif, sans serif or monospace, from the flags or else from the name.
     fn class(&self) -> Class {
         let key = family_key(&self.base_font);

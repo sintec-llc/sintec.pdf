@@ -34,8 +34,42 @@ pub fn ruling_segments(doc: &Document, page: usize) -> Result<Vec<Segment>, Edit
         /// The current subpath's points (user space) and whether each closes back to the start.
         lines: Vec<([f64; 2], [f64; 2])>,
         rects: Vec<[f64; 4]>,
+        /// Rectangles drawn as `m l l l h` subpaths (office suites fill table borders and cell
+        /// shading that way): filled ones count as `re` rectangles do.
+        path_rects: Vec<[f64; 4]>,
+        /// The current subpath's points, while it is still straight.
+        sub: Vec<[f64; 2]>,
         start: Option<[f64; 2]>,
         current: Option<[f64; 2]>,
+    }
+    /// The axis-aligned rectangle `pts` traces (4 corners, the start maybe repeated at the end).
+    fn rect_of(pts: &[[f64; 2]]) -> Option<[f64; 4]> {
+        let mut v: Vec<[f64; 2]> = Vec::with_capacity(5);
+        for q in pts {
+            if v.last().is_none_or(|l: &[f64; 2]| (l[0] - q[0]).abs() > 1e-6 || (l[1] - q[1]).abs() > 1e-6) {
+                v.push(*q);
+            }
+        }
+        if v.len() == 5 && v.first().zip(v.last()).is_some_and(|(a, b)| (a[0] - b[0]).abs() <= 1e-6 && (a[1] - b[1]).abs() <= 1e-6) {
+            v.pop();
+        }
+        let [a, b, c, d] = <[[f64; 2]; 4]>::try_from(v).ok()?;
+        let flat = |p: [f64; 2], q: [f64; 2]| (p[0] - q[0]).abs() <= SKEW || (p[1] - q[1]).abs() <= SKEW;
+        if !(flat(a, b) && flat(b, c) && flat(c, d) && flat(d, a)) {
+            return None;
+        }
+        let xs = [a[0], b[0], c[0], d[0]];
+        let ys = [a[1], b[1], c[1], d[1]];
+        let min = |v: [f64; 4]| v.iter().copied().fold(f64::INFINITY, f64::min);
+        let max = |v: [f64; 4]| v.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let r = [min(xs), min(ys), max(xs), max(ys)];
+        r.iter().all(|v| v.is_finite()).then_some(r)
+    }
+    fn end_sub(p: &mut PathState) {
+        if let Some(r) = rect_of(&p.sub) {
+            p.path_rects.push(r);
+        }
+        p.sub.clear();
     }
     fn push(out: &mut Vec<Segment>, a: [f64; 2], b: [f64; 2]) {
         if out.len() >= MAX_SEGMENTS || !a.iter().chain(&b).all(|v| v.is_finite()) {
@@ -73,6 +107,8 @@ pub fn ruling_segments(doc: &Document, page: usize) -> Result<Vec<Segment>, Edit
                 b"m" => {
                     if let Some([x, y]) = op.nums::<2>() {
                         let (a, b) = ctm.apply(x, y);
+                        end_sub(&mut p);
+                        p.sub.push([a, b]);
                         p.start = Some([a, b]);
                         p.current = Some([a, b]);
                     }
@@ -81,6 +117,11 @@ pub fn ruling_segments(doc: &Document, page: usize) -> Result<Vec<Segment>, Edit
                     if let (Some(a), Some([x, y])) = (p.current, op.nums::<2>()) {
                         let (bx, by) = ctm.apply(x, y);
                         p.lines.push((a, [bx, by]));
+                        if p.sub.len() < 6 {
+                            p.sub.push([bx, by]);
+                        } else {
+                            p.sub.clear();
+                        }
                         p.current = Some([bx, by]);
                     }
                 }
@@ -92,6 +133,7 @@ pub fn ruling_segments(doc: &Document, page: usize) -> Result<Vec<Segment>, Edit
                 }
                 b"c" | b"v" | b"y" => {
                     // A curve ends the straight run; its end point is where the path goes on.
+                    p.sub.clear();
                     let n = if op.is("c") { 6 } else { 4 };
                     let v: Vec<f64> = op.operands.iter().filter_map(|o| o.as_f64()).collect();
                     if let (Some(x), Some(y)) = (v.get(n - 2), v.get(n - 1)) {
@@ -100,6 +142,7 @@ pub fn ruling_segments(doc: &Document, page: usize) -> Result<Vec<Segment>, Edit
                     }
                 }
                 b"re" => {
+                    end_sub(&mut p);
                     if let Some([x, y, wd, ht]) = op.nums::<4>() {
                         let corners = [(x, y), (x + wd, y), (x + wd, y + ht), (x, y + ht)].map(|(a, b)| {
                             let (u, v) = ctm.apply(a, b);
@@ -117,6 +160,7 @@ pub fn ruling_segments(doc: &Document, page: usize) -> Result<Vec<Segment>, Edit
                     }
                 }
                 b"S" | b"s" | b"B" | b"B*" | b"b" | b"b*" => {
+                    end_sub(&mut p);
                     // Stroked: every straight piece and every rectangle edge is a line.
                     let close = matches!(op.op.as_slice(), b"s" | b"b" | b"b*");
                     if let (true, Some(a), Some(s)) = (close, p.current, p.start) {
@@ -134,8 +178,10 @@ pub fn ruling_segments(doc: &Document, page: usize) -> Result<Vec<Segment>, Edit
                     p = PathState::default();
                 }
                 b"f" | b"F" | b"f*" => {
+                    end_sub(&mut p);
                     // Filled: a thin bar is a rule; a larger fill (a cell's shading) bounds the cell.
-                    for r in p.rects.drain(..) {
+                    let rects: Vec<[f64; 4]> = p.rects.drain(..).chain(p.path_rects.drain(..)).collect();
+                    for r in rects {
                         let (wd, ht) = (r[2] - r[0], r[3] - r[1]);
                         if ht <= THIN && wd >= MIN_LENGTH {
                             push(&mut w.out, [r[0], (r[1] + r[3]) / 2.0], [r[2], (r[1] + r[3]) / 2.0]);
@@ -228,6 +274,19 @@ mod tests {
         // The diagonal line is not a rule; the form's line is.
         assert!(!segs.iter().any(|s| s[1] == 400.0 || s[3] == 450.0), "{segs:?}");
         assert!(segs.contains(&[100.0, 100.0, 300.0, 100.0]), "{segs:?}");
+    }
+
+    #[test]
+    fn rectangles_drawn_as_subpaths_count_when_filled() {
+        // A thin bar and a shaded band, each `m l l l h`, in one filled path (as office suites
+        // draw table borders); a filled triangle is no rule.
+        let doc = page("50 300 m 250 300 l 250 300.5 l 50 300.5 l h 50 200 m 250 200 l 250 220 l 50 220 l h f* 10 10 m 60 10 l 30 40 l h f");
+        let segs = ruling_segments(&doc, 0).unwrap();
+        assert!(segs.contains(&[50.0, 300.25, 250.0, 300.25]), "{segs:?}");
+        for s in [[50.0, 200.0, 250.0, 200.0], [50.0, 220.0, 250.0, 220.0], [50.0, 200.0, 50.0, 220.0], [250.0, 200.0, 250.0, 220.0]] {
+            assert!(segs.contains(&s), "{s:?} in {segs:?}");
+        }
+        assert!(!segs.iter().any(|s| s[1] < 50.0), "{segs:?}");
     }
 
     #[test]

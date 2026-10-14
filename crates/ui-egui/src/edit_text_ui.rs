@@ -269,6 +269,21 @@ fn look_of(b: &pdfcraft_engine::TextBlock) -> pdfcraft_engine::AddedText {
     source_look(&b.base_font, b.size, b.color, b.bold, b.italic)
 }
 
+/// Sintec.PDF: [`look_of`] from the font as it really is: the embedded program's own family,
+/// weight and slant (a PDF may call Calibri Bold `CIDFont+F1`).
+pub(crate) fn look_for(doc: &pdfcraft_engine::Document, page: usize, b: &pdfcraft_engine::TextBlock) -> pdfcraft_engine::AddedText {
+    let lines = doc.text_lines(page);
+    match b.lines.first().and_then(|i| lines.get(*i)).and_then(|l| doc.font_facts(page, &l.font)) {
+        Some(f) => source_look(f.family(), b.size, b.color, f.is_bold() || b.bold, f.is_italic() || b.italic),
+        None => look_of(b),
+    }
+}
+
+/// The standard family the Format text panel shows for a font named `name`.
+pub(crate) fn family_of(name: &str) -> pdfcraft_engine::FontFamily {
+    source_look(name, 12.0, [0.0; 3], false, false).family
+}
+
 fn editor_font(look: &pdfcraft_engine::AddedText, size: f32) -> FontId {
     let family = match (look.family, look.bold) {
         (pdfcraft_engine::FontFamily::Courier, _) => FontFamily::Monospace,
@@ -746,8 +761,8 @@ pub(crate) fn page_input(
             max_width,
             size: (l.size as f32 * scale).clamp(8.0, 72.0),
             focus: true,
-            look: look_of(l),
-            look0: look_of(l),
+            look: look_for(doc, page, l),
+            look0: look_for(doc, page, l),
             extras: Extras::default(),
             extras0: Extras::default(),
         });

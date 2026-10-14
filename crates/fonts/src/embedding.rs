@@ -89,6 +89,25 @@ pub fn validate_document_input(bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// Sintec.PDF: the family and PostScript names a font program's name table gives, read
+/// leniently: font programs embedded in PDFs often fail [`validate`] (no cmap, stripped tables)
+/// but still say what they are. `None` when there's no usable name.
+pub fn program_names(bytes: &[u8]) -> Option<(String, String)> {
+    use skrifa::string::StringId;
+    let f = FontRef::new(bytes).ok()?;
+    let name = |id| {
+        f.localized_strings(id)
+            .find(|s| s.language() == Some("en"))
+            .or_else(|| f.localized_strings(id).next())
+            .map(|s| s.to_string())
+            .filter(|s| !s.trim().is_empty() && s.len() <= 128)
+    };
+    // The family as installed fonts are listed (name ID 1), so the two compare.
+    let family = name(StringId::FAMILY_NAME).or_else(|| name(StringId::TYPOGRAPHIC_FAMILY_NAME))?;
+    let postscript = name(StringId::POSTSCRIPT_NAME).unwrap_or_else(|| family.replace(' ', ""));
+    Some((family, postscript))
+}
+
 /// Sintec.PDF: what a face looks like, for matching it to a PDF's font.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FaceStyle {
