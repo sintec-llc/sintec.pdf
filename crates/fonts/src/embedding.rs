@@ -144,6 +144,30 @@ pub fn style_of(bytes: &[u8]) -> Result<FaceStyle, String> {
     Ok(FaceStyle { weight, italic, monospace, serif, cyrillic })
 }
 
+/// Sintec.PDF: the characters whose advance widths make up a face's width fingerprint: Latin and
+/// Cyrillic letters, digits and common punctuation.
+pub fn probe_chars() -> impl Iterator<Item = char> {
+    ('A'..='Z').chain('a'..='z').chain('А'..='я').chain(['Ё', 'ё']).chain('0'..='9').chain(".,:;!?-()/%&@'\"".chars())
+}
+
+/// Sintec.PDF: a face's advance widths per 1000 em for the [`probe_chars`] it has. Empty when
+/// the face can't be read or has no usable units per em.
+pub fn probe_widths(bytes: &[u8]) -> Vec<(char, u16)> {
+    let Ok(f) = FontRef::new(bytes) else { return Vec::new() };
+    let upem = f.metrics(Size::unscaled(), LocationRef::default()).units_per_em;
+    if upem == 0 {
+        return Vec::new();
+    }
+    let (cmap, gm) = (f.charmap(), f.glyph_metrics(Size::unscaled(), LocationRef::default()));
+    probe_chars()
+        .filter_map(|c| {
+            let gid = cmap.map(c).filter(|g| g.to_u32() != 0)?;
+            let w = gm.advance_width(gid).filter(|w| w.is_finite())? * 1000.0 / f32::from(upem);
+            Some((c, w.round().clamp(0.0, 4000.0) as u16))
+        })
+        .collect()
+}
+
 /// Validate before allocating any PDF objects, so an invalid font cannot partly mutate a doc.
 pub fn validate(bytes: &[u8]) -> Result<(), String> {
     if bytes.len() > 16 << 20 {

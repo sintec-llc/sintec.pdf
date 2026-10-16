@@ -226,12 +226,20 @@ impl PdfCraftApp {
                 }
                 .to_string()
             };
-            Wanted { base_font: base, bold, italic, serif: None, monospace: fam == pdfcraft_engine::FontFamily::Courier, sample: text.clone() }
+            Wanted {
+                base_font: base,
+                bold,
+                italic,
+                serif: None,
+                monospace: fam == pdfcraft_engine::FontFamily::Courier,
+                sample: text.clone(),
+                widths: Vec::new(),
+            }
         };
         if let Some((fam, bold, italic)) = style.family {
             let want = want_for(fam, bold, italic);
             match self.styled_face(&want) {
-                Some((face, Match::Exact | Match::Alias)) => {
+                Some((face, Match::Exact | Match::Fingerprint | Match::Alias)) => {
                     if let Some(resource) = self.load_substitute(id, page, &face.path) {
                         style.resource = Some(resource);
                         style.family = None;
@@ -252,7 +260,7 @@ impl PdfCraftApp {
         let mut ranges = std::mem::take(&mut style.ranges);
         for r in &mut ranges {
             if let Some((fam, bold, italic)) = r.family
-                && let Some((face, Match::Exact | Match::Alias)) = self.styled_face(&want_for(fam, bold, italic))
+                && let Some((face, Match::Exact | Match::Fingerprint | Match::Alias)) = self.styled_face(&want_for(fam, bold, italic))
                 && let Some(resource) = self.load_substitute(id, page, &face.path)
             {
                 r.resource = Some(resource);
@@ -298,7 +306,7 @@ impl PdfCraftApp {
                 None => {}
             }
             let Some((best, quality)) = self.styled_face(&wanted) else { continue };
-            if quality == Match::Exact {
+            if matches!(quality, Match::Exact | Match::Fingerprint) {
                 // The same family is installed: it draws the missing characters, as it is.
                 self.fonts.choices.insert((id, key), FontChoice::Use { path: best.path.clone(), whole: false });
                 let _ = self.load_substitute(id, page, &best.path);
@@ -324,7 +332,7 @@ impl PdfCraftApp {
         paragraph: bool,
     ) {
         let fonts = self.installed_faces().unwrap_or_default();
-        let installed = rank(&wanted, &fonts).first().is_some_and(|f| family_match(&wanted, f) == Match::Exact);
+        let installed = rank(&wanted, &fonts).first().is_some_and(|f| matches!(family_match(&wanted, f), Match::Exact | Match::Fingerprint));
         self.fonts.offer = Some(FontOffer {
             doc: id,
             page,
@@ -498,6 +506,10 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
 fn label_of(want: &Wanted) -> impl Fn(&FontFile) -> String + '_ {
     move |f: &FontFile| match family_match(want, f) {
         Match::Exact => format!("{} — {}", f.display(), tl!("same font")),
+        Match::Fingerprint => {
+            let d = pdfcraft_engine::text_fonts::fingerprint_distance(want, f).unwrap_or_default();
+            crate::i18n::fmt(tl!("{face} — same glyph widths (off by {d} on average)"), &[("face", &f.display()), ("d", &format!("{d:.1}"))])
+        }
         Match::Alias => format!("{} — {}", f.display(), tl!("usual substitute")),
         Match::Other => f.display(),
     }
@@ -539,5 +551,29 @@ fn finish(app: &mut PdfCraftApp, offer: FontOffer, choice: Option<FontChoice>) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_analysis_shows_the_width_fingerprint() {
+        let widths: Vec<(char, u16)> = "ABCDEFGHIJ".chars().enumerate().map(|(i, c)| (c, 500 + 10 * i as u16)).collect();
+        let face = FontFile {
+            path: PathBuf::from("Mystery.ttf"),
+            family: "Mystery Sans".into(),
+            face: "MysterySans".into(),
+            style: pdfcraft_fonts::embedding::FaceStyle { weight: 400, italic: false, monospace: false, serif: Some(false), cyrillic: true },
+            widths,
+        };
+        let want = Wanted {
+            base_font: "CIDFont+F1".into(),
+            widths: "ABCDEFGHIJ".chars().enumerate().map(|(i, c)| (c, 503.0 + 10.0 * i as f32)).collect(),
+            ..Wanted::default()
+        };
+        let label = label_of(&want)(&face);
+        assert!(label.contains("Mystery Sans") && label.contains("3.0"), "{label}");
     }
 }

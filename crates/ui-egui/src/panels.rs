@@ -442,6 +442,7 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
                     serif: f.serif,
                     monospace: f.monospace,
                     sample: ed.text.clone(),
+                    widths: f.widths.clone(),
                 });
                 let ordered: Vec<&pdfcraft_engine::text_fonts::FontFile> = match &want {
                     Some(w) => pdfcraft_engine::text_fonts::rank(w, &fonts),

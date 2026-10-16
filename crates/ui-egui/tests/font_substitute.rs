@@ -90,6 +90,7 @@ fn installed_face(name: &str, family: &str, face: &str, weight: u16, bytes: &[u8
         family: family.into(),
         face: face.into(),
         style: pdfcraft_fonts::embedding::FaceStyle { weight, italic: false, monospace: false, serif: Some(false), cyrillic: true },
+        widths: Vec::new(),
     }
 }
 

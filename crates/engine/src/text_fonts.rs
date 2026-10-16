@@ -12,6 +12,8 @@ pub struct FontFile {
     /// The PostScript name.
     pub face: String,
     pub style: pdfcraft_fonts::embedding::FaceStyle,
+    /// Advance widths per 1000 em of the probe characters the face has (its width fingerprint).
+    pub widths: Vec<(char, u16)>,
 }
 
 impl FontFile {
@@ -90,7 +92,8 @@ pub fn discover(roots: &[PathBuf]) -> Vec<FontFile> {
                 continue;
             }
             if let (Ok((family, face)), Ok(style)) = (pdfcraft_fonts::embedding::names(&bytes), pdfcraft_fonts::embedding::style_of(&bytes)) {
-                files.push(FontFile { path, family, face, style });
+                let widths = pdfcraft_fonts::embedding::probe_widths(&bytes);
+                files.push(FontFile { path, family, face, style, widths });
             }
         }
     }
@@ -140,6 +143,35 @@ pub struct Wanted {
     pub monospace: bool,
     /// The text the face must be able to show (the paragraph being edited).
     pub sample: String,
+    /// The PDF font's advance widths per 1000 em of the probe characters it has (its width
+    /// fingerprint), for fonts whose names say nothing.
+    pub widths: Vec<(char, f32)>,
+}
+
+/// The fewest shared characters a width fingerprint needs to claim anything.
+pub const FINGERPRINT_MIN_SHARED: usize = 8;
+/// A fingerprint is close when the mean absolute width difference is below this (per 1000 em).
+pub const FINGERPRINT_CLOSE: f32 = 15.0;
+
+/// The mean absolute difference (per 1000 em) between the PDF font's widths and the face's over
+/// the characters both have; `None` with fewer than [`FINGERPRINT_MIN_SHARED`] of them.
+pub fn fingerprint_distance(want: &Wanted, f: &FontFile) -> Option<f32> {
+    let (mut sum, mut n) = (0.0f32, 0usize);
+    for (c, w) in want.widths.iter().take(1024) {
+        if !w.is_finite() {
+            continue;
+        }
+        if let Some((_, fw)) = f.widths.iter().find(|(fc, _)| fc == c) {
+            sum += (w - f32::from(*fw)).abs();
+            n += 1;
+        }
+    }
+    (n >= FINGERPRINT_MIN_SHARED).then(|| sum / n as f32).filter(|d| d.is_finite())
+}
+
+/// The distance when it is close enough to identify the family.
+pub fn fingerprint(want: &Wanted, f: &FontFile) -> Option<f32> {
+    fingerprint_distance(want, f).filter(|d| *d < FINGERPRINT_CLOSE)
 }
 
 impl Wanted {
@@ -154,6 +186,7 @@ impl Wanted {
             serif: facts.is_serif(),
             monospace: facts.monospace,
             sample: sample.to_string(),
+            widths: facts.widths.clone(),
         }
     }
 
@@ -205,6 +238,8 @@ fn class_of(f: &FontFile) -> Class {
 pub enum Match {
     Other,
     Alias,
+    /// Not the same name, but the glyph widths are those of this face.
+    Fingerprint,
     Exact,
 }
 
@@ -212,9 +247,11 @@ pub enum Match {
 pub fn family_match(want: &Wanted, f: &FontFile) -> Match {
     let (a, b) = (family_key(&want.base_font), family_key(&f.family));
     if a.is_empty() {
-        Match::Other
+        if fingerprint(want, f).is_some() { Match::Fingerprint } else { Match::Other }
     } else if a == b || family_key(&f.face) == a {
         Match::Exact
+    } else if fingerprint(want, f).is_some() {
+        Match::Fingerprint
     } else if group(&a).is_some_and(|g| g.contains(&b.as_str())) {
         Match::Alias
     } else {
@@ -236,6 +273,7 @@ pub fn rank<'a>(want: &Wanted, fonts: &'a [FontFile]) -> Vec<&'a FontFile> {
             let key = family_key(&f.family);
             let family = match family_match(want, f) {
                 Match::Exact => 10_000,
+                Match::Fingerprint => 8_000,
                 Match::Alias => 6_000,
                 Match::Other => 0,
             };
@@ -266,7 +304,35 @@ mod tests {
             family: family.into(),
             face: family.replace(' ', ""),
             style: FaceStyle { weight, italic, monospace: family.contains("Courier"), serif, cyrillic: !family.contains("Latin") },
+            widths: Vec::new(),
         }
+    }
+
+    fn known(offset: f32, n: usize) -> Vec<(char, f32)> {
+        "ABCDEFGHIJKLMNOP".chars().take(n).enumerate().map(|(i, c)| (c, 500.0 + 10.0 * i as f32 + offset)).collect()
+    }
+
+    fn known_face(family: &str) -> FontFile {
+        let mut f = face(family, 400, false, Some(false));
+        f.widths = known(0.0, 16).into_iter().map(|(c, w)| (c, w as u16)).collect();
+        f
+    }
+
+    #[test]
+    fn an_unnamed_font_is_identified_by_its_widths() {
+        let fonts = vec![face("Arial", 400, false, Some(false)), known_face("Mystery Sans"), face("Liberation Sans", 400, false, Some(false))];
+        let want = Wanted { base_font: "CIDFont+F1".into(), widths: known(3.0, 16), ..Wanted::default() };
+        assert_eq!(rank(&want, &fonts).first().map(|f| f.family.as_str()), Some("Mystery Sans"));
+        assert_eq!(family_match(&want, &fonts[1]), Match::Fingerprint);
+        assert!((fingerprint_distance(&want, &fonts[1]).unwrap_or(-1.0) - 3.0).abs() < 0.01);
+        // Fewer than eight shared characters: no claim.
+        let few = Wanted { widths: known(0.0, 7), ..want.clone() };
+        assert_eq!(fingerprint_distance(&few, &fonts[1]), None);
+        assert_eq!(family_match(&few, &fonts[1]), Match::Other);
+        // A mean difference of 15 or more: no claim.
+        let far = Wanted { widths: known(15.0, 16), ..want };
+        assert!(fingerprint_distance(&far, &fonts[1]).is_some());
+        assert_eq!(family_match(&far, &fonts[1]), Match::Other);
     }
 
     #[test]

@@ -50,6 +50,7 @@ fn standard_faces() -> Vec<pdfcraft_engine::text_fonts::FontFile> {
                 serif: Some(family == "Times New Roman"),
                 cyrillic: true,
             },
+            widths: Vec::new(),
         })
         .to_vec()
 }
@@ -3577,6 +3578,7 @@ fn inline_editor_preserves_source_font_and_previews_live_bounds() {
             family: "Inter".into(),
             face: "Inter-Regular".into(),
             style: pdfcraft_fonts::embedding::FaceStyle { weight: 400, italic: false, monospace: false, serif: Some(false), cyrillic: true },
+            widths: Vec::new(),
         }]);
         app
     });

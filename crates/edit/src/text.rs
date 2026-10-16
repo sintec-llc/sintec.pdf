@@ -142,6 +142,9 @@ pub struct FontFacts {
     pub program_weight: Option<u16>,
     pub program_italic: Option<bool>,
     pub program_serif: Option<bool>,
+    /// Advance widths per 1000 em of the probe characters the font has (via ToUnicode and its
+    /// widths): a fingerprint for fonts whose names say nothing.
+    pub widths: Vec<(char, f32)>,
 }
 
 impl FontFacts {
@@ -163,6 +166,22 @@ impl FontFacts {
     pub fn is_serif(&self) -> Option<bool> {
         self.program_serif.or(self.serif)
     }
+}
+
+/// The advance widths per 1000 em of the probe characters `m` shows, from its codes' Unicode text.
+fn probe_widths(m: &Metrics) -> Vec<(char, f32)> {
+    let probe: std::collections::HashSet<char> = pdfcraft_fonts::embedding::probe_chars().collect();
+    let mut out: Vec<(char, f32)> = Vec::new();
+    for code in 0u32..=0xFFFF {
+        let Some(text) = m.text_of(code) else { continue };
+        let mut it = text.chars();
+        let (Some(c), None) = (it.next(), it.next()) else { continue };
+        let w = m.width(code) * 1000.0;
+        if probe.contains(&c) && w.is_finite() && w > 0.0 && !out.iter().any(|(o, _)| *o == c) {
+            out.push((c, w as f32));
+        }
+    }
+    out
 }
 
 /// [`FontFacts`] for the font resource `resource` of page `page`.
@@ -203,6 +222,7 @@ pub fn font_facts(doc: &Document, page: usize, resource: &str) -> Result<FontFac
         program_weight: style.map(|s| s.weight),
         program_italic: style.map(|s| s.italic),
         program_serif: style.and_then(|s| s.serif),
+        widths: probe_widths(&m),
     })
 }
 
