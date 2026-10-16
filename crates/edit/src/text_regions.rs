@@ -190,7 +190,11 @@ struct SourceFace {
 
 fn source_face(doc: &Document, page: usize, line: &TextLine) -> SourceFace {
     match font_facts(doc, page, &line.font) {
-        Ok(f) => SourceFace { family: pdfcraft_fonts::embedding::family_key(f.family()), bold: f.is_bold() || line.bold, italic: f.is_italic() || line.italic },
+        Ok(f) => SourceFace {
+            family: pdfcraft_fonts::embedding::family_key(f.family()),
+            bold: f.is_bold() || line.bold,
+            italic: f.is_italic() || line.italic,
+        },
         Err(_) => SourceFace { family: pdfcraft_fonts::embedding::family_key(&line.base_font), bold: line.bold, italic: line.italic },
     }
 }

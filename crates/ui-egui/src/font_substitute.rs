@@ -86,7 +86,12 @@ fn styled_name(family: &str, bold: bool, italic: bool) -> String {
 
 /// The memory's key for a font in a style.
 fn key_of(wanted: &Wanted) -> String {
-    format!("{}{}{}", pdfcraft_engine::text_fonts::family_key(&wanted.base_font), if wanted.bold { "-b" } else { "" }, if wanted.italic { "-i" } else { "" })
+    format!(
+        "{}{}{}",
+        pdfcraft_engine::text_fonts::family_key(&wanted.base_font),
+        if wanted.bold { "-b" } else { "" },
+        if wanted.italic { "-i" } else { "" }
+    )
 }
 
 /// Choices, the analysis and the open dialog.
@@ -100,6 +105,9 @@ pub struct FontSubstitutes {
     pub reports: HashMap<(DocId, usize), (u64, Vec<FontReport>)>,
     /// Fonts already suggested for changing (per document and key), so it's asked once.
     pub suggested: std::collections::HashSet<(DocId, String)>,
+    /// The installed faces to use instead of scanning the system's font folders (embedders and
+    /// tests that need a known set).
+    pub installed_override: Option<Vec<FontFile>>,
 }
 
 /// What to do with a text edit.
@@ -124,6 +132,11 @@ fn installed(ctx: Option<&egui::Context>) -> Option<Vec<FontFile>> {
 }
 
 impl PdfCraftApp {
+    /// The installed faces, once the background scan has finished (see [`installed`]).
+    fn installed_faces(&self) -> Option<Vec<FontFile>> {
+        self.fonts.installed_override.clone().or_else(|| installed(self.ctx.as_ref()))
+    }
+
     /// The font facts and the font wanted for paragraph `block` of page `page` with `text`.
     fn wanted_for(&self, id: DocId, page: usize, block: usize, text: &str) -> Option<(pdfcraft_engine::FontFacts, Wanted)> {
         let doc = self.session.get(id)?;
@@ -146,7 +159,7 @@ impl PdfCraftApp {
         {
             return reports.clone();
         }
-        let Some(fonts) = installed(self.ctx.as_ref()) else { return Vec::new() };
+        let Some(fonts) = self.installed_faces() else { return Vec::new() };
         let mut seen = Vec::new();
         let mut reports = Vec::new();
         for line in doc.text_lines(page) {
@@ -184,7 +197,7 @@ impl PdfCraftApp {
 
     /// The installed face closest to `wanted`, and how well it matches.
     fn styled_face(&self, wanted: &Wanted) -> Option<(FontFile, Match)> {
-        let fonts = installed(self.ctx.as_ref())?;
+        let fonts = self.installed_faces()?;
         let best = rank(wanted, &fonts).first().map(|f| (*f).clone())?;
         let quality = family_match(wanted, &best);
         Some((best, quality))
@@ -310,7 +323,7 @@ impl PdfCraftApp {
         pending: Option<Edit>,
         paragraph: bool,
     ) {
-        let fonts = installed(self.ctx.as_ref()).unwrap_or_default();
+        let fonts = self.installed_faces().unwrap_or_default();
         let installed = rank(&wanted, &fonts).first().is_some_and(|f| family_match(&wanted, f) == Match::Exact);
         self.fonts.offer = Some(FontOffer {
             doc: id,
@@ -408,7 +421,9 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
         };
         ui.label(crate::i18n::fmt(why, &[("font", &format!("«{}»", offer.base_font))]));
         if offer.pending.is_none() && !offer.paragraph {
-            ui.label(egui::RichText::new(tl!("No similar font is installed. Choose the font edited text in it is set in.")).color(t.text_muted).small());
+            ui.label(
+                egui::RichText::new(tl!("No similar font is installed. Choose the font edited text in it is set in.")).color(t.text_muted).small(),
+            );
         }
         ui.add_space(8.0);
         match &fonts {

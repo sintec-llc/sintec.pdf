@@ -270,6 +270,29 @@ mod tests {
     }
 
     #[test]
+    fn wanted_prefers_the_programs_family_and_weight_over_the_pdfs_flags() {
+        let facts = pdfcraft_edit::text::FontFacts {
+            base_font: "F1".into(),
+            bold: false,
+            italic: false,
+            serif: Some(true),
+            program_family: Some("Rect Font".into()),
+            program_weight: Some(700),
+            program_italic: Some(true),
+            program_serif: Some(false),
+            ..Default::default()
+        };
+        let w = Wanted::from_facts(&facts, None, None, "Ж");
+        assert_eq!((w.base_font.as_str(), w.bold, w.italic, w.serif, w.sample.as_str()), ("Rect Font", true, true, Some(false), "Ж"));
+        // An explicit style request still wins; without a program the PDF's own facts are used.
+        let w = Wanted::from_facts(&facts, Some(false), Some(false), "");
+        assert!(!w.bold && !w.italic);
+        let plain = pdfcraft_edit::text::FontFacts { base_font: "Arial".into(), bold: true, ..Default::default() };
+        let w = Wanted::from_facts(&plain, None, None, "");
+        assert!(w.bold && w.base_font == "Arial");
+    }
+
+    #[test]
     fn family_keys_drop_subset_tags_and_styles() {
         assert_eq!(family_key("ABCDEF+TimesNewRomanPS-BoldItalicMT"), "timesnewroman");
         assert_eq!(family_key("TimesNewRomanPSMT"), "timesnewroman");

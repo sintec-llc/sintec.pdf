@@ -2457,3 +2457,6 @@ animation effects	Off	Выкл
 	No embeddable installed fonts found. Load a font file.	Не найдено установленных шрифтов, которые можно встроить. Загрузите файл шрифта.
 
 	The font {font} isn't installed on this computer and isn't embedded in the document.	Шрифт {font} не установлен на этом компьютере и не встроен в документ.
+
+
+	No similar font is installed. Choose the font edited text in it is set in.	Похожий шрифт не установлен. Выберите шрифт, которым будет набран отредактированный текст.

@@ -2382,51 +2382,81 @@ pub(crate) fn translate_blocks(doc: &mut Document, page: usize, indexes: &[usize
 mod tests {
     use super::*;
 
-    #[test]
-    fn paragraph_wrapping_keeps_ideographic_spaces() {
-        let width = |s: &str| s.chars().count() as f64;
-        assert_eq!(wrap("A　　B C", 4.0, width), ["A　　B", "C"]);
-        assert_eq!(wrap("A\u{a0}B C", 3.0, width), ["A B", "C"]);
-        assert_eq!(wrap("A\u{2028}B C", 3.0, width), ["A B", "C"]);
-        assert_eq!(wrap(" \tA  B\r\nC ", 3.0, width), ["A B", "C"]);
-    }
+    #[path = "../../../../engine/tests/support/font_fixture.rs"]
+    mod font_fixture;
 
-    #[test]
-    fn fallback_face_moves_on_when_the_best_face_lacks_a_character() {
-        static JPAN: &[&str] = &["Jpan"];
-        let mincho = CraftFont { family: "Mincho", style: "Regular", scripts: JPAN, bytes: b"" };
-        let gothic = CraftFont { family: "Gothic", style: "Regular", scripts: JPAN, bytes: b"" };
-        let faces = [&mincho, &gothic];
-        // Only the Gothic face has the Cyrillic letter.
-        let has = |face: &CraftFont, ch: char| ch.is_ascii() || face.family == "Gothic";
-        assert_eq!(fallback_face(&faces, &['a', 'ф'], has).map(|f| f.family), Some("Gothic"));
-        // Characters the best face has keep it.
-        assert_eq!(fallback_face(&faces, &['a', 'b'], has).map(|f| f.family), Some("Mincho"));
-        // No face has them all: the best face stays, and names the missing glyph.
-        assert_eq!(fallback_face(&faces, &['a', 'ф'], |_, ch| ch.is_ascii()).map(|f| f.family), Some("Mincho"));
-        assert!(fallback_face(&[], &['a'], has).is_none());
-    }
-
-    #[test]
-    fn hebrew_and_japanese_fallback_shards_are_recognized_as_ours() {
-        static HEBR: &[&str] = &["Hebr"];
-        let face = CraftFont { family: "FakeHebrew", style: "Regular", scripts: HEBR, bytes: b"" };
-        let glyph = |code, ch| Type3Glyph { code, ch, path: b"0 0 0 0 0 0 d1\nf\n".to_vec(), width: 0.5 };
-        let mut doc = Document::new_empty();
+    /// A one-page document with composite font `F1` (`/BaseFont /CIDFont+F1`) embedding `program`.
+    fn cid_document(program: Vec<u8>) -> Document {
+        let mut d = Document::new_empty();
+        let pages = d.add(Object::Dict(Dict::new()));
+        let file = d.add(Object::Stream(Stream::flate(Dict::new(), &program)));
+        let mut desc = Dict::new();
+        desc.set(b"Type".to_vec(), Object::name("FontDescriptor"));
+        desc.set(b"FontName".to_vec(), Object::name("CIDFont+F1"));
+        desc.set(b"Flags".to_vec(), Object::Int(4));
+        desc.set(b"FontFile2".to_vec(), Object::Ref(file));
+        let desc = d.add(Object::Dict(desc));
+        let mut cid = Dict::new();
+        cid.set(b"Type".to_vec(), Object::name("Font"));
+        cid.set(b"Subtype".to_vec(), Object::name("CIDFontType2"));
+        cid.set(b"BaseFont".to_vec(), Object::name("CIDFont+F1"));
+        cid.set(b"FontDescriptor".to_vec(), Object::Ref(desc));
+        cid.set(b"CIDToGIDMap".to_vec(), Object::name("Identity"));
+        let cid = d.add(Object::Dict(cid));
+        let mut font = Dict::new();
+        font.set(b"Type".to_vec(), Object::name("Font"));
+        font.set(b"Subtype".to_vec(), Object::name("Type0"));
+        font.set(b"BaseFont".to_vec(), Object::name("CIDFont+F1"));
+        font.set(b"Encoding".to_vec(), Object::name("Identity-H"));
+        font.set(b"DescendantFonts".to_vec(), Object::Array(vec![Object::Ref(cid)]));
+        // Glyph 1 is the space and glyph 2 the letter A.
+        let cmap = b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap
+1 begincodespacerange <0000> <FFFF> endcodespacerange
+2 beginbfchar <0001> <0020> <0002> <0041> endbfchar
+endcmap end end";
+        let to_unicode = d.add(Object::Stream(Stream::flate(Dict::new(), cmap)));
+        font.set(b"ToUnicode".to_vec(), Object::Ref(to_unicode));
         let mut fonts = Dict::new();
-        // A replacement split across two Hebrew fonts, then one Japanese font.
-        let he = add_type3_font(&mut doc, &mut fonts, &face, true, vec![glyph(1, 'א')]);
-        let he1 = add_type3_font(&mut doc, &mut fonts, &face, true, vec![glyph(1, 'ב')]);
-        let jp = add_type3_font(&mut doc, &mut fonts, &face, false, vec![glyph(1, 'あ')]);
-        assert_eq!([he.as_str(), he1.as_str(), jp.as_str()], ["PCHe", "PCHe1", "PCJp"]);
-        for name in [&he, &he1, &jp] {
-            let font = fonts.get(name.as_bytes()).and_then(Object::as_dict).cloned().unwrap_or_default();
-            assert!(is_type3_fallback(&font), "{name} isn't recognized as a generated fallback font");
-        }
-        // Someone else's Type 3 font is not ours.
-        let mut other = Dict::new();
-        other.set(b"Subtype".to_vec(), Object::name("Type3"));
-        other.set(b"Name".to_vec(), Object::name("PCHebrewX"));
-        assert!(!is_type3_fallback(&other));
+        fonts.set(b"F1".to_vec(), Object::Dict(font));
+        let mut res = Dict::new();
+        res.set(b"Font".to_vec(), Object::Dict(fonts));
+        let mut p = Dict::new();
+        p.set(b"Type".to_vec(), Object::name("Page"));
+        p.set(b"Parent".to_vec(), Object::Ref(pages));
+        p.set(b"Resources".to_vec(), Object::Dict(res));
+        p.set(b"MediaBox".to_vec(), Object::Array([0, 0, 300, 240].map(Object::Int).to_vec()));
+        let page = d.add(Object::Dict(p));
+        let _ = d.update_dict(pages, |p| {
+            p.set(b"Type".to_vec(), Object::name("Pages"));
+            p.set(b"Kids".to_vec(), Object::Array(vec![Object::Ref(page)]));
+            p.set(b"Count".to_vec(), Object::Int(1));
+        });
+        let mut root = Dict::new();
+        root.set(b"Type".to_vec(), Object::name("Catalog"));
+        root.set(b"Pages".to_vec(), Object::Ref(pages));
+        let root = d.add(Object::Dict(root));
+        d.trailer_mut().set(b"Root".to_vec(), Object::Ref(root));
+        d
+    }
+
+    #[test]
+    fn font_facts_come_from_the_embedded_program_not_the_made_up_name() {
+        let doc = cid_document(font_fixture::cff_font_with_weight(700));
+        let facts = font_facts(&doc, 0, "F1").expect("facts");
+        assert_eq!(facts.base_font, "F1", "the PDF's own name is only the fallback");
+        assert!(facts.embedded);
+        assert_eq!(facts.family(), "Rect Font");
+        assert_eq!(facts.program_weight, Some(700));
+        assert!(facts.is_bold(), "the program's weight wins over the descriptor's flags");
+        assert!(font_facts(&doc, 0, "Nope").is_err());
+    }
+
+    #[test]
+    fn first_unencodable_names_the_first_character_the_font_cannot_show() {
+        let doc = cid_document(font_fixture::cff_font_with_weight(400));
+        // The font shows only A and the space; whitespace is never reported.
+        assert_eq!(first_unencodable(&doc, 0, "F1", "A A").expect("ok"), None);
+        assert_eq!(first_unencodable(&doc, 0, "F1", "A q Z").expect("ok"), Some('q'));
+        assert!(first_unencodable(&doc, 0, "Nope", "A").is_err());
     }
 }

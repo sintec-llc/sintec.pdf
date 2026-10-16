@@ -34,6 +34,26 @@ fn fixture(n: usize) -> Vec<u8> {
     out
 }
 
+/// The machine's own fonts must not decide what Bold draws in or whether Edit PDF suggests a
+/// substitution: Arial, Times New Roman and Courier New "installed", as regular faces that are not
+/// on disk (so a styled edit falls back to the standard PDF fonts).
+fn standard_faces() -> Vec<pdfcraft_engine::text_fonts::FontFile> {
+    ["Arial", "Times New Roman", "Courier New"]
+        .map(|family| pdfcraft_engine::text_fonts::FontFile {
+            path: std::path::PathBuf::from(format!("/nonexistent/{family}.ttf")),
+            family: family.into(),
+            face: family.replace(' ', ""),
+            style: pdfcraft_fonts::embedding::FaceStyle {
+                weight: 400,
+                italic: false,
+                monospace: family == "Courier New",
+                serif: Some(family == "Times New Roman"),
+                cyrillic: true,
+            },
+        })
+        .to_vec()
+}
+
 fn harness(pages: usize, setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, PdfCraftApp> {
     let mut builder = Harness::builder().with_size(egui::vec2(1400.0, 900.0));
     if std::env::var_os("PDFCRAFT_ORGANIZE_SNAPSHOT").is_some() {
@@ -43,6 +63,7 @@ fn harness(pages: usize, setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harn
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("doc.pdf", None, fixture(pages)).expect("fixture opens");
+        app.fonts.installed_override = Some(standard_faces());
         setup(&mut app);
         app
     });
@@ -2258,6 +2279,7 @@ fn open_source_font_fixture() -> Harness<'static, PdfCraftApp> {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("fonts.pdf", None, source_font_fixture()).expect("font fixture opens");
+        app.fonts.installed_override = Some(standard_faces());
         app
     })
 }
@@ -2697,6 +2719,7 @@ fn paragraph_drag_harness(bytes: Vec<u8>, view_rotation: u16) -> Harness<'static
         app.session = pdfcraft_engine::Session::new().with_clock(|| 1_700_000_000);
         app.set_option("language", "en").unwrap();
         app.open_bytes("paragraphs.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("zoom", "75").unwrap();
         app.views[0].rotation = view_rotation;
         assert!(app.execute("edit.edit_text"));
@@ -3548,6 +3571,13 @@ fn inline_editor_preserves_source_font_and_previews_live_bounds() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("stable.pdf", None, bytes).unwrap();
+        // Inter is "installed", so Edit PDF has no font substitution to suggest over the editor.
+        app.fonts.installed_override = Some(vec![pdfcraft_engine::text_fonts::FontFile {
+            path: std::path::PathBuf::from("Inter-Regular.ttf"),
+            family: "Inter".into(),
+            face: "Inter-Regular".into(),
+            style: pdfcraft_fonts::embedding::FaceStyle { weight: 400, italic: false, monospace: false, serif: Some(false), cyrillic: true },
+        }]);
         app
     });
     h.run_steps(4);

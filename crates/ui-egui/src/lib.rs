@@ -2793,6 +2793,16 @@ impl eframe::App for PdfCraftApp {
             self.escape_to_main_view();
         }
         self.process_pending_edits();
+        // Edit PDF's text editing shows a page: suggest a font of it with no similar installed
+        // face, once per font (`FontSubstitutes::suggested`; the analysis is cached per version).
+        if self.quick_tool == QuickTool::EditText
+            && !self.modal_open()
+            && let Some((index, id)) = self.active_ids()
+            && let Some(page) = self.views.get(index).map(|v| v.current)
+            && self.session.get(id).is_some_and(|d| d.allows_modification())
+        {
+            self.suggest_fonts(id, page);
+        }
         // A page drag ends with the button, in the window it started in: dropped onto another
         // window by now, or let go.
         self.finish_page_transfer_drop(&ctx);

@@ -28,7 +28,16 @@ fn index(items: &[Vec<u8>]) -> Vec<u8> {
     }
     out
 }
+#[allow(dead_code)]
 pub fn cff_font() -> Vec<u8> {
+    cff_font_weighted(None)
+}
+/// The same font with an OS/2 table saying `weight` (the program's own weight class).
+#[allow(dead_code)]
+pub fn cff_font_with_weight(weight: u16) -> Vec<u8> {
+    cff_font_weighted(Some(weight))
+}
+fn cff_font_weighted(weight: Option<u16>) -> Vec<u8> {
     let name = index(&[b"RectFont".to_vec()]);
     let mut dict = Vec::new();
     for n in [0, 0, 500, 700] {
@@ -103,12 +112,20 @@ pub fn cff_font() -> Vec<u8> {
         data.extend(bytes);
     }
     name.extend(data);
-    let tables = [(*b"CFF ", cff), (*b"cmap", cmap), (*b"head", head), (*b"hhea", hhea), (*b"hmtx", hmtx), (*b"maxp", maxp), (*b"name", name)];
+    let mut tables =
+        vec![(*b"CFF ", cff), (*b"cmap", cmap), (*b"head", head), (*b"hhea", hhea), (*b"hmtx", hmtx), (*b"maxp", maxp), (*b"name", name)];
+    if let Some(weight) = weight {
+        let mut os2 = vec![0; 78];
+        os2[4..6].copy_from_slice(&weight.to_be_bytes());
+        tables.insert(1, (*b"OS/2", os2));
+    }
+    let count = tables.len() as u16;
+    let entry = count.ilog2() as u16;
     let mut out = b"OTTO".to_vec();
-    be16(&mut out, 7);
-    be16(&mut out, 64);
-    be16(&mut out, 2);
-    be16(&mut out, 48);
+    be16(&mut out, count);
+    be16(&mut out, 16 << entry);
+    be16(&mut out, entry);
+    be16(&mut out, count * 16 - (16 << entry));
     let mut payload = Vec::new();
     let mut offset = 12 + 16 * tables.len();
     for (tag, bytes) in tables {
