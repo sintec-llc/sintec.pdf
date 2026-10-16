@@ -1199,11 +1199,16 @@ title = "Multiple windows; drag a tab out into a window"
 area = "B"
 tier = "P1"
 milestone = "M14"
-status = "planned"
+status = "partial"
 commands = []
 tools = []
-evidence = []
-notes = ""
+evidence = [
+    "crates/ui-egui/tests/tab_windows.rs::a_tab_pulled_out_goes_to_a_process_of_its_own_and_leaves_this_window",
+    "crates/ui-egui/tests/tab_windows.rs::a_saved_document_goes_by_its_file_and_unsaved_changes_keep_their_path",
+    "crates/ui-egui/tests/tab_windows.rs::a_tab_whose_process_cannot_start_stays_and_says_so",
+    "crates/ui-egui/tests/tab_windows.rs::the_new_process_opens_handed_over_work_as_unsaved_changes",
+]
+notes = "Sintec.PDF: a tab dragged out of the strip opens in a process of its own (--new-window --torn-off --window-pos; unsaved work goes as a recovery entry and stays unsaved there), and the two windows close independently; the web keeps tabs in one window. Not yet: tabs dragged between processes, or back into the original window; the real drag between windows has only been tested in the harness"
 
 [[feature]]
 id = "view.split-window"

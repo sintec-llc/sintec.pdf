@@ -2098,6 +2098,15 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     {
         f.in_panel = false;
     }
+    // Edit a PDF shows this page: suggest, once per font, changing one that has no similar
+    // installed face (the Font substitution dialog; nothing until the installed fonts are known).
+    if app.left_open
+        && app.left == crate::LeftPanel::Tool("edit")
+        && !app.modal_open()
+        && let Some((id, page)) = app.views.get(index).map(|v| (v.id, v.current))
+    {
+        app.suggest_fonts(id, page);
+    }
     let Some(doc) = app.session.get(app.views[index].id) else { return };
     let info = &doc.info;
     if info.pages.is_empty() {

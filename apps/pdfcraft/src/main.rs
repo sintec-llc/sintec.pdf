@@ -155,6 +155,10 @@ fn main() -> eframe::Result {
     let mut create_images = false;
     let mut convert_to_pdf = false;
     let mut new_window = false;
+    // Sintec.PDF: started for a tab torn off another window (`pdfcraft_ui_egui::tear_off`).
+    let mut torn_off = false;
+    let mut window_pos: Option<egui::Pos2> = None;
+    let mut recover_key: Option<String> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -166,6 +170,13 @@ fn main() -> eframe::Result {
             "--create-images" => create_images = true,
             "--convert-to-pdf" => convert_to_pdf = true,
             "--new-window" => new_window = true,
+            "--torn-off" => torn_off = true,
+            "--window-pos" => match args.next().as_deref().map(pdfcraft_ui_egui::tear_off::parse_window_pos) {
+                Some(Ok(p)) => window_pos = Some(p),
+                Some(Err(e)) => log::warn!("--window-pos: {e}"),
+                None => log::warn!("--window-pos needs X,Y"),
+            },
+            "--recover-key" => recover_key = args.next(),
             flag if flag.starts_with("--") => {
                 let value = args.next().unwrap_or_default();
                 options.push((flag.trim_start_matches("--").to_string(), value));
@@ -195,14 +206,22 @@ fn main() -> eframe::Result {
     // Windows: a launch that only names files (an Outlook attachment, an Explorer double-click)
     // hands them to the PdfCraft already running and exits (#282, #317). Any option means the
     // caller wants this launch's own window.
-    let may_hand_off = !new_window && !convert_to_pdf && !files.is_empty() && options.is_empty() && control_file.is_none() && !create_images;
+    let may_hand_off = !new_window
+        && !torn_off
+        && recover_key.is_none()
+        && !convert_to_pdf
+        && !files.is_empty()
+        && options.is_empty()
+        && control_file.is_none()
+        && !create_images;
     let instance = match single_instance::claim(&single_instance::absolute(&files), may_hand_off) {
         single_instance::Claim::HandedOff => return Ok(()),
         single_instance::Claim::Primary(server) => Some(server),
         single_instance::Claim::Alone => None,
     };
     let choice = renderer_choice(std::env::var("PDFCRAFT_RENDERER").ok().as_deref());
-    let launch = Launch { files, options, control_file, create_images, convert_to_pdf, integrated };
+    let launch = Launch { files, options, control_file, create_images, convert_to_pdf, integrated, torn_off, window_pos, recover_key };
+    let window = WindowPlacement { torn_off, position: window_pos };
     // Finder, Open With and the Dock deliver files as Apple events, not arguments; catch the one
     // that launched us as well as later ones. Lives until the event loop returns.
     #[cfg(target_os = "macos")]
@@ -212,7 +231,7 @@ fn main() -> eframe::Result {
     let first = if choice == RendererChoice::Gl { eframe::Renderer::Glow } else { eframe::Renderer::Wgpu };
     let result = eframe::run_native(
         "Sintec.PDF",
-        native_options(integrated, first),
+        native_options(integrated, first, window),
         app_creator(
             launch.clone(),
             Rc::clone(&started),
@@ -230,7 +249,7 @@ fn main() -> eframe::Result {
             log::error!("the GPU renderer (wgpu) didn't start: {e}. Starting with OpenGL instead; set PDFCRAFT_RENDERER=gl to skip wgpu.");
             eframe::run_native(
                 "Sintec.PDF",
-                native_options(integrated, eframe::Renderer::Glow),
+                native_options(integrated, eframe::Renderer::Glow, window),
                 app_creator(
                     launch,
                     started,
@@ -269,8 +288,15 @@ fn retry_with_gl(choice: RendererChoice, app_started: bool) -> bool {
     choice == RendererChoice::Auto && !app_started
 }
 
+/// Where the window goes: a torn-off tab's window opens where the tab was let go.
+#[derive(Clone, Copy, Debug, Default)]
+struct WindowPlacement {
+    torn_off: bool,
+    position: Option<egui::Pos2>,
+}
+
 /// The window and renderer settings for one run.
-fn native_options(integrated: bool, renderer: eframe::Renderer) -> eframe::NativeOptions {
+fn native_options(integrated: bool, renderer: eframe::Renderer, window: WindowPlacement) -> eframe::NativeOptions {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Sintec.PDF")
         .with_inner_size([1440.0, 920.0])
@@ -286,9 +312,13 @@ fn native_options(integrated: bool, renderer: eframe::Renderer) -> eframe::Nativ
     if integrated {
         viewport = viewport.with_fullsize_content_view(true).with_titlebar_shown(false).with_title_shown(false);
     }
+    if let Some(p) = window.position {
+        viewport = viewport.with_position(p);
+    }
     let persistence_path = settings_dir().map(|d| d.join("app.ron"));
-    // Set explicitly, so the renderer never depends on which one eframe defaults to.
-    let mut native = eframe::NativeOptions { viewport, persistence_path, renderer, ..Default::default() };
+    // Set explicitly, so the renderer never depends on which one eframe defaults to. A torn-off
+    // tab's window doesn't keep its size and place for the main window's next start.
+    let mut native = eframe::NativeOptions { viewport, persistence_path, renderer, persist_window: !window.torn_off, ..Default::default() };
     if renderer == eframe::Renderer::Wgpu {
         configure_gpu(&mut native);
     }
@@ -305,6 +335,12 @@ struct Launch {
     /// Explorer ▸ «Преобразовать в PDF»: convert the files instead of opening them.
     convert_to_pdf: bool,
     integrated: bool,
+    /// Started for a tab torn off another window: no recovery offer, no reopened session.
+    torn_off: bool,
+    /// `--window-pos`: where the window goes (screen points).
+    window_pos: Option<egui::Pos2>,
+    /// `--recover-key`: unsaved work a torn-off tab handed over, in the recovery folder.
+    recover_key: Option<String>,
 }
 
 fn app_creator<'a>(
@@ -313,7 +349,7 @@ fn app_creator<'a>(
     instance: Option<&'a single_instance::Server>,
     #[cfg(target_os = "macos")] apple_events: &'a apple_events::AppleEvents,
 ) -> eframe::AppCreator<'a> {
-    let Launch { files, options, control_file, create_images, convert_to_pdf, integrated } = launch;
+    let Launch { files, options, control_file, create_images, convert_to_pdf, integrated, torn_off, window_pos, recover_key } = launch;
     Box::new(move |cc| {
         started.set(true);
         let mut app = PdfCraftApp::new();
@@ -337,6 +373,12 @@ fn app_creator<'a>(
         app.update_source = Some(std::sync::Arc::new(updates::latest_release));
         app.update_installer = Some(std::sync::Arc::new(updates::install_update));
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
+        // A tab torn off the tab strip opens in a process of its own.
+        app.window_spawner = Some(std::sync::Arc::new(pdfcraft_ui_egui::tear_off::spawn_self));
+        // Saved window settings win over the builder's position: place it once it exists.
+        if let Some(p) = window_pos {
+            cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(p));
+        }
         app.os_key_store_ids = cfg!(any(target_os = "macos", target_os = "windows"));
         #[cfg(target_os = "macos")]
         {
@@ -350,8 +392,11 @@ fn app_creator<'a>(
             open_control_channel(file, pdfcraft_ui_egui::control::serve(client))?;
         }
         // Autosave unsaved changes; offer to recover documents a crashed session left behind.
+        // A torn-off tab's window leaves the offer to the window it came from, which still runs
+        // and owns its entries.
         if let Some(dir) = pdfcraft_ui_egui::RecoveryStore::default_dir() {
-            app.enable_recovery(pdfcraft_ui_egui::RecoveryStore::new(dir));
+            let store = pdfcraft_ui_egui::RecoveryStore::new(dir);
+            if torn_off { app.enable_recovery_without_offer(store) } else { app.enable_recovery(store) }
         }
         if let Some(state) = &cc.wgpu_render_state {
             let adapter = state.adapter.get_info();
@@ -382,7 +427,12 @@ fn app_creator<'a>(
         } else {
             // With the preference on, last session's files come back first; files named on
             // the command line open after them, in front (#442).
-            app.reopen_last_files(&files);
+            if let Some(key) = &recover_key {
+                app.open_handed_off(key);
+            }
+            if !torn_off {
+                app.reopen_last_files(&files);
+            }
             for f in files {
                 app.open_path(&f);
             }
@@ -788,8 +838,19 @@ mod tests {
         assert!(!retry_with_gl(RendererChoice::Wgpu, false));
         assert!(!retry_with_gl(RendererChoice::Gl, false));
         // Each run states its renderer rather than relying on eframe's default.
-        assert_eq!(native_options(false, eframe::Renderer::Wgpu).renderer, eframe::Renderer::Wgpu);
-        assert_eq!(native_options(false, eframe::Renderer::Glow).renderer, eframe::Renderer::Glow);
+        assert_eq!(native_options(false, eframe::Renderer::Wgpu, super::WindowPlacement::default()).renderer, eframe::Renderer::Wgpu);
+        assert_eq!(native_options(false, eframe::Renderer::Glow, super::WindowPlacement::default()).renderer, eframe::Renderer::Glow);
+    }
+
+    #[test]
+    fn a_torn_off_tabs_window_opens_where_it_was_dropped_and_keeps_no_geometry() {
+        let main = super::native_options(false, eframe::Renderer::Glow, super::WindowPlacement::default());
+        assert!(main.persist_window, "the main window keeps its size and place");
+        assert_eq!(main.viewport.position, None);
+        let placement = super::WindowPlacement { torn_off: true, position: Some(egui::pos2(380.0, 283.0)) };
+        let torn = super::native_options(false, eframe::Renderer::Glow, placement);
+        assert!(!torn.persist_window, "a torn-off tab's window leaves the main window's saved geometry alone");
+        assert_eq!(torn.viewport.position, Some(egui::pos2(380.0, 283.0)));
     }
 
     #[test]
@@ -936,7 +997,7 @@ mod tests {
         // than the device allows.
         use eframe::wgpu;
         let _gpu = gpu();
-        let native = super::native_options(false, eframe::Renderer::Wgpu);
+        let native = super::native_options(false, eframe::Renderer::Wgpu, super::WindowPlacement::default());
         let eframe::egui_wgpu::WgpuSetup::CreateNew(setup) = &native.wgpu_options.wgpu_setup else {
             panic!("default setup creates its own instance")
         };
@@ -1003,7 +1064,7 @@ mod tests {
     fn pipeline_creation_error_is_returned_and_device_remains_usable() {
         use eframe::{egui_wgpu, wgpu};
         let _gpu = gpu();
-        let mut native = super::native_options(false, eframe::Renderer::Wgpu);
+        let mut native = super::native_options(false, eframe::Renderer::Wgpu, super::WindowPlacement::default());
         let egui_wgpu::WgpuSetup::CreateNew(setup) = &native.wgpu_options.wgpu_setup else { panic!("default setup creates its own instance") };
         let instance = pollster::block_on(native.wgpu_options.wgpu_setup.new_instance());
         let options = wgpu::RequestAdapterOptions { power_preference: setup.power_preference, ..Default::default() };

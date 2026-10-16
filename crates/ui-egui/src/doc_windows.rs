@@ -4,8 +4,9 @@
 //! it joins that window; dragged along its own strip it moves there. Every window shows the same
 //! tools and panels for its own tabs, and pages drag between documents in any windows.
 //!
-//! The windows are egui viewports in this one process, so they share the documents, undo history,
-//! settings and clipboard. `DocView::window` says which window shows a tab (0: the main window);
+//! The desktop app opens a torn-off tab in a process of its own ([`crate::tear_off`]); these
+//! windows are the fallback where it can't. They are egui viewports in this one process, so they
+//! share the documents, undo history, settings and clipboard. `DocView::window` says which window shows a tab (0: the main window);
 //! while a window is drawn, `active` is its shown tab and `current_window` is its id.
 //!
 //! A drag started in one window gets every pointer event until the button is let go, wherever the
@@ -106,7 +107,8 @@ impl PdfCraftApp {
         }
     }
 
-    /// Open tab `doc` in a new window, at `at` on the screen when known.
+    /// Open tab `doc` in a new window of this process, at `at` on the screen when known (see
+    /// [`Self::detach_tab`] for a process of its own).
     pub fn tear_off_tab(&mut self, doc: DocId, at: Option<Pos2>) {
         let id = self.next_window_id;
         self.next_window_id = self.next_window_id.saturating_add(1);

@@ -308,9 +308,10 @@ fn tab_drag(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, strip: Rect, t
     let screen = p + offset;
     let in_strip = strip.expand2(vec2(0.0, 24.0)).contains(p);
     let pulled_out = !strip.expand2(vec2(0.0, 48.0)).contains(p);
-    // A window's only tab stays: tearing it off would make the same window again. Windows of
-    // their own need the platform's (not on the web, where they'd be drawn inside this one).
-    let can_tear = app.window_tab_count(window) > 1 && !ui.ctx().embed_viewports();
+    // A window's only tab stays: tearing it off would make the same window again. It goes to a
+    // process of its own when the app can start one; otherwise windows of this process need the
+    // platform's (not on the web, where they'd be drawn inside this one).
+    let can_tear = app.window_tab_count(window) > 1 && (app.window_spawner.is_some() || !ui.ctx().embed_viewports());
     let other = app.window_geometry.iter().find(|g| g.window != window && g.strip.expand2(vec2(0.0, 24.0)).contains(screen)).cloned();
     if down {
         // The ghost: the tab under the pointer, with its page once it leaves the strip.
@@ -352,7 +353,7 @@ fn tab_drag(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, strip: Rect, t
         let before = crate::doc_windows::tab_gap(&g.tabs, screen.x);
         app.move_tab(drag.doc, g.window, before);
     } else if pulled_out && can_tear {
-        app.tear_off_tab(drag.doc, Some(screen));
+        app.detach_tab(drag.doc, Some(screen));
     }
 }
 

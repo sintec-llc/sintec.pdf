@@ -130,6 +130,7 @@ pub mod scroll_speed;
 #[cfg(not(target_arch = "wasm32"))]
 mod system_fonts;
 mod tab_context;
+pub mod tear_off;
 pub mod theme;
 pub mod ui_scale;
 pub mod updates;
@@ -370,8 +371,9 @@ pub struct PageClip {
     pub pages: Vec<usize>,
 }
 
-/// Sintec.PDF: a window of its own showing some document tabs, torn off the main window (a tab
-/// dragged out of the tab strip). Closing it moves its tabs back to the main window.
+/// Sintec.PDF: a window of this process showing some document tabs, torn off the main window
+/// where no process of its own can be started for them ([`tear_off`]). Closing it moves its tabs
+/// back to the main window.
 pub struct DocWindow {
     pub id: u64,
     /// Its shown tab.
@@ -560,6 +562,9 @@ pub struct PdfCraftApp {
     pub update_installer: Option<updates::UpdateInstaller>,
     /// An update's installer has started: the app is closing so it can install.
     pub update_started: bool,
+    /// Sintec.PDF: starts the process a torn-off tab moves to (the desktop app sets it; see
+    /// [`tear_off`]). Without one, a torn-off tab opens in a window of this process.
+    pub window_spawner: Option<tear_off::WindowSpawner>,
     /// Preferences: ask GitHub for a newer version by itself (`updates::AUTO_CHECK_EVERY`).
     pub auto_update_check: bool,
     /// The release the user chose to skip: not offered by the automatic check.
@@ -938,6 +943,7 @@ impl PdfCraftApp {
             dialog: None,
             update_source: None,
             update_installer: None,
+            window_spawner: None,
             update_started: false,
             auto_update_check: true,
             update_skipped: None,
@@ -2109,8 +2115,9 @@ impl PdfCraftApp {
     ///
     /// This is the seed of the UI control channel (M3.9): the same verbs become `ui.set` calls.
     pub fn set_option(&mut self, key: &str, value: &str) -> Result<(), String> {
-        // Sintec.PDF (automation): the shown tab in a window of its own; "back" returns every
-        // torn-off tab to the main window.
+        // Sintec.PDF (automation): the shown tab in a window of its own (a process of its own
+        // when the app can start one); "back" returns every tab torn off into a window of this
+        // process to the main window.
         if key == "tear-off" {
             if value == "back" {
                 let ids: Vec<u64> = self.doc_windows.iter().map(|w| w.id).collect();
@@ -2123,7 +2130,7 @@ impl PdfCraftApp {
             if self.window_tab_count(0) < 2 {
                 return Err("`tear-off` needs another tab to stay in the main window".into());
             }
-            self.tear_off_tab(doc, None);
+            self.detach_tab(doc, None);
             return Ok(());
         }
         let view = self.active.and_then(|i| self.views.get_mut(i));
