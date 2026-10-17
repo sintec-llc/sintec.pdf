@@ -2464,3 +2464,4 @@ animation effects	Off	Выкл
 	Couldn't open {name} in a new window: {e}. It stays here.	Не удалось открыть {name} в новом окне: {e}. Документ остаётся здесь.
 	there is no folder to keep a copy of its unsaved changes in	нет папки для копии несохранённых изменений
 	Couldn't open the document handed over from another window.	Не удалось открыть документ, переданный из другого окна.
+	Source font	Исходный шрифт

@@ -382,6 +382,12 @@ pub struct DocView {
     screen_xforms: Vec<(usize, PageXform)>,
     /// The scroll viewport on screen last frame.
     viewport_screen: Rect,
+    /// Sintec.PDF: where the floating Format text panel was drawn last frame (`Rect::NOTHING`
+    /// while it is hidden). Clicks there keep the paragraph being edited open.
+    pub(crate) text_panel: Rect,
+    /// Sintec.PDF: the pointer belongs to the Format text panel (or a popup over the page, such
+    /// as its font lists) this frame, not to the page under it (`update_text_panel_pointer`).
+    pub(crate) text_panel_pointer: bool,
     /// Pending zoom anchor: page, fractional position (also in gutters), and viewport offset.
     zoom_anchor: Option<(usize, f32, f32, Vec2)>,
     /// The page view has been shown, so its scroll offset in egui's memory is this document's.
@@ -576,6 +582,36 @@ impl DocView {
         self.viewport_screen
     }
 
+    /// Sintec.PDF: the floating Format text panel on screen last frame, if it showed (tests and
+    /// automation).
+    pub fn text_panel_rect(&self) -> Option<Rect> {
+        self.text_panel.is_positive().then_some(self.text_panel)
+    }
+
+    /// Sintec.PDF: decide whether the pointer belongs to the floating Format text panel this
+    /// frame. The panel floats over the page, and the page's tools read the raw pointer, so
+    /// without this a click on a control would also land on the page below (and close the
+    /// paragraph being formatted). While the panel shows, a popup over the page (a font list)
+    /// counts as the panel. A press decides it for its whole gesture, so a drag started on the
+    /// page still ends there, and one started on the panel never reaches the page. The inline
+    /// editor, a layer above the panel, keeps the pointer where it covers the panel.
+    fn update_text_panel_pointer(&mut self, ctx: &egui::Context) {
+        let shown = self.text_panel.is_positive();
+        let panel = self.text_panel;
+        let layer = crate::text_panel::layer(self.id);
+        let over = |p: Pos2| {
+            shown
+                && match ctx.layer_id_at(p) {
+                    Some(l) => l == layer || egui::Popup::is_id_open(ctx, l.id),
+                    None => panel.contains(p),
+                }
+        };
+        let (pressed, busy, at) = ctx.input(|i| (i.pointer.any_pressed(), i.pointer.any_down() || i.pointer.any_released(), i.pointer.latest_pos()));
+        if pressed || !busy {
+            self.text_panel_pointer = at.is_some_and(over);
+        }
+    }
+
     /// Whether a middle-button scrolling gesture is active (tests and automation).
     pub fn auto_scrolling(&self) -> bool {
         self.auto_scroll.active()
@@ -651,6 +687,8 @@ impl DocView {
             screen_rects: Vec::new(),
             screen_xforms: Vec::new(),
             viewport_screen: Rect::NOTHING,
+            text_panel: Rect::NOTHING,
+            text_panel_pointer: false,
             zoom_anchor: None,
             shown: false,
             wheel: Default::default(),
@@ -2087,9 +2125,16 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context) {
 const KEY_SCROLL_LINE: f32 = 40.0;
 
 pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
+    page_view(app, index, ui);
+    // Sintec.PDF: Format text floats over the page view's right edge while text is edited.
+    crate::text_panel::show(app, index, ui.ctx());
+}
+
+fn page_view(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     // Keyboard scrolling applies to this frame's page view only, never later.
     let key_scroll = std::mem::take(&mut app.views[index].key_scroll);
+    app.views[index].update_text_panel_pointer(ui.ctx());
     // The Search panel closed: its search moves to the find bar.
     let search_open = app.right == Some(crate::RightPanel::Search);
     if let Some(f) = app.views[index].find.as_mut()
@@ -2497,6 +2542,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         let mut best_overlap = -1.0f32;
         let mut current_overlap = -1.0f32;
         let mut current_height = f32::INFINITY;
+        // Sintec.PDF: the pointer is on the floating Format text panel: the page's tools read
+        // the raw pointer, so they see none until the pages are drawn (restored below).
+        let panel_pointer = view.text_panel_pointer.then(|| ui.ctx().input_mut(|i| std::mem::take(&mut i.pointer)));
         let pointer = ui.input(|i| i.pointer.hover_pos());
         if resp.secondary_clicked() {
             // Set again below when the right-click lands on a link.
@@ -3110,6 +3158,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     view.flash = None;
                 }
             }
+        }
+        if let Some(pointer) = panel_pointer {
+            ui.ctx().input_mut(|i| i.pointer = pointer);
         }
         // The page navigated to stays current while no page shows more of itself, so the next
         // page step starts from it rather than from a page further down the screen (#188).

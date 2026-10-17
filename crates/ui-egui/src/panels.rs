@@ -191,7 +191,8 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
         });
         ui.add_space(6.0);
     }
-    // Edit a PDF shows Format text at the top while text is selected or being added.
+    // Edit a PDF shows Edit image at the top while an added image is selected. Text is
+    // formatted in the Format text panel floating over the page (`text_panel`).
     if g.id == "edit" {
         if app.quick_tool == crate::QuickTool::EditText {
             let count = app.active_ids().map_or(0, |(i, _)| app.views[i].objects.count());
@@ -203,7 +204,7 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
             }
             ui.add_space(6.0);
         }
-        format_section(app, ui, t);
+        image_section(app, ui, t);
     }
     let mut run = None;
     // Redact a PDF has Acrobat's footer: Clear all / Redact all.
@@ -361,122 +362,11 @@ fn stamp_palette(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
     });
 }
 
-/// Edit a PDF ▸ Format text: for the selected added text (one undoable change), or the style
-/// new text gets.
-fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
-    // Editing a paragraph of existing text: its formatting, applied as it changes.
-    if let Some((i, _)) = app.active_ids()
-        && let Some(ed) = app.views[i].line_editor.clone()
-    {
-        let mut ed = ed;
-        let mut changed = false;
-        // Sintec.PDF: which font the paragraph is in, what of it the document carries, and
-        // whether this computer has it; Replace font… offers the closest installed faces.
-        let doc_id = app.views[i].id;
-        let source = app.session.get(doc_id).and_then(|d| {
-            let b = d.text_blocks(ed.page).into_iter().nth(ed.block)?;
-            let line = b.lines.first().and_then(|li| d.text_lines(ed.page).into_iter().nth(*li))?;
-            d.font_facts(ed.page, &line.font).map(|f| (f, b.bold, b.italic))
-        });
-        let mut replace = false;
-        if let Some((facts, bold, italic)) = &source {
-            let carried = if facts.embedded && !facts.subset {
-                tl!("embedded")
-            } else if facts.embedded {
-                tl!("embedded in part")
-            } else {
-                tl!("not embedded")
-            };
-            #[cfg(not(target_arch = "wasm32"))]
-            let on_system = crate::files::installed_font_files(ui.ctx()).map(|fonts| {
-                let want =
-                    pdfcraft_engine::text_fonts::Wanted { base_font: facts.base_font.clone(), bold: *bold, italic: *italic, ..Default::default() };
-                fonts.iter().any(|f| pdfcraft_engine::text_fonts::family_match(&want, f) == pdfcraft_engine::text_fonts::Match::Exact)
-            });
-            #[cfg(target_arch = "wasm32")]
-            let on_system: Option<bool> = {
-                let _ = (bold, italic);
-                None
-            };
-            let system = match on_system {
-                Some(true) => format!(", {}", tl!("installed")),
-                Some(false) => format!(", {}", tl!("not installed")),
-                None => String::new(),
-            };
-            ui.label(egui::RichText::new(format!("{} — {carried}{system}", facts.base_font)).small().color(t.text_muted)).on_hover_text(tl!(
-                "The paragraph's font as the PDF names it, how much of it the document carries, and whether this computer has it."
-            ));
-            replace = ui.button(tl!("Replace font…")).clicked();
-        }
-        if replace {
-            app.offer_for_paragraph(doc_id, ed.page, ed.block, &ed.text.clone());
-        }
-        let font_choices = app.session.get(app.views[i].id).map(|d| d.text_editor_fonts(ed.page)).unwrap_or_default();
-        egui::ComboBox::from_id_salt("document-font-resource")
-            .selected_text(
-                ed.font_resource
-                    .as_ref()
-                    .and_then(|r| font_choices.iter().find(|f| &f.resource == r))
-                    .map_or(tl!("Keep source fonts"), |f| f.face.as_str()),
-            )
-            .show_ui(ui, |ui| {
-                changed |= ui.selectable_value(&mut ed.font_resource, None, tl!("Keep source fonts")).changed();
-                for font in font_choices.iter().filter(|f| !f.resource.starts_with("PCApproved")) {
-                    changed |= ui.selectable_value(&mut ed.font_resource, Some(font.resource.clone()), &font.face).changed();
-                }
-            });
-        if ui.button(tl!("Load font…")).clicked() {
-            app.pick_files(crate::files::FilePurpose::TextFont { page: ed.page }, false);
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        egui::ComboBox::from_id_salt("installed-document-font").selected_text(tl!("Installed fonts…")).show_ui(ui, |ui| {
-            if let Some(fonts) = crate::files::installed_font_files(ui.ctx()) {
-                if fonts.is_empty() {
-                    ui.label(tl!("No embeddable installed fonts found. Load a font file."));
-                }
-                // The closest to the paragraph's font first.
-                let want = source.as_ref().map(|(f, bold, italic)| pdfcraft_engine::text_fonts::Wanted {
-                    base_font: f.base_font.clone(),
-                    bold: *bold,
-                    italic: *italic,
-                    serif: f.serif,
-                    monospace: f.monospace,
-                    sample: ed.text.clone(),
-                    widths: f.widths.clone(),
-                });
-                let ordered: Vec<&pdfcraft_engine::text_fonts::FontFile> = match &want {
-                    Some(w) => pdfcraft_engine::text_fonts::rank(w, &fonts),
-                    None => fonts.iter().collect(),
-                };
-                for font in ordered {
-                    if ui.selectable_label(false, font.display()).clicked() {
-                        app.use_paths(crate::files::FilePurpose::TextFont { page: ed.page }, std::slice::from_ref(&font.path));
-                    }
-                }
-            } else {
-                ui.label(tl!("Finding document fonts…"));
-            }
-        });
-        if let Some(look) = crate::content_ui::format_panel(ui, t, &ed.look) {
-            ed.look = look;
-            changed = true;
-        }
-        changed |= crate::edit_text_ui::extras_panel(ui, &mut ed.extras);
-        if changed {
-            let edit = pdfcraft_engine::Edit::EditTextBlock { page: ed.page, block: ed.block, text: ed.text.clone(), style: ed.style() };
-            if app.apply_edit(edit) {
-                ed.applied();
-                if let Some(doc) = app.session.get(app.views[i].id)
-                    && let Some(block) = doc.text_blocks(ed.page).get(ed.block)
-                {
-                    ed.refresh_source(block, doc.text_lines(ed.page));
-                    ed.fonts = crate::edit_text_ui::install_source_fonts(ui.ctx(), doc, ed.page);
-                }
-            }
-            app.views[i].line_editor = Some(ed);
-        }
-        ui.add_space(6.0);
-        ui.separator();
+/// Edit a PDF ▸ Edit image, for the selected added image. Text is formatted in the Format text
+/// panel floating over the page (`text_panel`).
+fn image_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
+    // A paragraph being edited owns the selection; its panel floats over the page.
+    if app.active_ids().is_some_and(|(i, _)| app.views.get(i).is_some_and(|v| v.line_editor.is_some())) {
         return;
     }
     let image = app.active_ids().and_then(|(i, id)| {
@@ -497,34 +387,7 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
         }
         ui.add_space(6.0);
         ui.separator();
-        return;
     }
-    let selected = app.active_ids().and_then(|(i, id)| {
-        let (page, index) = app.views[i].content.selected?;
-        let doc = app.session.get(id)?;
-        let a = doc.added.iter().filter(|a| a.page == page).nth(index)?;
-        match &a.content {
-            pdfcraft_engine::AddedContent::Text(text) => Some((page, index, text.clone())),
-            _ => None,
-        }
-    });
-    match selected {
-        Some((page, index, text)) => {
-            if let Some(style) = crate::content_ui::format_panel(ui, t, &text) {
-                app.text_style = pdfcraft_engine::AddedText { text: String::new(), rect: [0.0; 4], ..style.clone() };
-                app.apply_edit(pdfcraft_engine::Edit::UpdateContent { page, index, content: pdfcraft_engine::AddedContent::Text(style) });
-            }
-        }
-        None if app.quick_tool == crate::QuickTool::AddText => {
-            crate::content_ui::hint(ui, t);
-            if let Some(style) = crate::content_ui::format_panel(ui, t, &app.text_style) {
-                app.text_style = style;
-            }
-        }
-        None => return,
-    }
-    ui.add_space(6.0);
-    ui.separator();
 }
 
 // ───────────────────────────────────────────────────────────────────────────── right panels
