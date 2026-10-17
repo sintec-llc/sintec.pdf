@@ -47,6 +47,8 @@ modules:
       - install -Dm644 share/metainfo/ai.storyteller.pdfcraft.metainfo.xml /app/share/metainfo/ai.storyteller.pdfcraft.metainfo.xml
       # OCR models (with their licences), found at /app/bin/../share/pdfcraft/models.
       - mkdir -p /app/share/pdfcraft && cp -R share/pdfcraft/models /app/share/pdfcraft/
+      # Substitute fonts (with their licences), found at /app/bin/../share/pdfcraft/fonts.
+      - cp -R share/pdfcraft/fonts /app/share/pdfcraft/
       # Licences, including the embedded craft-fonts' OFL texts.
       - mkdir -p /app/share/icons /app/share/doc && cp -R share/icons/hicolor /app/share/icons/ && cp -R share/doc/pdfcraft /app/share/doc/
     sources:

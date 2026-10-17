@@ -2447,6 +2447,7 @@ animation effects	Off	Выкл
 	same font	тот же шрифт
 	usual substitute	обычная замена
 	{face} — same glyph widths (off by {d} on average)	{face} — те же ширины глифов (в среднем отличие {d})
+	included with Sintec.PDF	входит в состав Sintec.PDF
 	The text wasn't changed.	Текст не изменён.
 	embedded	встроен
 	embedded in part	встроен частично

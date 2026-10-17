@@ -41,7 +41,7 @@ pub(crate) fn installed_font_files(ctx: &egui::Context) -> Option<Vec<pdfcraft_e
         if std::thread::Builder::new()
             .name("document-font-discovery".into())
             .spawn(move || {
-                let fonts = pdfcraft_engine::text_fonts::discover(&pdfcraft_engine::text_fonts::installed_directories());
+                let fonts = pdfcraft_engine::text_fonts::discover_all();
                 if let Ok(mut result) = result.lock() {
                     *result = Some(fonts);
                 }

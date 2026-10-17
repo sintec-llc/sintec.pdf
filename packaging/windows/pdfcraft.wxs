@@ -321,6 +321,52 @@
         <File Id="LicenceFile7" Source="$(var.BinDir)\OFL-MarckScript.txt" KeyPath="yes" />
       </Component>
 
+      <!-- Substitute fonts (OFL-1.1; licence texts alongside) in fonts\ beside the exe: metric-compatible
+           stand-ins for Calibri, Cambria, Times New Roman and Courier New, plus PT Sans. -->
+      <Component Id="PdfcraftSubstituteFonts" Subdirectory="fonts" Guid="6B1F0C52-3E57-4F4B-9D1A-7C2A5E8B4D31">
+        <File Id="SubFontCarlitoBold" Source="$(var.BinDir)\fonts\Carlito-Bold.ttf" KeyPath="yes" />
+        <File Id="SubFontCarlitoBoldLicence" Source="$(var.BinDir)\fonts\Carlito-Bold.ttf.LICENCE.txt" />
+        <File Id="SubFontCarlitoBoldItalic" Source="$(var.BinDir)\fonts\Carlito-BoldItalic.ttf" />
+        <File Id="SubFontCarlitoBoldItalicLicence" Source="$(var.BinDir)\fonts\Carlito-BoldItalic.ttf.LICENCE.txt" />
+        <File Id="SubFontCarlitoItalic" Source="$(var.BinDir)\fonts\Carlito-Italic.ttf" />
+        <File Id="SubFontCarlitoItalicLicence" Source="$(var.BinDir)\fonts\Carlito-Italic.ttf.LICENCE.txt" />
+        <File Id="SubFontCarlitoRegular" Source="$(var.BinDir)\fonts\Carlito-Regular.ttf" />
+        <File Id="SubFontCarlitoRegularLicence" Source="$(var.BinDir)\fonts\Carlito-Regular.ttf.LICENCE.txt" />
+        <File Id="SubFontCaladeaBold" Source="$(var.BinDir)\fonts\Caladea-Bold.ttf" />
+        <File Id="SubFontCaladeaBoldLicence" Source="$(var.BinDir)\fonts\Caladea-Bold.ttf.LICENCE.txt" />
+        <File Id="SubFontCaladeaBoldItalic" Source="$(var.BinDir)\fonts\Caladea-BoldItalic.ttf" />
+        <File Id="SubFontCaladeaBoldItalicLicence" Source="$(var.BinDir)\fonts\Caladea-BoldItalic.ttf.LICENCE.txt" />
+        <File Id="SubFontCaladeaItalic" Source="$(var.BinDir)\fonts\Caladea-Italic.ttf" />
+        <File Id="SubFontCaladeaItalicLicence" Source="$(var.BinDir)\fonts\Caladea-Italic.ttf.LICENCE.txt" />
+        <File Id="SubFontCaladeaRegular" Source="$(var.BinDir)\fonts\Caladea-Regular.ttf" />
+        <File Id="SubFontCaladeaRegularLicence" Source="$(var.BinDir)\fonts\Caladea-Regular.ttf.LICENCE.txt" />
+        <File Id="SubFontTinosBold" Source="$(var.BinDir)\fonts\Tinos-Bold.ttf" />
+        <File Id="SubFontTinosBoldLicence" Source="$(var.BinDir)\fonts\Tinos-Bold.ttf.LICENCE.txt" />
+        <File Id="SubFontTinosBoldItalic" Source="$(var.BinDir)\fonts\Tinos-BoldItalic.ttf" />
+        <File Id="SubFontTinosBoldItalicLicence" Source="$(var.BinDir)\fonts\Tinos-BoldItalic.ttf.LICENCE.txt" />
+        <File Id="SubFontTinosItalic" Source="$(var.BinDir)\fonts\Tinos-Italic.ttf" />
+        <File Id="SubFontTinosItalicLicence" Source="$(var.BinDir)\fonts\Tinos-Italic.ttf.LICENCE.txt" />
+        <File Id="SubFontTinosRegular" Source="$(var.BinDir)\fonts\Tinos-Regular.ttf" />
+        <File Id="SubFontTinosRegularLicence" Source="$(var.BinDir)\fonts\Tinos-Regular.ttf.LICENCE.txt" />
+        <File Id="SubFontCousineBold" Source="$(var.BinDir)\fonts\Cousine-Bold.ttf" />
+        <File Id="SubFontCousineBoldLicence" Source="$(var.BinDir)\fonts\Cousine-Bold.ttf.LICENCE.txt" />
+        <File Id="SubFontCousineBoldItalic" Source="$(var.BinDir)\fonts\Cousine-BoldItalic.ttf" />
+        <File Id="SubFontCousineBoldItalicLicence" Source="$(var.BinDir)\fonts\Cousine-BoldItalic.ttf.LICENCE.txt" />
+        <File Id="SubFontCousineItalic" Source="$(var.BinDir)\fonts\Cousine-Italic.ttf" />
+        <File Id="SubFontCousineItalicLicence" Source="$(var.BinDir)\fonts\Cousine-Italic.ttf.LICENCE.txt" />
+        <File Id="SubFontCousineRegular" Source="$(var.BinDir)\fonts\Cousine-Regular.ttf" />
+        <File Id="SubFontCousineRegularLicence" Source="$(var.BinDir)\fonts\Cousine-Regular.ttf.LICENCE.txt" />
+        <File Id="SubFontPTSansWebBold" Source="$(var.BinDir)\fonts\PT_Sans-Web-Bold.ttf" />
+        <File Id="SubFontPTSansWebBoldLicence" Source="$(var.BinDir)\fonts\PT_Sans-Web-Bold.ttf.LICENCE.txt" />
+        <File Id="SubFontPTSansWebBoldItalic" Source="$(var.BinDir)\fonts\PT_Sans-Web-BoldItalic.ttf" />
+        <File Id="SubFontPTSansWebBoldItalicLicence" Source="$(var.BinDir)\fonts\PT_Sans-Web-BoldItalic.ttf.LICENCE.txt" />
+        <File Id="SubFontPTSansWebItalic" Source="$(var.BinDir)\fonts\PT_Sans-Web-Italic.ttf" />
+        <File Id="SubFontPTSansWebItalicLicence" Source="$(var.BinDir)\fonts\PT_Sans-Web-Italic.ttf.LICENCE.txt" />
+        <File Id="SubFontPTSansWebRegular" Source="$(var.BinDir)\fonts\PT_Sans-Web-Regular.ttf" />
+        <File Id="SubFontPTSansWebRegularLicence" Source="$(var.BinDir)\fonts\PT_Sans-Web-Regular.ttf.LICENCE.txt" />
+        <File Id="SubFontAttribution" Source="$(var.BinDir)\fonts\ATTRIBUTION.txt" />
+      </Component>
+
       <!-- OCR models (CC-BY-SA-4.0, licences alongside) in models\ beside the exe, where
            pdfcraft_ocr::Models::find looks, so Scan & OCR works offline right after install. -->
       <Component Id="PdfcraftOcrModels" Subdirectory="models" Guid="CF874DC8-D68A-4AEA-ABD9-0E63A3992E5F">

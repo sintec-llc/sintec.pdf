@@ -53,6 +53,8 @@ cp -R "$ROOT/assets/app-icon/hicolor" "$STAGE/share/icons/"
 copy_docs "$STAGE/share/doc/pdfcraft"
 # OCR models: the app finds them at <bin>/../share/pdfcraft/models.
 stage_models "$STAGE/share/pdfcraft/models"
+# Substitute fonts: <bin>/../share/pdfcraft/fonts.
+stage_fonts "$STAGE/share/pdfcraft/fonts"
 
 "$STAGE/bin/pdfcraft" --version
 mkdir -p "$DIST"

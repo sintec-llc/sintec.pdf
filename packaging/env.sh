@@ -84,6 +84,21 @@ stage_models() {
   ls -l "$dest"
 }
 
+# Fetch the substitute fonts (cargo xtask fonts) into $1, beside the OCR models.
+stage_fonts() {
+  local dest="$1"
+  mkdir -p "$dest"
+  dest="$(cd "$dest" && pwd)"
+  (cd "$ROOT" && cargo xtask fonts "$dest")
+  rm -f "$dest"/*.part
+  if ! ls "$dest"/*.ttf >/dev/null 2>&1 || [ ! -s "$dest/ATTRIBUTION.txt" ]; then
+    echo "error: no substitute fonts in $dest after cargo xtask fonts" >&2
+    exit 1
+  fi
+  echo "Substitute fonts in $dest:"
+  ls -l "$dest"
+}
+
 # Portable SHA-256 of a file (prints just the hash).
 sha256() {
   if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi

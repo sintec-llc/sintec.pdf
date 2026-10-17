@@ -391,7 +391,7 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
             let on_system = crate::files::installed_font_files(ui.ctx()).map(|fonts| {
                 let want =
                     pdfcraft_engine::text_fonts::Wanted { base_font: facts.base_font.clone(), bold: *bold, italic: *italic, ..Default::default() };
-                fonts.iter().any(|f| pdfcraft_engine::text_fonts::family_match(&want, f) == pdfcraft_engine::text_fonts::Match::Exact)
+                fonts.iter().any(|f| !f.bundled && pdfcraft_engine::text_fonts::family_match(&want, f) == pdfcraft_engine::text_fonts::Match::Exact)
             });
             #[cfg(target_arch = "wasm32")]
             let on_system: Option<bool> = {
@@ -449,7 +449,7 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
                     None => fonts.iter().collect(),
                 };
                 for font in ordered {
-                    if ui.selectable_label(false, font.display()).clicked() {
+                    if ui.selectable_label(false, crate::font_substitute::listed_name(font)).clicked() {
                         app.use_paths(crate::files::FilePurpose::TextFont { page: ed.page }, std::slice::from_ref(&font.path));
                     }
                 }
