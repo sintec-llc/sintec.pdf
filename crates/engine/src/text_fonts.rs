@@ -14,6 +14,8 @@ pub struct FontFile {
     pub style: pdfcraft_fonts::embedding::FaceStyle,
     /// Advance widths per 1000 em of the probe characters the face has (its width fingerprint).
     pub widths: Vec<(char, u16)>,
+    /// Shipped with the app (see [`bundled_directories`]), not installed on the machine.
+    pub bundled: bool,
 }
 
 impl FontFile {
@@ -54,6 +56,32 @@ pub fn installed_directories() -> Vec<PathBuf> {
     }
 }
 
+/// Where the app's own substitute fonts (Carlito, Caladea, Tinos, Cousine, PT Sans) live: `fonts`
+/// beside the executable (Windows), `../Resources/fonts` (macOS bundle), `../share/pdfcraft/fonts`
+/// (Linux packages) and the source tree's `assets/substitute-fonts` (`cargo xtask fonts`).
+/// Folders that don't exist are skipped by [`discover`].
+pub fn bundled_directories() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Some(exe_dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+        dirs.push(exe_dir.join("fonts"));
+        dirs.push(exe_dir.join("../Resources/fonts"));
+        dirs.push(exe_dir.join("../share/pdfcraft/fonts"));
+    }
+    dirs.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/substitute-fonts"));
+    dirs
+}
+
+/// The installed faces plus the bundled ones (flagged [`FontFile::bundled`]). A bundled face
+/// whose file is also reachable through the installed folders is listed once, as installed.
+pub fn discover_all() -> Vec<FontFile> {
+    let mut files = discover(&installed_directories());
+    let known: std::collections::HashSet<PathBuf> = files.iter().filter_map(|f| f.path.canonicalize().ok()).collect();
+    let bundled = scan(&bundled_directories(), true).into_iter().filter(|f| f.path.canonicalize().map_or(true, |p| !known.contains(&p)));
+    files.extend(bundled);
+    sort_files(&mut files);
+    files
+}
+
 /// How many bytes of font files one scan reads at most: a full Windows Fonts folder (≈ 1 GB
 /// with the optional language packs) fits; each file is read, checked and dropped in turn.
 const SCAN_BUDGET: u64 = 2 << 30;
@@ -61,6 +89,10 @@ const SCAN_BUDGET: u64 = 2 << 30;
 /// Bounded, symlink-free scan. Only standalone, embeddable faces are listed.
 /// The caller controls roots (automation resolves confinement before calling this).
 pub fn discover(roots: &[PathBuf]) -> Vec<FontFile> {
+    scan(roots, false)
+}
+
+fn scan(roots: &[PathBuf], bundled: bool) -> Vec<FontFile> {
     use std::io::Read;
     let mut pending: Vec<_> = roots.iter().take(16).map(|r| (r.clone(), 0usize)).collect();
     let mut files = Vec::new();
@@ -93,14 +125,18 @@ pub fn discover(roots: &[PathBuf]) -> Vec<FontFile> {
             }
             if let (Ok((family, face)), Ok(style)) = (pdfcraft_fonts::embedding::names(&bytes), pdfcraft_fonts::embedding::style_of(&bytes)) {
                 let widths = pdfcraft_fonts::embedding::probe_widths(&bytes);
-                files.push(FontFile { path, family, face, style, widths });
+                files.push(FontFile { path, family, face, style, widths, bundled });
             }
         }
     }
+    sort_files(&mut files);
+    files
+}
+
+fn sort_files(files: &mut [FontFile]) {
     files.sort_by(|a, b| {
         a.family.cmp(&b.family).then(a.style.weight.cmp(&b.style.weight)).then(a.style.italic.cmp(&b.style.italic)).then(a.path.cmp(&b.path))
     });
-    files
 }
 
 fn font_extension(path: &Path) -> bool {
@@ -111,7 +147,7 @@ pub use pdfcraft_fonts::embedding::family_key;
 
 /// Families that stand in for each other (metric-compatible or the usual substitutes), by key.
 const ALIASES: &[&[&str]] = &[
-    &["arial", "helvetica", "helveticaneue", "liberationsans", "arimo", "nimbussans", "nimbussansl", "freesans", "ptsans"],
+    &["arial", "helvetica", "helveticaneue", "liberationsans", "arimo", "nimbussans", "nimbussansl", "freesans"],
     &["timesnewroman", "times", "timesroman", "liberationserif", "tinos", "nimbusroman", "nimbusromanno9l", "freeserif", "ptserif"],
     &["couriernew", "courier", "liberationmono", "cousine", "nimbusmono", "nimbusmonol", "freemono", "ptmono"],
     &["calibri", "carlito"],
@@ -127,7 +163,7 @@ const ALIASES: &[&[&str]] = &[
 ];
 
 /// The faces each class falls back to first, by key, best first.
-const SANS: &[&str] = &["arial", "liberationsans", "dejavusans", "segoeui", "notosans"];
+const SANS: &[&str] = &["arial", "liberationsans", "dejavusans", "segoeui", "notosans", "ptsans"];
 const SERIF: &[&str] = &["timesnewroman", "liberationserif", "dejavuserif", "georgia", "notoserif"];
 const MONO: &[&str] = &["couriernew", "liberationmono", "dejavusansmono", "consolas"];
 
@@ -285,8 +321,10 @@ pub fn rank<'a>(want: &Wanted, fonts: &'a [FontFile]) -> Vec<&'a FontFile> {
             };
             let common = list.iter().position(|k| *k == key).map_or(0, |i| 500 - 50 * i as i32);
             let weight = -(i32::from(f.style.weight) - want_weight).abs();
+            // At an otherwise equal score the installed face wins over the bundled one.
+            let installed_first = i32::from(!f.bundled);
             let slant = if f.style.italic == want.italic { 400 } else { 0 };
-            (family + same_class + common + weight + slant, f)
+            (family + same_class + common + weight + slant + installed_first, f)
         })
         .collect();
     scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.family.cmp(&b.1.family)));
@@ -305,7 +343,12 @@ mod tests {
             face: family.replace(' ', ""),
             style: FaceStyle { weight, italic, monospace: family.contains("Courier"), serif, cyrillic: !family.contains("Latin") },
             widths: Vec::new(),
+            bundled: false,
         }
+    }
+
+    fn bundled(family: &str, weight: u16, italic: bool, serif: Option<bool>) -> FontFile {
+        FontFile { bundled: true, path: PathBuf::from(format!("bundled/{family}-{weight}-{italic}.ttf")), ..face(family, weight, italic, serif) }
     }
 
     fn known(offset: f32, n: usize) -> Vec<(char, f32)> {
@@ -395,5 +438,78 @@ mod tests {
         // Monospace.
         assert_eq!(first(want("Courier", false, false, "x")).as_deref(), Some("Courier New"));
         assert!(rank(&want("Anything", false, false, ""), &[]).is_empty());
+    }
+
+    #[test]
+    fn bundled_faces_stand_in_as_aliases_for_their_originals() {
+        for (original, substitute) in [("Calibri", "Carlito"), ("Cambria", "Caladea"), ("Times New Roman", "Tinos"), ("Courier New", "Cousine")] {
+            let want = Wanted { base_font: format!("ABCDEF+{}", original.replace(' ', "")), ..Wanted::default() };
+            assert_eq!(family_match(&want, &bundled(substitute, 400, false, Some(true))), Match::Alias, "{original}");
+        }
+        // PT Sans is only a sans class fallback, never an alias.
+        let arial = Wanted { base_font: "Arial".into(), ..Wanted::default() };
+        assert_eq!(family_match(&arial, &bundled("PT Sans", 400, false, Some(false))), Match::Other);
+    }
+
+    #[test]
+    fn installed_faces_beat_bundled_ones() {
+        let fonts = vec![
+            bundled("Carlito", 400, false, Some(false)),
+            bundled("Tinos", 400, false, Some(true)),
+            face("Calibri", 400, false, Some(false)),
+            face("Carlito", 400, false, Some(false)),
+        ];
+        let want = |base: &str| Wanted { base_font: base.into(), ..Wanted::default() };
+        // The exact installed face first; then, between equal stand-ins, the installed one.
+        let ranked = rank(&want("Calibri"), &fonts);
+        assert_eq!((ranked[0].family.as_str(), ranked[0].bundled), ("Calibri", false));
+        assert_eq!((ranked[1].family.as_str(), ranked[1].bundled), ("Carlito", false));
+        assert!(ranked[2].bundled);
+        // Without the original installed, the bundled stand-in beats the unrelated serif.
+        let only = vec![bundled("Tinos", 400, false, Some(true)), face("Georgia", 400, false, Some(true))];
+        assert_eq!(rank(&want("Times New Roman"), &only)[0].family, "Tinos");
+        // And with an installed twin of the same family, the installed one wins.
+        let twins = vec![bundled("Tinos", 400, false, Some(true)), face("Tinos", 400, false, Some(true))];
+        assert!(!rank(&want("TimesNewRoman"), &twins)[0].bundled);
+    }
+
+    #[test]
+    fn pt_sans_is_a_cyrillic_sans_fallback_not_an_alias() {
+        let fonts = vec![bundled("PT Sans", 400, false, Some(false)), bundled("Tinos", 400, false, Some(true))];
+        let want = Wanted { base_font: "Verdana".into(), serif: Some(false), sample: "Привет".into(), ..Wanted::default() };
+        assert_eq!(rank(&want, &fonts)[0].family, "PT Sans");
+    }
+
+    #[test]
+    fn bundled_directories_are_found_and_missing_ones_skipped() {
+        let dirs = bundled_directories();
+        assert!(dirs.iter().any(|d| d.ends_with("substitute-fonts")) && dirs.iter().any(|d| d.ends_with("fonts")));
+        assert!(scan(&[PathBuf::from("no/such/dir")], true).is_empty());
+        let dir = std::env::temp_dir().join(format!("pdfcraft-bundled-fonts-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("Corrupt.ttf"), b"not a font");
+        assert!(scan(std::slice::from_ref(&dir), true).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// With the fonts fetched (`cargo xtask fonts`), every bundled face is listed and flagged; all but Caladea (Latin only) have Cyrillic.
+    #[test]
+    fn fetched_substitute_fonts_are_discovered_with_cyrillic() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/substitute-fonts");
+        if !dir.is_dir() {
+            return;
+        }
+        let found = scan(&[dir], true);
+        if found.is_empty() {
+            return;
+        }
+        assert!(
+            found.iter().all(|f| f.bundled && (f.style.cyrillic || f.family == "Caladea")),
+            "{:?}",
+            found.iter().filter(|f| !f.style.cyrillic).map(|f| &f.face).collect::<Vec<_>>()
+        );
+        for family in ["Carlito", "Caladea", "Tinos", "Cousine", "PT Sans"] {
+            assert!(found.iter().any(|f| f.family == family), "{family}");
+        }
     }
 }

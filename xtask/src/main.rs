@@ -36,6 +36,11 @@ const COMMANDS: &[(&str, &str, Command)] = &[
     ("text-oracle", "Compare text extraction with pdftotext over corpus/ (word F1; target median ≥ 0.97)", gates::text_oracle),
     ("screenshots", "Regenerate the README screenshots in docs/images/ and their ATTRIBUTION entries", screenshots::run),
     ("models", "Fetch the OCR models (ATTRIBUTION.toml kind = \"model\") into assets/models/, verified by SHA-256", assets::models),
+    (
+        "fonts",
+        "Fetch the substitute fonts (ATTRIBUTION.toml kind = \"substitute-font\") into assets/substitute-fonts/, verified by SHA-256",
+        assets::fonts,
+    ),
     ("demo-pdf", "Build dist/demo/pdfcraft-showcase.pdf (needs Google Chrome or Chromium)", demo_pdf::run),
     ("rebrand", "Sintec.PDF: name the product in upstream's new strings and catalogs after a sync (--check only lists)", rebrand::run),
 ];

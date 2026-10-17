@@ -511,8 +511,13 @@ fn label_of(want: &Wanted) -> impl Fn(&FontFile) -> String + '_ {
             crate::i18n::fmt(tl!("{face} — same glyph widths (off by {d} on average)"), &[("face", &f.display()), ("d", &format!("{d:.1}"))])
         }
         Match::Alias => format!("{} — {}", f.display(), tl!("usual substitute")),
-        Match::Other => f.display(),
+        Match::Other => listed_name(f),
     }
+}
+
+/// A face's name as listed: bundled ones say they come with the app.
+pub(crate) fn listed_name(f: &FontFile) -> String {
+    if f.bundled { format!("{} — {}", f.display(), tl!("included with Sintec.PDF")) } else { f.display() }
 }
 
 /// Apply the dialog's choice: remember it, load the face, then the edit that waited (or, from
@@ -567,6 +572,7 @@ mod tests {
             face: "MysterySans".into(),
             style: pdfcraft_fonts::embedding::FaceStyle { weight: 400, italic: false, monospace: false, serif: Some(false), cyrillic: true },
             widths,
+            bundled: false,
         };
         let want = Wanted {
             base_font: "CIDFont+F1".into(),

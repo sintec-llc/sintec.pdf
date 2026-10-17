@@ -118,6 +118,16 @@ foreach ($m in $OcrModels) {
   Copy-Item (Join-Path $ModelsSrc $m), (Join-Path $ModelsSrc "$m.LICENCE.txt") $ModelsStage
 }
 
+# Substitute fonts (Carlito, Caladea, Tinos, Cousine, PT Sans): fonts\ beside sintec-pdf.exe is where the
+# editor looks for bundled fonts. Fetched (SHA-256 verified) if missing. Keep in step with pdfcraft.wxs.
+$FontsSrc = Join-Path $Root 'assets\substitute-fonts'
+Invoke-Native 'cargo xtask fonts' { cargo xtask fonts $FontsSrc }
+$FontsStage = Join-Path $Stage 'fonts'
+New-Item -ItemType Directory -Force -Path $FontsStage | Out-Null
+foreach ($f in Get-ChildItem -Path $FontsSrc -File | Where-Object { $_.Extension -in '.ttf', '.txt' }) {
+  Copy-Item $f.FullName $FontsStage
+}
+
 & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'sintec-pdf.exe') (Join-Path $Stage 'sintec-pdf-cli.exe')
 
 # ---- MSI ---------------------------------------------------------------------------------------
@@ -151,6 +161,7 @@ Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Get-ChildItem -LiteralPath $Stage -File | Copy-Item -Destination $Portable
 Copy-Item -Recurse $ModelsStage $Portable
+Copy-Item -Recurse $FontsStage $Portable
 foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE') {
   $p = Join-Path $Root $f
   if (Test-Path $p) { Copy-Item $p $Portable }
