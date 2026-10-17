@@ -2615,6 +2615,67 @@ fn the_format_panel_restyles_the_paragraph_being_edited() {
     assert!(s.views[0].line_editor.as_ref().is_some_and(|e| e.extras.underline));
 }
 
+/// Sintec.PDF: Format text floats over the page, just left of the right rail, only while a
+/// paragraph is open; Esc closes the paragraph and the panel with it.
+#[test]
+fn the_format_panel_floats_left_of_the_rail_while_a_paragraph_is_open() {
+    let mut h = harness(1, |_| {});
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    assert!(h.state().views[0].text_panel_rect().is_none(), "no panel before text is edited");
+    assert!(h.query_by_label("FORMAT TEXT").is_none(), "Format text left the tools panel");
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let at = egui::pos2(r.left() + 40.0 / 200.0 * r.width(), r.top() + (300.0 - 158.0) / 300.0 * r.height());
+    h.hover_at(at);
+    h.run_steps(1);
+    h.drag_at(at);
+    h.run_steps(1);
+    h.drop_at(at);
+    h.run_steps(3);
+    assert!(h.state().views[0].line_editor.is_some(), "the paragraph opens");
+    let panel = h.state().views[0].text_panel_rect().expect("the panel shows while the paragraph is open");
+    let viewport = h.state().views[0].viewport_rect();
+    assert!(viewport.contains_rect(panel), "the panel floats over the document area: {panel:?} in {viewport:?}");
+    let title = h.get_by_label("FORMAT TEXT").rect();
+    assert!(panel.contains_rect(title), "the controls are in the floating panel: {title:?} in {panel:?}");
+    // At the right edge, left of the rail (the window's last 48 points, its buttons inside).
+    let rail_button = h.get_by_label("Comments").rect();
+    assert!(rail_button.left() >= 1400.0 - 48.0, "the rail is at the window's right edge: {rail_button:?}");
+    assert!(panel.right() <= 1400.0 - 48.0, "the panel does not cover the rail: {panel:?}");
+    assert!(panel.width() <= 301.0, "the panel keeps its width: {panel:?}");
+    assert!(panel.right() > viewport.right() - 40.0, "the panel is against the right edge: {panel:?} in {viewport:?}");
+    // A visual check: PDFCRAFT_ORGANIZE_SNAPSHOT=1 (wgpu) PDFCRAFT_TEXT_PANEL_SNAPSHOT=out.png.
+    if let Some(path) = std::env::var_os("PDFCRAFT_TEXT_PANEL_SNAPSHOT") {
+        h.render().unwrap().save(std::path::Path::new(&path)).unwrap();
+    }
+    // The panel takes no keyboard focus: typing still edits the paragraph.
+    h.event(egui::Event::Text("!".into()));
+    h.run_steps(2);
+    assert!(h.state().views[0].line_editor.as_ref().is_some_and(|e| e.text.contains('!')), "typing reaches the paragraph");
+    assert!(h.state().views[0].text_panel_rect().is_some());
+    h.key_press(Key::Escape);
+    h.run_steps(3);
+    assert!(h.state().views[0].line_editor.is_none(), "Esc closes the paragraph");
+    assert!(h.state().views[0].text_panel_rect().is_none(), "and the panel with it");
+    assert!(h.query_by_label("FORMAT TEXT").is_none());
+}
+
+/// Sintec.PDF: the Add text tool formats the text it adds in the same floating panel, and the
+/// panel goes with the tool.
+#[test]
+fn the_add_text_tool_shows_the_format_panel() {
+    let mut h = harness(1, |_| {});
+    assert!(h.state_mut().execute("edit.text"));
+    h.run_steps(3);
+    let panel = h.state().views[0].text_panel_rect().expect("the panel shows with the Add text tool");
+    assert!(panel.contains_rect(h.get_by_label("FORMAT TEXT").rect()));
+    assert!(h.query_by_label("SOURCE FONT").is_none(), "new text has no source font");
+    h.state_mut().set_option("quick", "select").unwrap();
+    h.run_steps(3);
+    assert!(h.state().views[0].text_panel_rect().is_none(), "the panel goes with the tool");
+    assert!(h.query_by_label("FORMAT TEXT").is_none());
+}
+
 #[test]
 fn selected_text_formatting_keeps_the_rest_of_the_paragraph_and_reopens() {
     let mut h = harness(1, |_| {});
