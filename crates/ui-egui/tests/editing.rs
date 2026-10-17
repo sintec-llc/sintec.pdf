@@ -2696,6 +2696,38 @@ fn dragging_a_paragraph_moves_it_and_its_edge_rewraps_it() {
     assert!(h.state().views[0].line_editor.is_none());
 }
 
+#[test]
+fn dragging_a_paragraph_by_its_move_handle_moves_it() {
+    let mut h = harness(1, |_| {});
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let block = |h: &Harness<'static, PdfCraftApp>| {
+        let s = h.state();
+        s.session.get(s.views[0].id).unwrap().text_blocks(0)[0].clone()
+    };
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 200.0;
+    let before = block(&h);
+    // The box (2 px margin) top-left in screen space; the 18 px grip sits just above it.
+    let left = r.left() + before.rect[0] as f32 * k - 2.0;
+    let top = r.top() + (300.0 - before.rect[3] as f32) * k - 2.0;
+    assert!(top - 19.0 > r.top(), "fixture text leaves room above the box for the grip");
+    let grip = egui::pos2(left + 9.0, top - 10.0);
+    // Hovering the grip shows the move cursor.
+    h.hover_at(grip);
+    h.run_steps(2);
+    assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::Move);
+    // Press near the grip's hit-area edge (outside the drawn square) and fling the pointer far
+    // off the box.
+    let start = grip + egui::vec2(-4.0, -4.0);
+    drag(&mut h, start, start + egui::vec2(30.0 * k, 40.0 * k));
+    assert!(h.state().views[0].line_editor.is_none());
+    let moved = block(&h);
+    let near = |a: f64, b: f64| (a - b).abs() < 1.5;
+    assert!(near(moved.rect[0], before.rect[0] + 30.0) && near(moved.rect[1], before.rect[1] - 40.0), "{:?} → {:?}", before.rect, moved.rect);
+    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().can_undo(), Some("Move object"));
+}
+
 /// Contributor-original text, with an off-origin CropBox. Keep the moving paragraph last in
 /// source order so an ordinary hit picks it again when two independent boxes fully overlap.
 fn paragraph_drag_fixture(content: &str, rotation: i64, unit: i64) -> Vec<u8> {

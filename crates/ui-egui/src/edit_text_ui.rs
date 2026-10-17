@@ -378,6 +378,31 @@ fn width_handles(b: Rect) -> [Rect; 2] {
     [b.left(), b.right()].map(|x| Rect::from_center_size(Pos2::new(x, b.center().y), egui::vec2(7.0, h)))
 }
 
+/// Side of the visible move grip (screen pixels).
+const MOVE_GRIP: f32 = 18.0;
+/// How far the grip's invisible hit area extends beyond what is drawn (24 px in all).
+const MOVE_GRIP_SLOP: f32 = 3.0;
+
+/// The move grip of a paragraph box: just above its top-left corner so it stays off the text;
+/// inside the page's top edge when the box sits against it.
+fn move_handle(b: Rect, bounds: Rect) -> Rect {
+    let top = if b.top() - MOVE_GRIP - 1.0 < bounds.top() { b.top() + 1.0 } else { b.top() - MOVE_GRIP - 1.0 };
+    Rect::from_min_size(Pos2::new(b.left(), top), egui::vec2(MOVE_GRIP, MOVE_GRIP))
+}
+
+/// The topmost box whose move grip (hit area included) is under `p`.
+fn handle_at(boxes: &[Rect], bounds: Rect, p: Pos2) -> Option<usize> {
+    boxes.iter().enumerate().rev().find_map(|(i, b)| move_handle(*b, bounds).expand(MOVE_GRIP_SLOP).contains(p).then_some(i))
+}
+
+/// Is `p` on the move grip of a paragraph box on `page`? Such a press starts a box drag, not a
+/// marquee selection (the grip sits just outside the box, on empty page).
+pub(crate) fn on_move_grip(view: &DocView, xf: &PageXform, info: &DocInfo, page: usize, p: Pos2) -> bool {
+    let Some((_, lines)) = view.edit_lines.get(&page) else { return false };
+    let boxes: Vec<Rect> = lines.iter().map(|l| xf.user_rect(info, page, l.rect.map(|v| v as f32)).expand(2.0)).collect();
+    handle_at(&boxes, xf.rect, p).is_some()
+}
+
 /// The edge of `b` that `p` grabs: anywhere along its height, within reach of the line. A narrow
 /// box keeps its middle for moving.
 fn edge_at(b: Rect, p: Pos2) -> Option<Grip> {
@@ -660,16 +685,34 @@ pub(crate) fn page_input(
     // The width handle needs the page upright (or upside down): on a quarter-turned page the
     // screen's horizontal is the paragraph's vertical.
     let upright = info.pages.get(page).is_some_and(|p| p.rotation % 180 == 0);
+    let draw_move_grip = |b: Rect| {
+        let g = move_handle(b, xf.rect);
+        painter.rect(g, CornerRadius::same(3), ACCENT, Stroke::new(1.0, Color32::WHITE), egui::StrokeKind::Middle);
+        // Four-way arrow glyph.
+        let (c, r) = (g.center(), MOVE_GRIP * 0.3);
+        let s = Stroke::new(1.5, Color32::WHITE);
+        painter.line_segment([c - egui::vec2(r, 0.0), c + egui::vec2(r, 0.0)], s);
+        painter.line_segment([c - egui::vec2(0.0, r), c + egui::vec2(0.0, r)], s);
+        for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
+            let tip = c + egui::vec2(dx, dy) * r;
+            let back = tip - egui::vec2(dx, dy) * 3.0;
+            let side = egui::vec2(dy, dx) * 2.5;
+            painter.line_segment([tip, back + side], s);
+            painter.line_segment([tip, back - side], s);
+        }
+    };
     let draw_handles = |b: Rect| {
         for h in width_handles(b) {
             painter.rect(h, CornerRadius::same(2), Color32::WHITE, Stroke::new(1.0, ACCENT), egui::StrokeKind::Middle);
         }
+        draw_move_grip(b);
     };
     // A drag in progress: the box follows the pointer (or the grabbed edge does); releasing applies it.
     if let Some(d) = view.block_drag.filter(|d| d.page == page)
         && let (Some(b), Some(l)) = (boxes.get(d.block).copied(), lines.get(d.block))
     {
-        let p = ui.input(|i| i.pointer.interact_pos()).unwrap_or(d.start);
+        // The latest known pointer position, so leaving the box (or a fast flick) keeps the drag.
+        let p = ui.input(|i| i.pointer.interact_pos().or(i.pointer.latest_pos())).unwrap_or(d.start);
         let dx = p.x - d.start.x;
         let preview = match d.grip {
             Grip::Move => b.translate(p - d.start),
@@ -715,13 +758,14 @@ pub(crate) fn page_input(
     if resp.drag_started()
         && active.is_none()
         && let Some(o) = ui.input(|i| i.pointer.press_origin())
-        && let Some((block, grip)) = grab_at(&boxes, o, upright)
+        && let Some((block, grip)) = handle_at(&boxes, xf.rect, o).map(|i| (i, Grip::Move)).or_else(|| grab_at(&boxes, o, upright))
     {
         view.block_drag = Some(BlockDrag { page, block, generation: doc.edit_generation(), start: o, grip });
         return true;
     }
     let Some(p) = ui.input(|i| i.pointer.hover_pos()).filter(|p| xf.rect.contains(*p)) else { return false };
-    let Some((hit, grip)) = grab_at(&boxes, p, upright) else { return false };
+    let on_grip = active.is_none().then(|| handle_at(&boxes, xf.rect, p)).flatten();
+    let Some((hit, grip)) = on_grip.map(|i| (i, Grip::Move)).or_else(|| grab_at(&boxes, p, upright)) else { return false };
     if active != Some(hit) {
         painter.rect_stroke(boxes[hit], CornerRadius::same(2), Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
     }
@@ -729,8 +773,15 @@ pub(crate) fn page_input(
     if upright && active.is_none() {
         draw_handles(boxes[hit]);
     }
-    ui.ctx().set_cursor_icon(if on_edge { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::Text });
-    if resp.clicked() {
+    ui.ctx().set_cursor_icon(if on_grip.is_some() {
+        egui::CursorIcon::Move
+    } else if on_edge {
+        egui::CursorIcon::ResizeHorizontal
+    } else {
+        egui::CursorIcon::Text
+    });
+    // A click on the grip selects nothing: it only moves.
+    if resp.clicked() && on_grip.is_none() {
         view.image_selection = None;
         // Sintec.PDF: start looking for installed fonts now, so a substitute is ready if the
         // typed text needs one (see `font_substitute`).
