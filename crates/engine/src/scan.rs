@@ -60,8 +60,16 @@ pub fn scan_page(dir: &std::path::Path) -> Result<Option<Vec<u8>>, ScanError> {
     } else {
         Err(explain(&String::from_utf8_lossy(&out.stderr)))
     };
-    let _ = std::fs::remove_file(&file);
+    clean_up(dir, &file);
     result
+}
+
+/// Remove the temporary PNG and then its folder (`sintec-scan-<pid>`), which is left behind
+/// otherwise, one per app run that scanned. A folder still holding anything else stays.
+#[cfg(any(windows, test))]
+fn clean_up(dir: &std::path::Path, file: &std::path::Path) {
+    let _ = std::fs::remove_file(file);
+    let _ = std::fs::remove_dir(dir);
 }
 
 /// Elsewhere there is no WIA.
@@ -195,6 +203,24 @@ pub fn explain(stderr: &str) -> ScanError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Task 008: the `sintec-scan-<pid>` folder went with the PNG, not just the PNG.
+    #[test]
+    fn a_scan_leaves_no_temporary_folder_behind() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+        let dir = std::env::temp_dir().join(format!("sintec-scan-test-{}-{nonce}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("scan.png");
+        std::fs::write(&file, b"png").unwrap();
+        clean_up(&dir, &file);
+        assert!(!dir.exists(), "{}", dir.display());
+        // A folder holding something else is not the scan's to remove.
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("other"), b"x").unwrap();
+        clean_up(&dir, &file);
+        assert!(dir.join("other").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn the_script_is_ascii_and_saves_png() {

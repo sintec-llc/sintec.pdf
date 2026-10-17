@@ -76,7 +76,7 @@ impl SignatureDrag {
                 layers.received_tag = Some(tag);
                 layers.background = Some(ctx.load_texture(
                     "signature-drag-background",
-                    ColorImage::from_rgba_premultiplied([out.width as usize, out.height as usize], &out.rgba),
+                    crate::canvas::texture_image([out.width as usize, out.height as usize], out.rgba),
                     TextureOptions::LINEAR,
                 ));
             } else {

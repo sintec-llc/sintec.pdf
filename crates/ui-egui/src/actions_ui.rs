@@ -127,10 +127,14 @@ impl PdfCraftApp {
             }
         };
         #[cfg(not(target_arch = "wasm32"))]
-        if self.run_inline {
-            work();
-        } else {
-            std::thread::Builder::new().name("pdfcraft-action".into()).spawn(work).ok();
+        {
+            let p = progress.clone();
+            crate::jobs::spawn("pdfcraft-action", self.run_inline, work, move |m| {
+                if let Ok(mut s) = p.lock() {
+                    s.done = s.total;
+                    s.message = Some(m);
+                }
+            });
         }
         #[cfg(target_arch = "wasm32")]
         work();

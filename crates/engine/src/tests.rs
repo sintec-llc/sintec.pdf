@@ -4442,3 +4442,62 @@ fn copy_image_finds_a_picture_inside_form_artwork_under_text() {
     assert_eq!(d.page_image_copy_file(0, 0).unwrap(), ("jpg", jpeg));
     assert!(d.page_image_copy_file(0, 1).is_err());
 }
+
+/// Task 008: structurally hostile files (page-tree cycles, a lying /Count, empty and
+/// non-finite boxes, deep nesting, a stream longer than the file, garbage) open or are refused,
+/// and whatever opens renders, takes an edit, undoes, redoes and saves without a panic or hang.
+#[test]
+fn structurally_hostile_pdfs_never_panic_through_open_render_edit_and_save() {
+    let head = "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n";
+    let tail = "trailer << /Root 1 0 R >>\n%%EOF";
+    let page = |media: &str| format!("3 0 obj << /Type /Page /Parent 2 0 R /MediaBox {media} >> endobj\n");
+    let deep = "[".repeat(20_000);
+    let files: Vec<String> = vec![
+        // The page tree points back at itself.
+        format!("{head}2 0 obj << /Type /Pages /Kids [2 0 R 3 0 R] /Count 2 >> endobj\n{}{tail}", page("[0 0 200 200]")),
+        // A page whose parent is a page that lists it again.
+        format!(
+            "{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Pages /Kids [3 0 R] /Parent 2 0 R /Count 1 >> endobj\n{tail}"
+        ),
+        // A /Count that promises a billion pages and no Kids.
+        format!("{head}2 0 obj << /Type /Pages /Kids [] /Count 999999999 >> endobj\n{tail}"),
+        // Zero-size, inverted and absurd boxes.
+        format!("{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n{}{tail}", page("[0 0 0 0]")),
+        format!("{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n{}{tail}", page("[500 500 -3 -1]")),
+        format!("{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n{}{tail}", page("[0 0 1e400 -1e400]")),
+        format!("{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n{}{tail}", page("[0 0 99999999 99999999]")),
+        // Deeply nested arrays in the page and in its content.
+        format!(
+            "{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 99 99] /X {deep} >> endobj\n{tail}"
+        ),
+        format!(
+            "{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 99 99] /Contents 4 0 R >> endobj\n4 0 obj << /Length {} >> stream\n{deep}\nendstream endobj\n{tail}",
+            deep.len()
+        ),
+        // A stream that claims to run far past the end of the file.
+        format!(
+            "{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 99 99] /Contents 4 0 R >> endobj\n4 0 obj << /Length 4000000000 >> stream\n0 0 m 9 9 l S\nendstream endobj\n{tail}"
+        ),
+        // Truncated, empty and not a PDF at all.
+        head.to_owned(),
+        String::new(),
+        "%PDF-".to_owned(),
+        "garbage \u{0}\u{1} trailer << /Root 99 0 R >>".to_owned(),
+    ];
+    for (i, text) in files.into_iter().enumerate() {
+        let bytes = Arc::new(text.into_bytes());
+        let mut s = Session::new();
+        let Ok(id) = s.open(format!("hostile-{i}.pdf"), None, bytes.clone(), None) else { continue };
+        let pages = s.get(id).map_or(0, |d| d.info.pages.len());
+        let mut r = pdfcraft_render::PageRenderer::new(bytes, Default::default());
+        for page in 0..pages.min(2) {
+            let _ = r.render(pdfcraft_render::RenderRequest { page, scale: 1.0, ..Default::default() });
+        }
+        let _ = s.apply(id, Edit::InsertBlankPage { at: pages, width: 100.0, height: 100.0 });
+        let _ = s.apply(id, Edit::DeletePages { pages: vec![0] });
+        let _ = s.undo(id);
+        let _ = s.redo(id);
+        let _ = s.save_bytes(id);
+        s.close(id);
+    }
+}
