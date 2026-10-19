@@ -1064,8 +1064,9 @@ impl PdfCraftApp {
     pub fn bookmark_action(&mut self, action: crate::panels::BmAction) {
         use crate::panels::BmAction as A;
         let Some((i, id)) = self.active_ids() else { return };
-        let current = self.views[i].current;
-        let parent_of = |p: &[usize]| p[..p.len() - 1].to_vec();
+        let Some(current) = self.views.get(i).map(|v| v.current) else { return };
+        // A path's parent and its index among its siblings; `None` for an empty path (no item).
+        let split = |p: &[usize]| p.split_last().map(|(last, parent)| (parent.to_vec(), *last));
         let edit = match action {
             A::New => {
                 let n = self.session.get(id).map_or(0, |d| d.info.outline.len());
@@ -1084,23 +1085,22 @@ impl PdfCraftApp {
             A::SetToCurrentPage(path) => Edit::SetBookmarkPage { path, page: current },
             A::Delete(path) => Edit::DeleteBookmark { path },
             A::MoveUp(path) => {
-                let at = path[path.len() - 1].saturating_sub(1);
-                Edit::MoveBookmark { to_parent: parent_of(&path), from: path, index: at }
+                let Some((to_parent, last)) = split(&path) else { return };
+                Edit::MoveBookmark { to_parent, from: path, index: last.saturating_sub(1) }
             }
             A::MoveDown(path) => {
-                let at = path[path.len() - 1] + 1;
-                Edit::MoveBookmark { to_parent: parent_of(&path), from: path, index: at }
+                let Some((to_parent, last)) = split(&path) else { return };
+                Edit::MoveBookmark { to_parent, from: path, index: last.saturating_add(1) }
             }
             A::Indent(path) => {
-                let mut to_parent = parent_of(&path);
-                to_parent.push(path[path.len() - 1].saturating_sub(1));
+                let Some((mut to_parent, last)) = split(&path) else { return };
+                to_parent.push(last.saturating_sub(1));
                 Edit::MoveBookmark { from: path, to_parent, index: usize::MAX }
             }
             A::Outdent(path) => {
-                let parent = parent_of(&path);
-                let grand = parent_of(&parent);
-                let at = parent[parent.len() - 1] + 1;
-                Edit::MoveBookmark { from: path, to_parent: grand, index: at }
+                // A top-level bookmark has no parent to move out of.
+                let Some((grand, at)) = split(&path).and_then(|(parent, _)| split(&parent)) else { return };
+                Edit::MoveBookmark { from: path, to_parent: grand, index: at.saturating_add(1) }
             }
             A::FromStructure => {
                 self.right = Some(crate::RightPanel::Bookmarks);
@@ -1520,5 +1520,31 @@ mod content_page_tests {
         assert_eq!(content_page(&moved), Some(3));
         assert_eq!(content_page(&Edit::RotatePages { pages: vec![0], degrees: 90 }), None);
         assert_eq!(content_page(&Edit::SetInfo { key: "Title".into(), value: "x".into() }), None);
+    }
+
+    /// Task 008: a bookmark action for a path that has no parent (or no item at all) did
+    /// `len() - 1` on it and panicked; now it does nothing and the outline is unchanged.
+    #[test]
+    fn bookmark_moves_without_a_parent_do_nothing() {
+        use crate::panels::BmAction as A;
+        const PDF: &[u8] = b"%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R >> endobj
+trailer << /Root 1 0 R >>
+%%EOF";
+        let mut app = crate::PdfCraftApp::new();
+        app.open_bytes("one.pdf", None, PDF.to_vec()).unwrap();
+        app.bookmark_action(A::New);
+        let id = app.views[0].id;
+        let outline = |app: &crate::PdfCraftApp| app.session.get(id).unwrap().info.outline.len();
+        assert_eq!(outline(&app), 1);
+        for action in [A::Outdent(vec![0]), A::Outdent(vec![]), A::MoveUp(vec![]), A::MoveDown(vec![]), A::Indent(vec![])] {
+            app.bookmark_action(action);
+        }
+        assert_eq!(outline(&app), 1);
+        // With no document open there is nothing to act on.
+        let mut empty = crate::PdfCraftApp::new();
+        empty.bookmark_action(A::Outdent(vec![0]));
     }
 }

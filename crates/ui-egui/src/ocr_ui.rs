@@ -197,10 +197,13 @@ impl PdfCraftApp {
             }
         };
         #[cfg(not(target_arch = "wasm32"))]
-        if self.run_inline {
-            work();
-        } else {
-            std::thread::Builder::new().name("pdfcraft-ocr".into()).spawn(work).ok();
+        {
+            let p = progress.clone();
+            crate::jobs::spawn("pdfcraft-ocr", self.run_inline, work, move |m| {
+                if let Ok(mut s) = p.lock() {
+                    s.result = Some(Err(m));
+                }
+            });
         }
         #[cfg(target_arch = "wasm32")]
         work();
@@ -283,10 +286,14 @@ impl PdfCraftApp {
             }
         };
         #[cfg(not(target_arch = "wasm32"))]
-        if self.run_inline {
-            work();
-        } else {
-            std::thread::Builder::new().name("pdfcraft-ocr-files".into()).spawn(work).ok();
+        {
+            let p = progress.clone();
+            crate::jobs::spawn("pdfcraft-ocr-files", self.run_inline, work, move |m| {
+                if let Ok(mut s) = p.lock() {
+                    s.done = s.total;
+                    s.message = Some(m);
+                }
+            });
         }
         #[cfg(target_arch = "wasm32")]
         work();
@@ -380,5 +387,35 @@ impl PdfCraftApp {
             }
             Err(e) => self.notify_error(e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Task 008: closing the tab text is being recognised in stops the recognition, so it
+    /// doesn't run on, block the next one ("already running") and end in an error.
+    #[test]
+    fn closing_the_tab_stops_its_recognition() {
+        const PDF: &[u8] = b"%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R >> endobj
+trailer << /Root 1 0 R >>
+%%EOF";
+        let mut app = PdfCraftApp::new();
+        app.open_bytes("a.pdf", None, PDF.to_vec()).unwrap();
+        app.open_bytes("b.pdf", None, PDF.to_vec()).unwrap();
+        let (a, b) = (app.views[0].id, app.views[1].id);
+        let progress = Arc::new(Mutex::new(OcrProgress { total: 1, ..Default::default() }));
+        app.ocr_run = Some(OcrRun { doc: a, progress: progress.clone() });
+        // Another tab closing leaves it alone.
+        app.close_tab(1);
+        assert!(app.ocr_run.is_some() && !progress.lock().unwrap().cancel);
+        assert!(app.session.get(b).is_none());
+        app.close_tab(0);
+        assert!(app.ocr_run.is_none());
+        assert!(progress.lock().unwrap().cancel, "the worker is told to stop");
     }
 }

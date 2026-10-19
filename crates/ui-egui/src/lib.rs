@@ -49,6 +49,8 @@ mod credits;
 mod crop;
 mod drag_pointer;
 mod export_ui;
+#[cfg(not(target_arch = "wasm32"))]
+mod jobs;
 mod js_ui;
 mod marks_ui;
 mod measure_ui;
@@ -1600,6 +1602,12 @@ impl PdfCraftApp {
         }
         self.forget_recovery(id);
         self.session.close(id);
+        // A recognition running on it has no document to add its words to any more: stop it, so
+        // it doesn't run on for minutes, block the next one and end in an error.
+        if self.ocr_run.as_ref().is_some_and(|r| r.doc == id) {
+            self.cancel_ocr();
+            self.ocr_run = None;
+        }
         self.active = match self.active {
             _ if self.views.is_empty() => None,
             Some(a) if a > index => Some(a - 1),

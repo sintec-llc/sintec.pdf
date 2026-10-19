@@ -530,7 +530,7 @@ fn figure_picture(ctx: &egui::Context, doc: &pdfcraft_engine::Document, f: &pdfc
     if out.error.is_some() || out.width == 0 {
         return None;
     }
-    let img = egui::ColorImage::from_rgba_premultiplied([out.width as usize, out.height as usize], &out.rgba);
+    let img = crate::canvas::texture_image([out.width as usize, out.height as usize], out.rgba);
     Some(ctx.load_texture("alt-figure", img, egui::TextureOptions::LINEAR))
 }
 

@@ -272,11 +272,14 @@ impl PdfCraftApp {
                         *s = Some((done.max(total), total, Some(done_msg)));
                     }
                 };
-                if inline {
-                    work(); // tests and automation: synchronous
-                } else {
-                    std::thread::Builder::new().name("pdfcraft-export".into()).spawn(work).ok();
-                }
+                // Inline for tests and automation: synchronous.
+                let failed = status.clone();
+                crate::jobs::spawn("pdfcraft-export", inline, work, move |m| {
+                    if let Ok(mut s) = failed.lock() {
+                        let total = s.as_ref().map_or(0, |(_, t, _)| *t);
+                        *s = Some((total, total, Some(m)));
+                    }
+                });
                 app.export_status = Some(status);
             };
             match self.export_dir_override.clone() {

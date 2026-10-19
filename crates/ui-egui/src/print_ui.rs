@@ -423,10 +423,13 @@ impl PdfCraftApp {
                     }
                 };
                 #[cfg(not(target_arch = "wasm32"))]
-                if self.run_inline {
-                    work();
-                } else {
-                    std::thread::Builder::new().name("sintec-print".into()).spawn(work).ok();
+                {
+                    let failed = result.clone();
+                    crate::jobs::spawn("sintec-print", self.run_inline, work, move |m| {
+                        if let Ok(mut s) = failed.lock() {
+                            *s = Some(Err(m));
+                        }
+                    });
                 }
                 #[cfg(target_arch = "wasm32")]
                 work();

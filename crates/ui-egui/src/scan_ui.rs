@@ -44,15 +44,18 @@ impl PdfCraftApp {
             {
                 let slot = run.clone();
                 let dir = std::env::temp_dir().join(format!("sintec-scan-{}", std::process::id()));
-                std::thread::Builder::new()
-                    .name("sintec-scan".into())
-                    .spawn(move || {
-                        let page = pdfcraft_engine::scan::scan_page(&dir);
-                        if let Ok(mut s) = slot.lock() {
-                            *s = Some(page);
-                        }
-                    })
-                    .ok();
+                let failed = run.clone();
+                let work = move || {
+                    let page = pdfcraft_engine::scan::scan_page(&dir);
+                    if let Ok(mut s) = slot.lock() {
+                        *s = Some(page);
+                    }
+                };
+                crate::jobs::spawn("sintec-scan", false, work, move |m| {
+                    if let Ok(mut s) = failed.lock() {
+                        *s = Some(Err(ScanError::Failed(m)));
+                    }
+                });
                 self.notify_tr("Waiting for the scanner…");
             }
             #[cfg(target_arch = "wasm32")]

@@ -4766,16 +4766,35 @@ fn organize_grid(view: &mut DocView, info: &DocInfo, editable: bool, dirty: bool
 /// A rendered raster as texture data. Its words are premultiplied RGBA bytes, exactly
 /// `Color32`s, so the renderer's buffer becomes the image without a copy on the UI thread.
 pub(crate) fn texture_image(size: [usize; 2], pixels: pdfcraft_render::Pixels) -> egui::ColorImage {
-    match bytemuck::allocation::try_cast_vec::<u32, Color32>(pixels.into_words()) {
-        Ok(px) if px.len() == size[0].saturating_mul(size[1]) => egui::ColorImage::new(size, px),
-        Ok(px) => egui::ColorImage::from_rgba_premultiplied(size, bytemuck::cast_slice(&px)),
-        Err((_, words)) => egui::ColorImage::from_rgba_premultiplied(size, bytemuck::cast_slice(&words)),
+    let mut px = match bytemuck::allocation::try_cast_vec::<u32, Color32>(pixels.into_words()) {
+        Ok(px) => px,
+        Err((_, words)) => bytemuck::cast_slice::<u32, Color32>(&words).to_vec(),
+    };
+    // A buffer that doesn't match its size (egui asserts on that) is cut or padded with
+    // transparent pixels: a blank strip instead of a crash (task 008).
+    let n = size[0].saturating_mul(size[1]);
+    if px.len() != n {
+        px.resize(n, Color32::TRANSPARENT);
     }
+    egui::ColorImage::new(size, px)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Task 008: a buffer shorter or longer than its size made egui assert; it becomes a
+    /// texture image of the stated size.
+    #[test]
+    fn a_raster_that_doesnt_match_its_size_is_padded_not_a_crash() {
+        let short = texture_image([4, 4], pdfcraft_render::Pixels::from(vec![u32::MAX; 3]));
+        assert_eq!((short.size, short.pixels.len()), ([4, 4], 16));
+        assert_eq!(short.pixels[3], Color32::TRANSPARENT);
+        let long = texture_image([2, 1], pdfcraft_render::Pixels::from(vec![0; 9]));
+        assert_eq!((long.size, long.pixels.len()), ([2, 1], 2));
+        let empty = texture_image([0, 7], pdfcraft_render::Pixels::default());
+        assert!(empty.pixels.is_empty());
+    }
 
     #[test]
     fn rendered_rasters_become_texture_images_without_a_copy() {

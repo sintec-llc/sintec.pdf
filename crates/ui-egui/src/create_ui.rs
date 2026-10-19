@@ -129,11 +129,12 @@ impl PdfCraftApp {
                 *s = Some(done);
             }
         };
-        if self.run_inline {
-            work();
-        } else {
-            std::thread::Builder::new().name("sintec-convert".into()).spawn(work).ok();
-        }
+        let failed = result.clone();
+        crate::jobs::spawn("sintec-convert", self.run_inline, work, move |m| {
+            if let Ok(mut s) = failed.lock() {
+                *s = Some(Err(m));
+            }
+        });
         self.notify_tr("Converting to PDF…");
         self.convert_run = Some(result);
         self.poll_convert();
