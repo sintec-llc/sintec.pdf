@@ -271,6 +271,19 @@ impl PdfCraftApp {
     pub fn enable_recovery_without_offer(&mut self, store: RecoveryStore) {
         self.recovery = Some(store);
     }
+
+    /// A torn-off window ends with its last document: closing it, or sending it to another
+    /// window, quits this process rather than leaving an empty start page behind.
+    pub(crate) fn close_when_last_document_gone(&mut self, ctx: &egui::Context) {
+        if !self.quit_when_empty {
+            return;
+        }
+        if !self.views.is_empty() {
+            self.had_document = true;
+        } else if self.had_document && self.close_request.is_none() && self.password_prompt.is_none() && self.dialog.is_none() {
+            self.request_quit(ctx);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -341,5 +354,34 @@ mod tests {
         for bad in ["", "../x", "a/b", "a\\b", "a.pdf", "a b", &"k".repeat(MAX_KEY_LEN + 1)] {
             assert!(!valid_recovery_key(bad), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn a_torn_off_window_quits_when_its_last_document_is_closed() {
+        let ctx = egui::Context::default();
+        let mut app = PdfCraftApp::new();
+        app.quit_when_empty = true;
+        // Nothing opened yet (the file may still be loading): the window stays.
+        app.close_when_last_document_gone(&ctx);
+        assert!(!app.allow_quit);
+        let bytes = app.session.create_blank(612.0, 792.0, 1).unwrap();
+        app.open_bytes("a.pdf", None, bytes.as_ref().clone()).unwrap();
+        app.close_when_last_document_gone(&ctx);
+        assert!(!app.allow_quit, "a document is open");
+        app.close_tab(0);
+        app.close_when_last_document_gone(&ctx);
+        assert!(app.allow_quit, "the last document is closed");
+    }
+
+    #[test]
+    fn the_main_window_stays_on_the_start_page_after_its_last_document() {
+        let ctx = egui::Context::default();
+        let mut app = PdfCraftApp::new();
+        let bytes = app.session.create_blank(612.0, 792.0, 1).unwrap();
+        app.open_bytes("a.pdf", None, bytes.as_ref().clone()).unwrap();
+        app.close_when_last_document_gone(&ctx);
+        app.close_tab(0);
+        app.close_when_last_document_gone(&ctx);
+        assert!(!app.allow_quit);
     }
 }

@@ -406,6 +406,7 @@ fn app_creator<'a>(
             let store = pdfcraft_ui_egui::RecoveryStore::new(dir);
             if torn_off { app.enable_recovery_without_offer(store) } else { app.enable_recovery(store) }
         }
+        app.quit_when_empty = torn_off;
         if let Some(state) = &cc.wgpu_render_state {
             let adapter = state.adapter.get_info();
             let max_texture_dimension_2d = state.device.limits().max_texture_dimension_2d;

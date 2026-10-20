@@ -778,6 +778,10 @@ pub struct PdfCraftApp {
     pub form_preview: bool,
     /// Where autosaves go (`None`: autosave off, e.g. on the web and in tests).
     pub recovery: Option<RecoveryStore>,
+    /// A torn-off tab's window: once it has shown a document and the last one is closed, the
+    /// window (and its process) closes too instead of sitting on the start page.
+    pub quit_when_empty: bool,
+    pub(crate) had_document: bool,
     /// Entries left by a previous session, offered in the Recovery dialog.
     pub recoverable: Vec<RecoveryMeta>,
     recovery_keys: std::collections::HashMap<DocId, String>,
@@ -1073,6 +1077,8 @@ impl PdfCraftApp {
             form_preview: false,
             window_title: String::new(),
             recovery: None,
+            quit_when_empty: false,
+            had_document: false,
             recoverable: Vec::new(),
             recovery_keys: Default::default(),
             last_autosave: 0.0,
@@ -2613,6 +2619,7 @@ impl eframe::App for PdfCraftApp {
         ui_scale::sync(ctx, ui_scale::zoom(self.ui_scale, self.system_text_scale, native), &mut self.ui_scale_applied);
         // Remember user work even if its tab is subsequently closed or Home is selected.
         self.startup_superseded |= !self.views.is_empty() || self.combine_showing() || self.dialog.is_some() || self.password_prompt.is_some();
+        self.close_when_last_document_gone(ctx);
         // Also done in `raw_input_hook`, before input; here for hosts that don't call the hook.
         self.scroll_speed.set_line_speed(ctx);
         // Before anything reads this frame's wheel input or draws, and with the line speed just set.
