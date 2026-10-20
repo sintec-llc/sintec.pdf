@@ -58,7 +58,11 @@ pub(crate) fn layer(doc: pdfcraft_engine::DocId) -> egui::LayerId {
 /// this frame (its `viewport_rect` is current).
 pub(crate) fn show(app: &mut PdfCraftApp, index: usize, ctx: &egui::Context) {
     let Some(view) = app.views.get_mut(index) else { return };
+    let last = view.text_panel;
     view.text_panel = Rect::NOTHING;
+    // Where the open box is grabbed this frame (set by the text tool, then used once).
+    let zones = std::mem::take(&mut view.open_box_zones);
+    view.panel_yield = zones.clone();
     if app.full_screen || view.organize {
         return;
     }
@@ -79,8 +83,18 @@ pub(crate) fn show(app: &mut PdfCraftApp, index: usize, ctx: &egui::Context) {
     let layer = layer(doc_view);
     let area = egui::Area::new(layer.id);
     // Pinned by its top-right corner, and kept inside the page view, so it never spills over
-    // the rail.
-    let area = area.order(layer.order).pivot(Align2::RIGHT_TOP).fixed_pos(pos2(right, viewport.top() + GAP));
+    // the rail. It steps over to the left side when on the right it would cover the open box's
+    // grip or width handles.
+    let height = if last.is_positive() { last.height() } else { max_height };
+    let on_right = Rect::from_min_size(pos2(right - width, viewport.top() + GAP), egui::vec2(width, height));
+    let left = viewport.left() + GAP;
+    let on_left = Rect::from_min_size(pos2(left, viewport.top() + GAP), egui::vec2(width, height));
+    let covers = |r: Rect| zones.iter().any(|z| r.intersects(*z));
+    let area = if covers(on_right) && !covers(on_left) {
+        area.order(layer.order).pivot(Align2::LEFT_TOP).fixed_pos(pos2(left, viewport.top() + GAP))
+    } else {
+        area.order(layer.order).pivot(Align2::RIGHT_TOP).fixed_pos(pos2(right, viewport.top() + GAP))
+    };
     let area = area.constrain_to(viewport).show(ctx, |ui| {
         let frame = egui::Frame::NONE.fill(t.panel).stroke(Stroke::new(BORDER, t.border)).corner_radius(CornerRadius::same(8));
         let frame = frame.inner_margin(Margin::same(PAD)).shadow(ui.visuals().popup_shadow);

@@ -377,10 +377,44 @@ const EDGE_INSIDE: f32 = 10.0;
 /// The narrowest a box can be dragged to (screen pixels).
 const MIN_BOX_WIDTH: f32 = 12.0;
 
-/// The rewrap handles drawn on a paragraph box's left and right edges (screen).
-fn width_handles(b: Rect) -> [Rect; 2] {
-    let h = (b.height() * 0.5).clamp(24.0, 40.0);
-    [b.left(), b.right()].map(|x| Rect::from_center_size(Pos2::new(x, b.center().y), egui::vec2(8.0, h)))
+/// A rect with its axes swapped: width handles are written for text running left to right and
+/// reach a quarter-turned page's boxes through this.
+fn transposed(r: Rect) -> Rect {
+    Rect::from_min_max(Pos2::new(r.min.y, r.min.x), Pos2::new(r.max.y, r.max.x))
+}
+
+fn transposed_pos(p: Pos2) -> Pos2 {
+    Pos2::new(p.y, p.x)
+}
+
+/// Does the paragraph's width run along the screen's vertical here? True on a page turned by a
+/// quarter (its own /Rotate plus the view's), where the text's left and right edges are the box's
+/// top and bottom.
+pub(crate) fn width_is_vertical(xf: &PageXform, info: &DocInfo, page: usize) -> bool {
+    let turn = info.pages.get(page).map_or(0, |p| p.rotation as i64).saturating_add(i64::from(xf.rot));
+    turn.rem_euclid(180) != 0
+}
+
+/// The rewrap handles drawn on a paragraph box's width edges (screen): left and right, or top and
+/// bottom when the width runs vertically.
+fn width_handles(b: Rect, vertical: bool) -> [Rect; 2] {
+    let t = if vertical { transposed(b) } else { b };
+    let h = (t.height() * 0.5).clamp(24.0, 40.0);
+    [t.left(), t.right()].map(|x| {
+        let r = Rect::from_center_size(Pos2::new(x, t.center().y), egui::vec2(8.0, h));
+        if vertical { transposed(r) } else { r }
+    })
+}
+
+/// Where a press on the box open for typing grabs it (grip and width edges, screen). The Format
+/// text panel keeps clear of these, and gives way to them where it can't.
+fn grab_zones(b: Rect, bounds: Rect, vertical: bool) -> Vec<Rect> {
+    let t = if vertical { transposed(b) } else { b };
+    let side = |x0: f32, x1: f32| {
+        let r = Rect::from_min_max(Pos2::new(x0, t.top() - EDGE_REACH), Pos2::new(x1, t.bottom() + EDGE_REACH));
+        if vertical { transposed(r) } else { r }
+    };
+    vec![move_handle(b, bounds).expand(MOVE_GRIP_SLOP), side(t.left() - EDGE_REACH, t.left()), side(t.right(), t.right() + EDGE_REACH)]
 }
 
 /// Side of the visible move grip (screen pixels).
@@ -406,15 +440,16 @@ fn handle_at(boxes: &[Rect], bounds: Rect, p: Pos2) -> Option<usize> {
 pub(crate) fn on_move_grip(view: &DocView, xf: &PageXform, info: &DocInfo, page: usize, p: Pos2) -> bool {
     let Some((_, lines)) = view.edit_lines.get(&page) else { return false };
     let boxes: Vec<Rect> = lines.iter().map(|l| xf.user_rect(info, page, l.rect.map(|v| v as f32)).expand(2.0)).collect();
-    let upright = info.pages.get(page).is_some_and(|pg| pg.rotation % 180 == 0);
+    let vertical = width_is_vertical(xf, info, page);
     let active = view.line_editor.as_ref().filter(|e| e.page == page).map(|e| e.block);
-    handle_at(&boxes, xf.rect, p).is_some() || grab_at(&boxes, p, upright, active).is_some_and(|(_, g)| g != Grip::Move)
+    handle_at(&boxes, xf.rect, p).is_some() || grab_at(&boxes, p, vertical, active).is_some_and(|(_, g)| g != Grip::Move)
 }
 
 /// The edge of `b` that `p` grabs: anywhere along its height, within reach of the line. A narrow
 /// box keeps its middle for moving. A box open for typing owns its inside (the text editor sits
 /// there), so its edges are grabbed from outside only.
-fn edge_at(b: Rect, p: Pos2, editing: bool) -> Option<Grip> {
+fn edge_at(b: Rect, p: Pos2, editing: bool, vertical: bool) -> Option<Grip> {
+    let (b, p) = if vertical { (transposed(b), transposed_pos(p)) } else { (b, p) };
     if p.y < b.top() - EDGE_REACH || p.y > b.bottom() + EDGE_REACH {
         return None;
     }
@@ -428,10 +463,11 @@ fn edge_at(b: Rect, p: Pos2, editing: bool) -> Option<Grip> {
     }
 }
 
-/// The topmost box under `p` and what it grabs there; edges only on an upright page. `active` is
-/// the box open for typing.
-fn grab_at(boxes: &[Rect], p: Pos2, upright: bool, active: Option<usize>) -> Option<(usize, Grip)> {
-    boxes.iter().enumerate().rev().find_map(|(i, b)| match upright.then(|| edge_at(*b, p, active == Some(i))).flatten() {
+/// The topmost box under `p` and what it grabs there. `Grip::Left` is the box's edge where the
+/// text starts (its left, or its top when the width runs vertically). `active` is the box open for
+/// typing.
+fn grab_at(boxes: &[Rect], p: Pos2, vertical: bool, active: Option<usize>) -> Option<(usize, Grip)> {
+    boxes.iter().enumerate().rev().find_map(|(i, b)| match edge_at(*b, p, active == Some(i), vertical) {
         Some(g) => Some((i, g)),
         None => b.contains(p).then_some((i, Grip::Move)),
     })
@@ -692,9 +728,9 @@ pub(crate) fn page_input(
     if !allow_interaction {
         return false;
     }
-    // The width handle needs the page upright (or upside down): on a quarter-turned page the
-    // screen's horizontal is the paragraph's vertical.
-    let upright = info.pages.get(page).is_some_and(|p| p.rotation % 180 == 0);
+    // On a quarter-turned page the paragraph's width runs along the screen's vertical, and its
+    // handles sit on the box's top and bottom edges.
+    let vertical = width_is_vertical(xf, info, page);
     let draw_move_grip = |b: Rect| {
         let g = move_handle(b, xf.rect);
         painter.rect(g, CornerRadius::same(3), ACCENT, Stroke::new(1.0, Color32::WHITE), egui::StrokeKind::Middle);
@@ -712,10 +748,8 @@ pub(crate) fn page_input(
         }
     };
     let draw_handles = |b: Rect| {
-        if upright {
-            for h in width_handles(b) {
-                painter.rect(h, CornerRadius::same(2), Color32::WHITE, Stroke::new(1.0, ACCENT), egui::StrokeKind::Middle);
-            }
+        for h in width_handles(b, vertical) {
+            painter.rect(h, CornerRadius::same(2), Color32::WHITE, Stroke::new(1.0, ACCENT), egui::StrokeKind::Middle);
         }
         draw_move_grip(b);
     };
@@ -725,16 +759,23 @@ pub(crate) fn page_input(
     {
         // The latest known pointer position, so leaving the box (or a fast flick) keeps the drag.
         let p = ui.input(|i| i.pointer.interact_pos().or(i.pointer.latest_pos())).unwrap_or(d.start);
-        let dx = p.x - d.start.x;
+        // The pointer's travel along the width axis (the screen's vertical on a quarter-turned page).
+        let dx = if vertical { p.y - d.start.y } else { p.x - d.start.x };
+        let t = if vertical { transposed(b) } else { b };
+        let resized = |r: Rect| if vertical { transposed(r) } else { r };
         let preview = match d.grip {
             Grip::Move => b.translate(p - d.start),
-            Grip::Left => Rect::from_min_max(Pos2::new((b.left() + dx).min(b.right() - MIN_BOX_WIDTH), b.min.y), b.max),
-            Grip::Right => Rect::from_min_max(b.min, Pos2::new((b.right() + dx).max(b.left() + MIN_BOX_WIDTH), b.max.y)),
+            Grip::Left => resized(Rect::from_min_max(Pos2::new((t.left() + dx).min(t.right() - MIN_BOX_WIDTH), t.min.y), t.max)),
+            Grip::Right => resized(Rect::from_min_max(t.min, Pos2::new((t.right() + dx).max(t.left() + MIN_BOX_WIDTH), t.max.y))),
         };
         painter.rect_stroke(preview, CornerRadius::same(2), Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
         let resizing = d.grip != Grip::Move;
         draw_handles(preview);
-        ui.ctx().set_cursor_icon(if resizing { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::Grabbing });
+        ui.ctx().set_cursor_icon(match (resizing, vertical) {
+            (false, _) => egui::CursorIcon::Grabbing,
+            (true, false) => egui::CursorIcon::ResizeHorizontal,
+            (true, true) => egui::CursorIcon::ResizeVertical,
+        });
         // The paragraph open for typing stays open while its box is dragged.
         view.objects.hold_editor = active == Some(d.block);
         if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
@@ -751,6 +792,9 @@ pub(crate) fn page_input(
                 // The new width in user space: the box's change, added to the paragraph's own. A
                 // moved left side (in user space; on an upside-down page that's the screen's right
                 // edge) moves the paragraph with it.
+                // Intended: a handle drag always sets an explicit width, so a single auto-width line
+                // becomes a fixed-width paragraph (it wraps at that width from then on). The block's
+                // rect is its text extent, so after saving the width reads back as the widest row.
                 let width = (l.rect[2] - l.rect[0]) + (to[2] - to[0]) - (from[2] - from[0]);
                 let shift = to[0] - from[0];
                 let style = pdfcraft_engine::BlockStyle { width: Some(width), offset: (shift != 0.0).then_some([shift, 0.0]), ..Default::default() };
@@ -784,7 +828,7 @@ pub(crate) fn page_input(
     let origin = ui.input(|i| i.pointer.press_origin());
     let grab = origin.and_then(|o| {
         let on_grip = handle_at(&boxes, xf.rect, o);
-        on_grip.map(|i| (i, Grip::Move)).or_else(|| grab_at(&boxes, o, upright, active)).filter(|(block, grip)| {
+        on_grip.map(|i| (i, Grip::Move)).or_else(|| grab_at(&boxes, o, vertical, active)).filter(|(block, grip)| {
             // The inside of the open box is the text editor's: only its grip and edges count.
             resp.drag_started() || (active == Some(*block) && (on_grip.is_some() || *grip != Grip::Move))
         })
@@ -800,7 +844,9 @@ pub(crate) fn page_input(
     // there too, so moving from the box up to its grip never loses it.
     let hover = ui.input(|i| i.pointer.hover_pos()).filter(|p| xf.rect.expand(MOVE_GRIP + MOVE_GRIP_SLOP).contains(*p));
     let on_grip = hover.and_then(|p| handle_at(&boxes, xf.rect, p));
-    let grab = hover.and_then(|p| on_grip.map(|i| (i, Grip::Move)).or_else(|| grab_at(&boxes, p, upright, active)));
+    let grab = hover.and_then(|p| on_grip.map(|i| (i, Grip::Move)).or_else(|| grab_at(&boxes, p, vertical, active)));
+    // Where the open box is grabbed: the Format text panel keeps clear of it.
+    view.open_box_zones = active.and_then(|a| boxes.get(a)).map(|b| grab_zones(*b, xf.rect, vertical)).unwrap_or_default();
     // The box open for typing keeps its grip and width handles whether or not it is hovered.
     if let Some(b) = active.and_then(|a| boxes.get(a)).filter(|_| grab.is_none_or(|(h, _)| Some(h) != active)) {
         draw_handles(*b);
@@ -814,7 +860,7 @@ pub(crate) fn page_input(
     ui.ctx().set_cursor_icon(if on_grip.is_some() {
         egui::CursorIcon::Move
     } else if on_edge {
-        egui::CursorIcon::ResizeHorizontal
+        if vertical { egui::CursorIcon::ResizeVertical } else { egui::CursorIcon::ResizeHorizontal }
     } else {
         egui::CursorIcon::Text
     });
