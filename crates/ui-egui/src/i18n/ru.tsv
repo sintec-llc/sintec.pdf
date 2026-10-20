@@ -2167,6 +2167,7 @@ signature pad	Type	Ввести
 	Created a PDF from the first {n} files	PDF создан из первых файлов: {n}
 	Go to page…	Перейти на страницу…
 	For page sizes and margins.	Для размеров страниц и полей.
+	Match paper to PDF page size when printing	Подбирать бумагу под размер страницы PDF при печати
 	The PDF text fonts can't draw “{c}” ({code}). Choose supported text.	Шрифты текста PDF не могут отобразить «{c}» ({code}). Выберите поддерживаемый текст.
 	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	Стандартные шрифты не могут отобразить «{c}» ({code}). Пока в виде текста можно добавлять только западноевропейские символы.
 	This field's font can't draw “{c}” ({code}), so Sintec.PDF shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Шрифт этого поля не может отобразить «{c}» ({code}), поэтому Sintec.PDF показывает на его месте ?. Значение сохранено, и другие программы просмотра PDF перерисуют поле по нему.

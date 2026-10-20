@@ -508,6 +508,9 @@ pub struct PdfCraftApp {
     pub view_defaults: canvas::ViewDefaults,
     /// The unit page sizes and margins are shown in (Preferences ▸ Documents and view).
     pub units: units::Unit,
+    /// Print picks the standard paper that fits the PDF page when the dialog opens (off by
+    /// default: the paper the user chose is used).
+    pub match_paper_to_page: bool,
     /// The Preferences ▸ Date format box while it's being edited, or while it holds an invalid
     /// pattern (the session keeps the last valid one).
     pub date_format_draft: Option<String>,
@@ -915,6 +918,7 @@ impl PdfCraftApp {
             default_mode: Mode::AllTools,
             view_defaults: Default::default(),
             units: Default::default(),
+            match_paper_to_page: false,
             date_format_draft: None,
             mode_override: None,
             left: LeftPanel::AllTools,
@@ -1917,6 +1921,7 @@ impl PdfCraftApp {
             "default_zoom": self.view_defaults.zoom_name(),
             "highlight_fields": self.view_defaults.highlight_fields,
             "units": self.units,
+            "match_paper_to_page": self.match_paper_to_page,
             "language": self.language,
             "reading_colors": self.reading_colors,
             // Null follows the system's text scaling.
@@ -2013,6 +2018,9 @@ impl PdfCraftApp {
         }
         if let Ok(units) = serde_json::from_value::<units::Unit>(v["units"].clone()) {
             self.units = units;
+        }
+        if let Some(on) = v["match_paper_to_page"].as_bool() {
+            self.match_paper_to_page = on;
         }
         if let Some(on) = v["highlight_fields"].as_bool() {
             self.view_defaults.highlight_fields = on;

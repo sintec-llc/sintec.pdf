@@ -148,6 +148,17 @@ impl Default for PrintDraft {
 }
 
 impl PrintDraft {
+    /// Picks the standard paper that fits `source` and prints it at 100% (no change when none fits).
+    pub fn match_page(&mut self, source: (f64, f64)) {
+        if let Some(paper) = print::matching_paper(source) {
+            self.paper = paper;
+            self.handling = Handling::Size;
+            self.size = SizeMode::Actual;
+            self.orientation = Orientation::Auto;
+            self.sheet = 0;
+        }
+    }
+
     /// The engine settings for this draft (page count and labels from the document).
     pub fn settings(&self, count: usize, labels: &[String]) -> Result<print::Settings, String> {
         if self.handling == Handling::Multiple && self.order == PageOrder::CutStack && self.duplex != spool::Duplex::Off {
@@ -275,7 +286,7 @@ impl PdfCraftApp {
     }
 
     pub fn open_print(&mut self) {
-        let Some((i, _)) = self.active_ids() else { return };
+        let Some((i, id)) = self.active_ids() else { return };
         let (printers, printers_loading) = match self.printer_source.clone() {
             // The list from the last time the dialog opened, until the fresh one arrives.
             #[cfg(not(target_arch = "wasm32"))]
@@ -308,6 +319,12 @@ impl PdfCraftApp {
             which,
             ..keep
         };
+        // Only with the preference on; otherwise the user's paper stays as it is.
+        if self.match_paper_to_page
+            && let Some(page) = self.session.get(id).and_then(|doc| doc.info.pages.get(current))
+        {
+            self.print_draft.match_page((f64::from(page.width), f64::from(page.height)));
+        }
         self.dialog = Some(crate::Dialog::Print);
     }
 
@@ -836,14 +853,8 @@ pub(crate) fn body(
                 ui.horizontal_wrapped(|ui| {
                     ui.label(crate::i18n::fmt(tl!("PDF page: {size}"), &[("size", &d.units.size(source.0, source.1))]));
                     let matched = print::matching_paper(source);
-                    if ui.add_enabled(matched.is_some(), egui::Button::new(tl!("Match page at 100%"))).clicked()
-                        && let Some(paper) = matched
-                    {
-                        d.paper = paper;
-                        d.handling = Handling::Size;
-                        d.size = SizeMode::Actual;
-                        d.orientation = Orientation::Auto;
-                        d.sheet = 0;
+                    if ui.add_enabled(matched.is_some(), egui::Button::new(tl!("Match page at 100%"))).clicked() {
+                        d.match_page(source);
                     }
                 });
             }

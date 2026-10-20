@@ -333,6 +333,44 @@ fn architectural_page_can_be_matched_at_100_percent() {
     assert_eq!(settings.layout, pdfcraft_engine::print::Layout::Size(pdfcraft_engine::print::SizeMode::Actual));
 }
 
+fn arch_app(match_paper: bool) -> PdfCraftApp {
+    let mut app = PdfCraftApp::new();
+    app.set_option("language", "en").unwrap();
+    app.match_paper_to_page = match_paper;
+    let bytes = app.session.create_blank(2592.0, 1728.0, 1).unwrap();
+    app.open_bytes("architectural.pdf", None, bytes.as_ref().clone()).unwrap();
+    app
+}
+
+#[test]
+fn opening_print_keeps_the_chosen_paper_unless_matching_is_on() {
+    let mut app = arch_app(false);
+    assert!(!PdfCraftApp::new().match_paper_to_page, "off by default");
+    let a4 = app.print_draft.paper;
+    app.open_print();
+    assert_eq!(app.print_draft.paper, a4, "a non-A4 page leaves the paper alone");
+    assert_eq!(app.print_draft.size, pdfcraft_engine::print::SizeMode::default());
+
+    let mut app = arch_app(true);
+    app.open_print();
+    let settings = app.print_draft.settings(1, &[]).unwrap();
+    assert_eq!(settings.paper, (1728.0, 2592.0));
+    assert_eq!(settings.layout, pdfcraft_engine::print::Layout::Size(pdfcraft_engine::print::SizeMode::Actual));
+}
+
+#[test]
+fn match_paper_preference_round_trips() {
+    let mut app = PdfCraftApp::new();
+    app.match_paper_to_page = true;
+    let json = app.persist();
+    let mut fresh = PdfCraftApp::new();
+    assert!(!fresh.match_paper_to_page);
+    fresh.restore(&json);
+    assert!(fresh.match_paper_to_page);
+    fresh.restore("{ not json");
+    assert!(fresh.match_paper_to_page, "bad data leaves the setting alone");
+}
+
 #[test]
 fn custom_page_cannot_silently_match_a_standard_paper() {
     let mut h = harness();
