@@ -388,6 +388,10 @@ pub struct DocView {
     /// Sintec.PDF: the pointer belongs to the Format text panel (or a popup over the page, such
     /// as its font lists) this frame, not to the page under it (`update_text_panel_pointer`).
     pub(crate) text_panel_pointer: bool,
+    /// Where a press grabs the open paragraph box (grip, width edges), set by the text tool each frame.
+    pub(crate) open_box_zones: Vec<Rect>,
+    /// The same, as the Format text panel saw it this frame: a press here belongs to the page.
+    pub(crate) panel_yield: Vec<Rect>,
     /// Pending zoom anchor: page, fractional position (also in gutters), and viewport offset.
     zoom_anchor: Option<(usize, f32, f32, Vec2)>,
     /// The page view has been shown, so its scroll offset in egui's memory is this document's.
@@ -599,8 +603,11 @@ impl DocView {
         let shown = self.text_panel.is_positive();
         let panel = self.text_panel;
         let layer = crate::text_panel::layer(self.id);
+        let zones = std::mem::take(&mut self.panel_yield);
         let over = |p: Pos2| {
+            // The open box's grip and width edges win over the panel where it could not keep clear.
             shown
+                && !zones.iter().any(|z| z.contains(p))
                 && match ctx.layer_id_at(p) {
                     Some(l) => l == layer || egui::Popup::is_id_open(ctx, l.id),
                     None => panel.contains(p),
@@ -610,6 +617,7 @@ impl DocView {
         if pressed || !busy {
             self.text_panel_pointer = at.is_some_and(over);
         }
+        self.panel_yield = zones;
     }
 
     /// Whether a middle-button scrolling gesture is active (tests and automation).
@@ -689,6 +697,8 @@ impl DocView {
             viewport_screen: Rect::NOTHING,
             text_panel: Rect::NOTHING,
             text_panel_pointer: false,
+            open_box_zones: Vec::new(),
+            panel_yield: Vec::new(),
             zoom_anchor: None,
             shown: false,
             wheel: Default::default(),
