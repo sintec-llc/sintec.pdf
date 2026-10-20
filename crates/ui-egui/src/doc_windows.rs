@@ -11,7 +11,8 @@
 //!
 //! A drag started in one window gets every pointer event until the button is let go, wherever the
 //! pointer is, so a drop onto another window is found from where each window drew its tab strip
-//! and Pages panel last frame, in screen points ([`crate::WindowGeometry`]).
+//! and Pages panel last frame, in screen points ([`crate::WindowGeometry`]). Windows of other
+//! processes publish their strips through [`crate::tab_transfer`].
 
 use egui::{Context, Pos2, Rect, Ui, Vec2, vec2};
 use pdfcraft_engine::DocId;

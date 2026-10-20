@@ -132,6 +132,7 @@ pub mod scroll_speed;
 #[cfg(not(target_arch = "wasm32"))]
 mod system_fonts;
 mod tab_context;
+pub mod tab_transfer;
 pub mod tear_off;
 mod text_panel;
 pub mod theme;
@@ -571,6 +572,10 @@ pub struct PdfCraftApp {
     /// Sintec.PDF: starts the process a torn-off tab moves to (the desktop app sets it; see
     /// [`tear_off`]). Without one, a torn-off tab opens in a window of this process.
     pub window_spawner: Option<tear_off::WindowSpawner>,
+    /// Sintec.PDF: this process's end of tab drags between processes (the desktop app starts
+    /// it; see [`tab_transfer`]). Without one, tabs only move between windows of this process.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub tab_peer: Option<tab_transfer::Peer>,
     /// Preferences: ask GitHub for a newer version by itself (`updates::AUTO_CHECK_EVERY`).
     pub auto_update_check: bool,
     /// The release the user chose to skip: not offered by the automatic check.
@@ -747,6 +752,8 @@ pub struct PdfCraftApp {
     /// Last frame's and this frame's window layouts (see [`WindowGeometry`]).
     pub(crate) window_geometry: Vec<WindowGeometry>,
     pub(crate) window_geometry_next: Vec<WindowGeometry>,
+    /// This frame's tab strips in physical screen pixels, for other processes ([`tab_transfer`]).
+    pub(crate) tab_strips_next: Vec<tab_transfer::Strip>,
     /// The window showing the open dialog or palette (they act on its document).
     pub(crate) overlay_window: Option<u64>,
     /// Where the Pages panel was drawn last frame (files dropped on it go into the document).
@@ -951,6 +958,8 @@ impl PdfCraftApp {
             update_source: None,
             update_installer: None,
             window_spawner: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            tab_peer: None,
             update_started: false,
             auto_update_check: true,
             update_skipped: None,
@@ -1051,6 +1060,7 @@ impl PdfCraftApp {
             drag_ghost: None,
             window_geometry: Vec::new(),
             window_geometry_next: Vec::new(),
+            tab_strips_next: Vec::new(),
             overlay_window: None,
             pages_panel_rect: None,
             grid_drop: None,
@@ -2666,6 +2676,9 @@ impl eframe::App for PdfCraftApp {
                 OsEvent::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             }
         }
+        // Tabs dragged here from windows of other processes.
+        #[cfg(not(target_arch = "wasm32"))]
+        self.take_handed_tabs();
         if let Some((_, id)) = self.active_ids() {
             let out = self.session.take_js_output(id);
             self.handle_js(id, out);
@@ -2741,6 +2754,13 @@ impl eframe::App for PdfCraftApp {
         // Sintec.PDF: windows record where they drew their strips and panels each frame; drops
         // read last frame's. The main window shows one of its own tabs.
         self.window_geometry = std::mem::take(&mut self.window_geometry_next);
+        let strips = std::mem::take(&mut self.tab_strips_next);
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(peer) = &self.tab_peer {
+            peer.publish(strips);
+        }
+        #[cfg(target_arch = "wasm32")]
+        drop(strips);
         self.current_window = 0;
         if self.active.and_then(|i| self.views.get(i)).is_some_and(|v| v.window != 0) {
             self.active = self.views.iter().position(|v| v.window == 0);

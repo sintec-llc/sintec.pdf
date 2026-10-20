@@ -375,6 +375,14 @@ fn app_creator<'a>(
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
         // A tab torn off the tab strip opens in a process of its own.
         app.window_spawner = Some(std::sync::Arc::new(pdfcraft_ui_egui::tear_off::spawn_self));
+        // And a tab dragged onto a window of another Sintec.PDF process joins it.
+        if let Some(dir) = pdfcraft_ui_egui::tab_transfer::Registry::default_dir() {
+            let ctx = cc.egui_ctx.clone();
+            match pdfcraft_ui_egui::tab_transfer::Peer::start(pdfcraft_ui_egui::tab_transfer::Registry::new(dir), move || ctx.request_repaint()) {
+                Ok(peer) => app.tab_peer = Some(peer),
+                Err(e) => log::warn!("tabs can't be dragged to or from other windows: {e}"),
+            }
+        }
         // Saved window settings win over the builder's position: place it once it exists.
         if let Some(p) = window_pos {
             cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(p));

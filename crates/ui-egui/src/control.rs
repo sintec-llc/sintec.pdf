@@ -835,7 +835,7 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
 
 /// 128 random bits from the OS, hex-encoded.
 #[cfg(not(target_arch = "wasm32"))]
-fn random_token() -> std::io::Result<String> {
+pub(crate) fn random_token() -> std::io::Result<String> {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).map_err(|e| std::io::Error::other(e.to_string()))?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())

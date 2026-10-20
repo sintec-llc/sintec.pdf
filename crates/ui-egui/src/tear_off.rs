@@ -17,6 +17,9 @@
 //!
 //! Where no process can be started (the web, and tests, which install no spawner), the tab opens
 //! in a window of this process instead ([`PdfCraftApp::tear_off_tab`]).
+//!
+//! A tab dropped on the strip of a window of another process goes the same way, file or recovery
+//! entry, through [`crate::tab_transfer`] ([`PdfCraftApp::send_tab`]).
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -164,6 +167,59 @@ impl PdfCraftApp {
 
     /// Start the process that takes over tab `index`. On failure nothing it needed is left behind.
     fn hand_off(&mut self, index: usize, at: Option<Pos2>, spawner: &WindowSpawner) -> Result<(), String> {
+        let (what, store, page) = self.hand_off_what(index)?;
+        let args = hand_off_args(&what, at, page);
+        if let Err(e) = spawner(&args) {
+            if let (HandOff::Recovery(key), Some(store)) = (&what, store) {
+                store.remove(key);
+            }
+            return Err(e.to_string());
+        }
+        log::info!("tab handed to a new process: {what:?}");
+        Ok(())
+    }
+
+    /// Tab `doc` was let go over the tab strip of a window of another process: hand it over
+    /// ([`crate::tab_transfer`]) and, once that process has confirmed it took it, remove it here.
+    /// Otherwise the tab stays and a notice says why.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn send_tab(&mut self, doc: DocId, target: crate::tab_transfer::Target) {
+        if !self.commit_typing_in(doc) {
+            return;
+        }
+        let Some(index) = self.views.iter().position(|v| v.id == doc) else { return };
+        let name = self.session.get(doc).map(|d| d.display_name()).unwrap_or_default();
+        let result = self.hand_off_what(index).and_then(|(what, store, page)| {
+            // The other process has a working folder of its own.
+            let what = match what {
+                HandOff::File(p) => HandOff::File(std::path::absolute(&p).map_or(p, |a| a.to_string_lossy().into_owned())),
+                other => other,
+            };
+            let take = crate::tab_transfer::Take { what, window: target.window, before: target.before, page };
+            crate::tab_transfer::send(&target, &take).map_err(|code| {
+                // Not taken: the copy made for it isn't needed.
+                if let (HandOff::Recovery(key), Some(store)) = (&take.what, store) {
+                    store.remove(key);
+                }
+                crate::tab_transfer::reason_text(&code)
+            })
+        });
+        match result {
+            Ok(()) => {
+                log::info!("tab {name} moved to a window of process {}", target.pid);
+                self.close_handed_off(index);
+            }
+            Err(e) => {
+                log::warn!("moving {name} to another window: {e}");
+                self.notify_fmt("Couldn't move {name} to that window: {e}. It stays here.", &[("name", &name), ("e", &e)]);
+            }
+        }
+    }
+
+    /// What another process opens for tab `index`: its file when saved without changes,
+    /// otherwise a recovery entry written now from what Save would write (with the store, to
+    /// remove it if the hand-off fails). And the page it shows.
+    fn hand_off_what(&mut self, index: usize) -> Result<(HandOff, Option<RecoveryStore>, usize), String> {
         let unsaved = self.has_unsaved_work(index);
         let view = self.views.get(index).ok_or("the tab was closed")?;
         let page = view.current;
@@ -180,15 +236,7 @@ impl PdfCraftApp {
                 (HandOff::Recovery(key), Some(store))
             }
         };
-        let args = hand_off_args(&what, at, page);
-        if let Err(e) = spawner(&args) {
-            if let (HandOff::Recovery(key), Some(store)) = (&what, store) {
-                store.remove(key);
-            }
-            return Err(e.to_string());
-        }
-        log::info!("tab handed to a new process: {what:?}");
-        Ok(())
+        Ok((what, store, page))
     }
 
     /// Tab `index` now lives in another process: close it here without asking (its unsaved work

@@ -242,6 +242,11 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     tabs: strip_tabs.iter().map(|(d, r)| (*d, r.translate(on_screen))).collect(),
                     pages: None,
                 });
+                // The same in physical pixels, for windows of other processes.
+                let ppp = ui.ctx().pixels_per_point();
+                let px = |r: Rect| crate::tab_transfer::to_screen_px(r, on_screen, ppp);
+                app.tab_strips_next.retain(|s| s.window != window);
+                app.tab_strips_next.push(crate::tab_transfer::Strip::new(window, px(full), strip_tabs.iter().map(|(_, r)| px(*r))));
                 tab_drag(app, ui, &t, full, &strip_tabs);
                 if let Some(i) = tab_drop {
                     let remove = ui.input(|inp| inp.modifiers.shift);
@@ -293,7 +298,8 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
 
 /// Sintec.PDF: a tab being dragged in this window. While the button is held: a bar where it would
 /// go in the strip, or a label by the pointer saying what letting go does. Let go: moved in the
-/// strip, into the window whose strip it is over, or (pulled out of the strip) into a new window.
+/// strip, into the window whose strip it is over (of this process, or of another one through
+/// [`crate::tab_transfer`]), or (pulled out of the strip) into a new window.
 fn tab_drag(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, strip: Rect, tabs: &[(pdfcraft_engine::DocId, Rect)]) {
     let window = app.current_window;
     let Some(drag) = app.tab_drag.filter(|d| d.from_window == window) else { return };
@@ -313,6 +319,17 @@ fn tab_drag(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, strip: Rect, t
     // platform's (not on the web, where they'd be drawn inside this one).
     let can_tear = app.window_tab_count(window) > 1 && (app.window_spawner.is_some() || !ui.ctx().embed_viewports());
     let other = app.window_geometry.iter().find(|g| g.window != window && g.strip.expand2(vec2(0.0, 24.0)).contains(screen)).cloned();
+    // A window of another process (outside this one, which is in front while it drags).
+    #[cfg(not(target_arch = "wasm32"))]
+    let foreign = if in_strip || other.is_some() || ui.ctx().content_rect().contains(p) {
+        None
+    } else {
+        let ppp = ui.ctx().pixels_per_point();
+        let at = (screen.to_vec2() * ppp).to_pos2();
+        app.tab_peer.as_mut().and_then(|peer| crate::tab_transfer::find_target(peer.peers(), at, 24.0 * ppp))
+    };
+    #[cfg(target_arch = "wasm32")]
+    let foreign: Option<crate::tab_transfer::Target> = None;
     if down {
         // The ghost: the tab under the pointer, with its page once it leaves the strip.
         let ghost_view = app.views.iter().find(|v| v.id == drag.doc);
@@ -327,7 +344,7 @@ fn tab_drag(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, strip: Rect, t
             };
             painter.line_segment([pos2(x, strip.top() + 5.0), pos2(x, strip.bottom() - 5.0)], Stroke::new(3.0, t.accent));
         } else {
-            let label = if other.is_some() {
+            let label = if other.is_some() || foreign.is_some() {
                 Some(tl!("Release to move it to that window"))
             } else if pulled_out && can_tear {
                 Some(tl!("Release to open it in a new window"))
@@ -346,14 +363,22 @@ fn tab_drag(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, strip: Rect, t
     }
     // The button came up: wherever the pointer is, the drag ends here.
     app.tab_drag = None;
-    if in_strip {
-        let before = crate::doc_windows::tab_gap(tabs, p.x);
-        app.move_tab(drag.doc, window, before);
-    } else if let Some(g) = other {
-        let before = crate::doc_windows::tab_gap(&g.tabs, screen.x);
-        app.move_tab(drag.doc, g.window, before);
-    } else if pulled_out && can_tear {
-        app.detach_tab(drag.doc, Some(screen));
+    use crate::tab_transfer::TabDrop;
+    match crate::tab_transfer::decide(in_strip, other, foreign, pulled_out, can_tear) {
+        TabDrop::Reorder => {
+            let before = crate::doc_windows::tab_gap(tabs, p.x);
+            app.move_tab(drag.doc, window, before);
+        }
+        TabDrop::ToWindow(g) => {
+            let before = crate::doc_windows::tab_gap(&g.tabs, screen.x);
+            app.move_tab(drag.doc, g.window, before);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        TabDrop::ToProcess(target) => app.send_tab(drag.doc, target),
+        #[cfg(target_arch = "wasm32")]
+        TabDrop::ToProcess(_) => {}
+        TabDrop::NewWindow => app.detach_tab(drag.doc, Some(screen)),
+        TabDrop::Stay => {}
     }
 }
 

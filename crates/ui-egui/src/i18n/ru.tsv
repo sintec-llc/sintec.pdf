@@ -2467,3 +2467,10 @@ animation effects	Off	Выкл
 	there is no folder to keep a copy of its unsaved changes in	нет папки для копии несохранённых изменений
 	Couldn't open the document handed over from another window.	Не удалось открыть документ, переданный из другого окна.
 	Source font	Исходный шрифт
+	Couldn't move {name} to that window: {e}. It stays here.	Не удалось перенести {name} в то окно: {e}. Документ остаётся здесь.
+	that window has closed	то окно закрыто
+	that window didn't answer	то окно не ответило
+	that window is busy	то окно занято
+	the file is no longer there	файла больше нет на месте
+	it couldn't be opened there	его не удалось открыть там
+	that window refused it	то окно отказалось его принять
