@@ -369,13 +369,18 @@ pub struct BlockDrag {
     grip: Grip,
 }
 
-/// How far an edge grip reaches either side of a box's edge (screen pixels).
-const EDGE_REACH: f32 = 6.0;
+/// How far an edge grip reaches outside a box's edge (screen pixels); with [`EDGE_INSIDE`] the
+/// grabbable strip is 24 px wide.
+const EDGE_REACH: f32 = 14.0;
+/// How far it reaches inside the edge (a narrow box keeps its middle for moving).
+const EDGE_INSIDE: f32 = 10.0;
+/// The narrowest a box can be dragged to (screen pixels).
+const MIN_BOX_WIDTH: f32 = 12.0;
 
 /// The rewrap handles drawn on a paragraph box's left and right edges (screen).
 fn width_handles(b: Rect) -> [Rect; 2] {
-    let h = (b.height() * 0.5).clamp(14.0, 28.0);
-    [b.left(), b.right()].map(|x| Rect::from_center_size(Pos2::new(x, b.center().y), egui::vec2(7.0, h)))
+    let h = (b.height() * 0.5).clamp(24.0, 40.0);
+    [b.left(), b.right()].map(|x| Rect::from_center_size(Pos2::new(x, b.center().y), egui::vec2(8.0, h)))
 }
 
 /// Side of the visible move grip (screen pixels).
@@ -395,21 +400,25 @@ fn handle_at(boxes: &[Rect], bounds: Rect, p: Pos2) -> Option<usize> {
     boxes.iter().enumerate().rev().find_map(|(i, b)| move_handle(*b, bounds).expand(MOVE_GRIP_SLOP).contains(p).then_some(i))
 }
 
-/// Is `p` on the move grip of a paragraph box on `page`? Such a press starts a box drag, not a
-/// marquee selection (the grip sits just outside the box, on empty page).
+/// Is `p` on the move grip or a width handle of a paragraph box on `page`? Such a press starts a
+/// box drag, not a marquee selection (the grip sits just outside the box, on empty page, and the
+/// handles reach outside the box's edge too).
 pub(crate) fn on_move_grip(view: &DocView, xf: &PageXform, info: &DocInfo, page: usize, p: Pos2) -> bool {
     let Some((_, lines)) = view.edit_lines.get(&page) else { return false };
     let boxes: Vec<Rect> = lines.iter().map(|l| xf.user_rect(info, page, l.rect.map(|v| v as f32)).expand(2.0)).collect();
-    handle_at(&boxes, xf.rect, p).is_some()
+    let upright = info.pages.get(page).is_some_and(|pg| pg.rotation % 180 == 0);
+    let active = view.line_editor.as_ref().filter(|e| e.page == page).map(|e| e.block);
+    handle_at(&boxes, xf.rect, p).is_some() || grab_at(&boxes, p, upright, active).is_some_and(|(_, g)| g != Grip::Move)
 }
 
 /// The edge of `b` that `p` grabs: anywhere along its height, within reach of the line. A narrow
-/// box keeps its middle for moving.
-fn edge_at(b: Rect, p: Pos2) -> Option<Grip> {
+/// box keeps its middle for moving. A box open for typing owns its inside (the text editor sits
+/// there), so its edges are grabbed from outside only.
+fn edge_at(b: Rect, p: Pos2, editing: bool) -> Option<Grip> {
     if p.y < b.top() - EDGE_REACH || p.y > b.bottom() + EDGE_REACH {
         return None;
     }
-    let inside = EDGE_REACH.min(b.width() / 4.0);
+    let inside = if editing { 0.0 } else { EDGE_INSIDE.min(b.width() / 4.0) };
     let (dl, dr) = (p.x - b.left(), b.right() - p.x);
     match (dl >= -EDGE_REACH && dl <= inside, dr >= -EDGE_REACH && dr <= inside) {
         (true, true) if dl <= dr => Some(Grip::Left),
@@ -419,9 +428,10 @@ fn edge_at(b: Rect, p: Pos2) -> Option<Grip> {
     }
 }
 
-/// The topmost box under `p` and what it grabs there; edges only on an upright page.
-fn grab_at(boxes: &[Rect], p: Pos2, upright: bool) -> Option<(usize, Grip)> {
-    boxes.iter().enumerate().rev().find_map(|(i, b)| match upright.then(|| edge_at(*b, p)).flatten() {
+/// The topmost box under `p` and what it grabs there; edges only on an upright page. `active` is
+/// the box open for typing.
+fn grab_at(boxes: &[Rect], p: Pos2, upright: bool, active: Option<usize>) -> Option<(usize, Grip)> {
+    boxes.iter().enumerate().rev().find_map(|(i, b)| match upright.then(|| edge_at(*b, p, active == Some(i))).flatten() {
         Some(g) => Some((i, g)),
         None => b.contains(p).then_some((i, Grip::Move)),
     })
@@ -702,8 +712,10 @@ pub(crate) fn page_input(
         }
     };
     let draw_handles = |b: Rect| {
-        for h in width_handles(b) {
-            painter.rect(h, CornerRadius::same(2), Color32::WHITE, Stroke::new(1.0, ACCENT), egui::StrokeKind::Middle);
+        if upright {
+            for h in width_handles(b) {
+                painter.rect(h, CornerRadius::same(2), Color32::WHITE, Stroke::new(1.0, ACCENT), egui::StrokeKind::Middle);
+            }
         }
         draw_move_grip(b);
     };
@@ -716,17 +728,24 @@ pub(crate) fn page_input(
         let dx = p.x - d.start.x;
         let preview = match d.grip {
             Grip::Move => b.translate(p - d.start),
-            Grip::Left => Rect::from_min_max(Pos2::new((b.left() + dx).min(b.right() - 12.0), b.min.y), b.max),
-            Grip::Right => Rect::from_min_max(b.min, Pos2::new((b.right() + dx).max(b.left() + 12.0), b.max.y)),
+            Grip::Left => Rect::from_min_max(Pos2::new((b.left() + dx).min(b.right() - MIN_BOX_WIDTH), b.min.y), b.max),
+            Grip::Right => Rect::from_min_max(b.min, Pos2::new((b.right() + dx).max(b.left() + MIN_BOX_WIDTH), b.max.y)),
         };
         painter.rect_stroke(preview, CornerRadius::same(2), Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
         let resizing = d.grip != Grip::Move;
-        if resizing {
-            draw_handles(preview);
-        }
+        draw_handles(preview);
         ui.ctx().set_cursor_icon(if resizing { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::Grabbing });
+        // The paragraph open for typing stays open while its box is dragged.
+        view.objects.hold_editor = active == Some(d.block);
         if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
             view.block_drag = None;
+            view.objects.hold_editor = false;
+            // A paragraph open for typing is finished by the drag: its draft goes along.
+            let draft = (preview != b)
+                .then(|| view.line_editor.take_if(|e| e.page == page && e.block == d.block))
+                .flatten()
+                .filter(|e| e.text != e.original)
+                .map(|e| e.text);
             let (from, to) = (user_box(xf, info, page, b), user_box(xf, info, page, preview));
             let edit = if resizing {
                 // The new width in user space: the box's change, added to the paragraph's own. A
@@ -735,7 +754,10 @@ pub(crate) fn page_input(
                 let width = (l.rect[2] - l.rect[0]) + (to[2] - to[0]) - (from[2] - from[0]);
                 let shift = to[0] - from[0];
                 let style = pdfcraft_engine::BlockStyle { width: Some(width), offset: (shift != 0.0).then_some([shift, 0.0]), ..Default::default() };
-                Edit::EditTextBlock { page, block: d.block, text: l.text.clone(), style }
+                Edit::EditTextBlock { page, block: d.block, text: draft.unwrap_or_else(|| l.text.clone()), style }
+            } else if let Some(text) = draft {
+                let style = pdfcraft_engine::BlockStyle { offset: Some([to[0] - from[0], to[1] - from[1]]), ..Default::default() };
+                Edit::EditTextBlock { page, block: d.block, text, style }
             } else {
                 // Translation must keep the selected source operators. Rewriting unchanged text
                 // would also remove unrelated paragraphs that now overlap this one (#594).
@@ -755,24 +777,40 @@ pub(crate) fn page_input(
     // What it grabs comes from where the button went down, not where the pointer is now: egui
     // only calls it a drag once the pointer has moved a few pixels (or been held a moment), and a
     // quick flick has left the edge by then.
-    if resp.drag_started()
-        && active.is_none()
-        && let Some(o) = ui.input(|i| i.pointer.press_origin())
-        && let Some((block, grip)) = handle_at(&boxes, xf.rect, o).map(|i| (i, Grip::Move)).or_else(|| grab_at(&boxes, o, upright))
+    // The text editor's frame can sit over the box's edge and take the press from the page, so a
+    // press that lands on the open box's own handles starts the drag by itself, without waiting for
+    // the page to report one.
+    let press_on_open_box = active.is_some() && ui.input(|i| i.pointer.primary_pressed());
+    let origin = ui.input(|i| i.pointer.press_origin());
+    let grab = origin.and_then(|o| {
+        let on_grip = handle_at(&boxes, xf.rect, o);
+        on_grip.map(|i| (i, Grip::Move)).or_else(|| grab_at(&boxes, o, upright, active)).filter(|(block, grip)| {
+            // The inside of the open box is the text editor's: only its grip and edges count.
+            resp.drag_started() || (active == Some(*block) && (on_grip.is_some() || *grip != Grip::Move))
+        })
+    });
+    if (resp.drag_started() || press_on_open_box)
+        && let Some(o) = origin
+        && let Some((block, grip)) = grab
     {
         view.block_drag = Some(BlockDrag { page, block, generation: doc.edit_generation(), start: o, grip });
         return true;
     }
-    let Some(p) = ui.input(|i| i.pointer.hover_pos()).filter(|p| xf.rect.contains(*p)) else { return false };
-    let on_grip = active.is_none().then(|| handle_at(&boxes, xf.rect, p)).flatten();
-    let Some((hit, grip)) = on_grip.map(|i| (i, Grip::Move)).or_else(|| grab_at(&boxes, p, upright)) else { return false };
+    // The grip sits above the box and may stick out past the page's edge; the pointer is followed
+    // there too, so moving from the box up to its grip never loses it.
+    let hover = ui.input(|i| i.pointer.hover_pos()).filter(|p| xf.rect.expand(MOVE_GRIP + MOVE_GRIP_SLOP).contains(*p));
+    let on_grip = hover.and_then(|p| handle_at(&boxes, xf.rect, p));
+    let grab = hover.and_then(|p| on_grip.map(|i| (i, Grip::Move)).or_else(|| grab_at(&boxes, p, upright, active)));
+    // The box open for typing keeps its grip and width handles whether or not it is hovered.
+    if let Some(b) = active.and_then(|a| boxes.get(a)).filter(|_| grab.is_none_or(|(h, _)| Some(h) != active)) {
+        draw_handles(*b);
+    }
+    let Some((hit, grip)) = grab else { return false };
     if active != Some(hit) {
         painter.rect_stroke(boxes[hit], CornerRadius::same(2), Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
     }
-    let on_edge = active.is_none() && grip != Grip::Move;
-    if upright && active.is_none() {
-        draw_handles(boxes[hit]);
-    }
+    let on_edge = grip != Grip::Move;
+    draw_handles(boxes[hit]);
     ui.ctx().set_cursor_icon(if on_grip.is_some() {
         egui::CursorIcon::Move
     } else if on_edge {

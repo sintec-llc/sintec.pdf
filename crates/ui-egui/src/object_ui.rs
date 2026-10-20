@@ -246,7 +246,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         }
         return false;
     }
-    if view.line_editor.is_none() && crate::edit_text_ui::on_move_grip(view, xf, info, page, p) {
+    if crate::edit_text_ui::on_move_grip(view, xf, info, page, p) {
         // A paragraph's move grip: the text editor's box drag takes this press.
         s.clear();
         return false;
