@@ -411,3 +411,35 @@ fn a_printer_without_two_sided_printing_points_to_its_properties() {
     h.run_steps(2);
     h.get_by_label_contains(note);
 }
+
+#[test]
+fn print_defaults_pick_no_paper_and_do_not_rotate() {
+    use pdfcraft_engine::print::Orientation;
+    let d = PdfCraftApp::new().print_draft;
+    assert_eq!(d.orientation, Orientation::Portrait, "no automatic landscape sheet");
+    assert!(!d.auto_rotate);
+    // A landscape architectural page: the sheet stays A4 portrait after open_print.
+    let mut app = arch_app(false);
+    app.open_print();
+    assert_eq!(app.print_draft.orientation, Orientation::Portrait);
+    let s = app.print_draft.settings(1, &[]).unwrap();
+    assert_eq!(s.paper, (595.28, 841.89));
+    let sheets = pdfcraft_engine::print::layout(&[(2592.0, 1728.0)], &s).unwrap();
+    assert_eq!(sheets[0].size.0.min(sheets[0].size.1), sheets[0].size.0, "portrait sheet");
+}
+
+#[test]
+fn dialog_checkbox_toggles_match_paper() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1000.0)).build_eframe(|_cc| arch_app(false));
+    h.run_steps(4);
+    assert!(h.state_mut().execute("print.dialog"));
+    h.run_steps(3);
+    assert!(!h.state().match_paper_to_page);
+    h.get_by_label("Match paper to PDF page size when printing").click();
+    h.run_steps(3);
+    assert!(h.state().match_paper_to_page);
+    assert_eq!(h.state().print_draft.settings(1, &[]).unwrap().paper, (1728.0, 2592.0), "turning it on matches the page");
+    h.get_by_label("Match paper to PDF page size when printing").click();
+    h.run_steps(3);
+    assert!(!h.state().match_paper_to_page);
+}

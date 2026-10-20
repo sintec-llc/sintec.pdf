@@ -127,13 +127,13 @@ impl Default for PrintDraft {
             per_sheet: 2,
             order: PageOrder::Horizontal,
             border: false,
-            auto_rotate: true,
+            auto_rotate: false,
             booklet_subset: BookletSubset::BothSides,
             binding: Binding::Left,
             poster_scale: 200.0,
             overlap: 18.0,
             cut_marks: true,
-            orientation: Orientation::Auto,
+            orientation: Orientation::Portrait,
             content: Content::DocumentAndMarkups,
             // A4: the standard paper outside North America (US Letter stays one click away).
             paper: PAPERS.iter().position(|p| p.0 == "A4").unwrap_or(0),
@@ -736,6 +736,7 @@ fn combo<T: PartialEq + Copy>(ui: &mut egui::Ui, id: &str, value: &mut T, choice
 pub(crate) fn body(
     ui: &mut egui::Ui,
     d: &mut PrintDraft,
+    match_paper: &mut bool,
     t: &Tokens,
     sizes: &[(f64, f64)],
     labels: &[String],
@@ -831,6 +832,15 @@ pub(crate) fn body(
                         ui.selectable_value(&mut d.paper, i, *name);
                     }
                 });
+                ui.end_row();
+                ui.label("");
+                // Turning it on matches the current page at once; the choice stays for the next print.
+                if ui.add(widgets::checkbox(match_paper, tl!("Match paper to PDF page size when printing"))).changed()
+                    && *match_paper
+                    && let Some(&source) = sizes.get(d.current_page)
+                {
+                    d.match_page(source);
+                }
                 ui.end_row();
             });
             // Windows says which drivers can't print two-sided as they're asked; they keep their
