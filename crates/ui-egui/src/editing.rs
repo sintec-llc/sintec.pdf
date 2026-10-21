@@ -34,6 +34,12 @@ impl PdfCraftApp {
         // Sintec.PDF: text that needs glyphs the document's font lacks gets a substitute first,
         // or waits for the Font substitution dialog.
         let edit = if matches!(edit, Edit::EditTextBlock { .. }) {
+            // A paragraph whose width was set by dragging its box keeps wrapping there.
+            let generation = self.session.get(id).map_or(0, |d| d.edit_generation());
+            let edit = match self.views.get(i) {
+                Some(v) => crate::edit_text_ui::with_kept_width(v, generation, edit),
+                None => edit,
+            };
             match self.prepare_text_edit(id, edit) {
                 crate::font_substitute::Prepared::Apply(edit) => edit,
                 crate::font_substitute::Prepared::Wait => return false,
@@ -53,6 +59,7 @@ impl PdfCraftApp {
                 let info = &doc.info;
                 let view = &mut self.views[i];
                 view.signature_drag.committed(&edit, doc.edit_generation());
+                crate::edit_text_ui::kept_after(view, &edit, doc.edit_generation());
                 if let Some(page) = comment_page(&edit).or_else(|| content_page(&edit)) {
                     // Comment and content edits change one page: keep every other raster.
                     view.page_changed(page);

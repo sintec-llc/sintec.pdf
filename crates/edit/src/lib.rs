@@ -706,3 +706,5 @@ pub use added::{
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod wrap_tests;

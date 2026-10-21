@@ -42,7 +42,8 @@ impl TextBackground {
             }
         }
         if let Some(ed) = editor {
-            let draft_key = (ed.text.clone(), ed.style());
+            // Measured as it will be applied: with the paragraph's kept width.
+            let draft_key = (ed.text.clone(), ed.layout_style());
             if self.draft_key.as_ref() != Some(&draft_key) {
                 self.draft_rect = doc.text_edit_layout(ed.page, ed.block, &ed.text, &draft_key.1).ok().and_then(|layout| layout.draft_rect);
                 self.draft_key = Some(draft_key);
@@ -110,6 +111,10 @@ pub struct LineEditor {
     /// The original PDF rectangle, in user space. It is converted again each frame so the editor
     /// stays attached while the page is zoomed, scrolled, or rotated.
     source_rect: [f32; 4],
+    /// Where the paragraph wraps: its frame's width in user space ([`frame`]).
+    wrap_width: f32,
+    /// The explicit width kept for the paragraph ([`KeptWidth`]), which its rewrite will carry.
+    kept_width: Option<f64>,
     multiline: bool,
     source: Option<(pdfcraft_engine::TextBlock, Vec<pdfcraft_engine::TextLine>)>,
     pub(crate) fonts: BTreeMap<String, String>,
@@ -224,6 +229,16 @@ impl LineEditor {
         style
     }
 
+    /// [`LineEditor::style`] as the rewrite will be applied: with the paragraph's kept width (see
+    /// [`with_kept_width`]).
+    pub(crate) fn layout_style(&self) -> pdfcraft_engine::BlockStyle {
+        let mut style = self.style();
+        if style.width.is_none() {
+            style.width = self.kept_width;
+        }
+        style
+    }
+
     /// After applying formatting: the paragraph now has it.
     pub fn applied(&mut self) {
         self.selection = None;
@@ -237,10 +252,22 @@ impl LineEditor {
     /// Adopt the rewritten paragraph's current geometry before the next overlay frame.
     pub(crate) fn refresh_source(&mut self, block: &pdfcraft_engine::TextBlock, lines: Vec<pdfcraft_engine::TextLine>) {
         self.source_rect = block.rect.map(|v| v as f32);
+        let f = frame(block);
+        self.wrap_width = (f[2] - f[0]) as f32;
+        self.kept_width = None;
         self.multiline = block.rows.len() > 1;
         self.source = Some((block.clone(), lines));
         self.text = block.editor_text.clone();
         self.original = self.text.clone();
+    }
+
+    /// The paragraph wraps at `width` (user space; a width kept by [`KeptWidth`]).
+    pub(crate) fn keep_wrap(&mut self, width: f64) {
+        let ink = (self.source_rect[2] - self.source_rect[0]).abs();
+        if width.is_finite() {
+            self.wrap_width = (width.min(14_400.0) as f32).max(ink);
+            self.kept_width = Some(width.min(14_400.0));
+        }
     }
 }
 
@@ -369,41 +396,78 @@ pub struct BlockDrag {
     grip: Grip,
 }
 
-/// The width a paragraph box was dragged to. A block's rect is its text's extent, so without this
-/// the box would snap back on release (widening a single line changes no text at all).
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// The explicit width a paragraph was last rewritten at ([`pdfcraft_engine::BlockStyle::width`]: a
+/// handle drag, or an edit that carried this width on). PDFs store no wrap width, so the engine
+/// would otherwise derive one from the text's layout ([`pdfcraft_engine::TextBlock::wrap`]) and the
+/// box would snap back. While kept, the box shows it and every further rewrite of the paragraph is
+/// sent with it (see [`with_kept_width`]), so the box is where the text really wraps.
+#[derive(Clone, Debug, PartialEq)]
 pub struct KeptWidth {
     page: usize,
     block: usize,
     /// In user space.
     width: f64,
-    /// The document generation: the one the drag was made at, then (once the drag's own edit has
-    /// landed, `adopted`) the one the box belongs to. Any later change drops it.
+    /// The document generation the rewrite produced. Any other change drops the width.
     generation: u64,
-    adopted: bool,
+    /// The rewritten text (see [`text_key`]), to recognise the paragraph.
+    key: String,
 }
 
-/// Apply the kept width to a freshly read page's blocks. The box shows the larger of the dragged
-/// width and the text's extent, so narrowing below the longest word shows the clamped width.
-pub(crate) fn keep_width(view: &mut DocView, page: usize, generation: u64, blocks: &mut [pdfcraft_engine::TextBlock]) {
-    let Some(mut k) = view.kept_width.filter(|k| k.page == page) else { return };
-    if k.generation != generation {
-        if k.adopted {
-            view.kept_width = None;
-            return;
-        }
-        k.adopted = true;
-        k.generation = generation;
-        view.kept_width = Some(k);
-    } else if !k.adopted {
-        return;
-    }
-    if let Some(b) = blocks.get_mut(k.block)
-        && k.width.is_finite()
-        && k.width > b.rect[2] - b.rect[0]
+/// A paragraph's text without spacing, breaks or hyphens: what a rewrap leaves unchanged.
+fn text_key(text: &str) -> String {
+    text.chars().filter(|c| !c.is_whitespace() && !matches!(c, '-' | '\u{ad}')).collect()
+}
+
+/// A paragraph box's frame (user space): its rows' height, and across, where its text wraps.
+pub(crate) fn frame(b: &pdfcraft_engine::TextBlock) -> [f64; 4] {
+    [b.wrap[0].min(b.rect[0]), b.rect[1], b.wrap[1].max(b.rect[2]), b.rect[3]]
+}
+
+/// After `edit` was applied (the document is now at `generation`): an explicit width it set is
+/// kept for the paragraph; anything else drops a kept width (see [`keep_width`]).
+pub(crate) fn kept_after(view: &mut DocView, edit: &Edit, generation: u64) {
+    view.kept_width = match edit {
+        Edit::EditTextBlock { page, block, text, style } => style.width.filter(|w| w.is_finite() && *w > 0.0).map(|width| KeptWidth {
+            page: *page,
+            block: *block,
+            width: width.min(14_400.0),
+            generation,
+            key: text_key(text),
+        }),
+        _ => None,
+    };
+}
+
+/// The width kept for paragraph `block` on `page` while the document is at `generation`.
+pub(crate) fn kept_width_of(view: &DocView, page: usize, block: usize, generation: u64) -> Option<f64> {
+    view.kept_width.as_ref().filter(|k| k.page == page && k.block == block && k.generation == generation).map(|k| k.width)
+}
+
+/// A rewrite of a paragraph whose width is kept carries that width, so it wraps where its box
+/// shows (unless it asks for a width of its own).
+pub(crate) fn with_kept_width(view: &DocView, generation: u64, mut edit: Edit) -> Edit {
+    if let Edit::EditTextBlock { page, block, style, .. } = &mut edit
+        && style.width.is_none()
+        && let Some(width) = kept_width_of(view, *page, *block, generation)
     {
-        b.rect[2] = b.rect[0] + k.width.min(14_400.0);
+        style.width = Some(width);
     }
+    edit
+}
+
+/// Apply the kept width to a freshly read page's blocks. It is dropped when the document has
+/// changed since, or the paragraph at its index is no longer the rewritten one. The box shows the
+/// larger of the kept width and the text's extent (the engine never wraps inside a word), and that
+/// is the width kept for the next rewrite, so narrowing below the longest word shows the clamp.
+pub(crate) fn keep_width(view: &mut DocView, page: usize, generation: u64, blocks: &mut [pdfcraft_engine::TextBlock]) {
+    let Some(k) = view.kept_width.as_mut().filter(|k| k.page == page) else { return };
+    let Some(b) = blocks.get_mut(k.block).filter(|b| k.generation == generation && k.width.is_finite() && text_key(&b.text) == k.key) else {
+        view.kept_width = None;
+        return;
+    };
+    k.width = k.width.max(b.rect[2] - b.rect[0]).min(14_400.0);
+    // An explicit width wraps from the paragraph's left edge, right to left or not.
+    b.wrap = [b.rect[0], b.rect[0] + k.width];
 }
 
 /// How far an edge grip reaches outside a box's edge (screen pixels); with [`EDGE_INSIDE`] the
@@ -476,7 +540,7 @@ fn handle_at(boxes: &[Rect], bounds: Rect, p: Pos2) -> Option<usize> {
 /// handles reach outside the box's edge too).
 pub(crate) fn on_move_grip(view: &DocView, xf: &PageXform, info: &DocInfo, page: usize, p: Pos2) -> bool {
     let Some((_, lines)) = view.edit_lines.get(&page) else { return false };
-    let boxes: Vec<Rect> = lines.iter().map(|l| xf.user_rect(info, page, l.rect.map(|v| v as f32)).expand(2.0)).collect();
+    let boxes: Vec<Rect> = lines.iter().map(|l| xf.user_rect(info, page, frame(l).map(|v| v as f32)).expand(2.0)).collect();
     let vertical = width_is_vertical(xf, info, page);
     let active = view.line_editor.as_ref().filter(|e| e.page == page).map(|e| e.block);
     handle_at(&boxes, xf.rect, p).is_some() || grab_at(&boxes, p, vertical, active).is_some_and(|(_, g)| g != Grip::Move)
@@ -485,7 +549,7 @@ pub(crate) fn on_move_grip(view: &DocView, xf: &PageXform, info: &DocInfo, page:
 /// The edge of `b` that `p` grabs: anywhere along its height, within reach of the line. A narrow
 /// box keeps its middle for moving. A box open for typing owns its inside (the text editor sits
 /// there), so its edges are grabbed from outside only.
-fn edge_at(b: Rect, p: Pos2, editing: bool, vertical: bool) -> Option<Grip> {
+fn edge_at(b: Rect, p: Pos2, editing: bool, vertical: bool) -> Option<(Grip, f32)> {
     let (b, p) = if vertical { (transposed(b), transposed_pos(p)) } else { (b, p) };
     if p.y < b.top() - EDGE_REACH || p.y > b.bottom() + EDGE_REACH {
         return None;
@@ -493,21 +557,29 @@ fn edge_at(b: Rect, p: Pos2, editing: bool, vertical: bool) -> Option<Grip> {
     let inside = if editing { 0.0 } else { EDGE_INSIDE.min(b.width() / 4.0) };
     let (dl, dr) = (p.x - b.left(), b.right() - p.x);
     match (dl >= -EDGE_REACH && dl <= inside, dr >= -EDGE_REACH && dr <= inside) {
-        (true, true) if dl <= dr => Some(Grip::Left),
-        (_, true) => Some(Grip::Right),
-        (true, false) => Some(Grip::Left),
+        (true, true) if dl <= dr => Some((Grip::Left, dl.abs())),
+        (_, true) => Some((Grip::Right, dr.abs())),
+        (true, false) => Some((Grip::Left, dl.abs())),
         _ => None,
     }
 }
 
-/// The topmost box under `p` and what it grabs there. `Grip::Left` is the box's edge where the
-/// text starts (its left, or its top when the width runs vertically). `active` is the box open for
-/// typing.
+/// The box under `p` and what it grabs there. `Grip::Left` is the box's edge where the text starts
+/// (its left, or its top when the width runs vertically). `active` is the box open for typing.
+/// Edges come first, the nearest one winning (boxes of neighbouring table cells sit close enough
+/// for their grab strips to overlap; ties go to the topmost box); otherwise the topmost box `p` is in.
 fn grab_at(boxes: &[Rect], p: Pos2, vertical: bool, active: Option<usize>) -> Option<(usize, Grip)> {
-    boxes.iter().enumerate().rev().find_map(|(i, b)| match edge_at(*b, p, active == Some(i), vertical) {
-        Some(g) => Some((i, g)),
-        None => b.contains(p).then_some((i, Grip::Move)),
-    })
+    let edge = boxes.iter().enumerate().rev().filter_map(|(i, b)| edge_at(*b, p, active == Some(i), vertical).map(|(g, d)| (i, g, d))).fold(
+        None,
+        |best: Option<(usize, Grip, f32)>, hit| match best {
+            Some(b) if b.2 <= hit.2 => Some(b),
+            _ => Some(hit),
+        },
+    );
+    match edge {
+        Some((i, g, _)) => Some((i, g)),
+        None => boxes.iter().enumerate().rev().find_map(|(i, b)| b.contains(p).then_some((i, Grip::Move))),
+    }
 }
 
 /// What a right-click on a selected image asks for.
@@ -754,7 +826,8 @@ pub(crate) fn page_input(
         view.block_drag = None;
         return true;
     }
-    let boxes: Vec<Rect> = lines.iter().map(|l| xf.user_rect(info, page, l.rect.map(|v| v as f32)).expand(2.0)).collect();
+    // Each box spans where its text wraps (see `frame`), not just its ink.
+    let boxes: Vec<Rect> = lines.iter().map(|l| xf.user_rect(info, page, frame(l).map(|v| v as f32)).expand(2.0)).collect();
     let painter = ui.painter();
     let active = view.line_editor.as_ref().filter(|e| e.page == page).map(|e| e.block);
     for (i, b) in boxes.iter().enumerate() {
@@ -830,17 +903,19 @@ pub(crate) fn page_input(
                 // moved left side (in user space; on an upside-down page that's the screen's right
                 // edge) moves the paragraph with it.
                 // Intended: a handle drag always sets an explicit width, so a single auto-width line
-                // becomes a fixed-width paragraph (it wraps at that width from then on). The block's
-                // rect is its text extent, so after saving the width reads back as the widest row.
-                let width = (l.rect[2] - l.rect[0]) + (to[2] - to[0]) - (from[2] - from[0]);
-                let shift = to[0] - from[0];
-                // The block's rect is its text extent, which would snap the box back; the dragged
-                // width is kept for it until the document changes again (see `keep_width`).
-                if preview != b {
-                    view.kept_width = Some(KeptWidth { page, block: d.block, width, generation: doc.edit_generation(), adopted: false });
-                }
-                let style = pdfcraft_engine::BlockStyle { width: Some(width), offset: (shift != 0.0).then_some([shift, 0.0]), ..Default::default() };
-                Edit::EditTextBlock { page, block: d.block, text: draft.unwrap_or_else(|| l.text.clone()), style }
+                // becomes a fixed-width paragraph (it wraps at that width from then on). PDFs store
+                // no wrap width: the UI keeps it for the paragraph's next rewrites (`KeptWidth`).
+                // The box is the paragraph's frame (where it wraps); an explicit width wraps from
+                // the paragraph's left edge, so the text moves to the frame's new left edge.
+                let f = frame(l);
+                let width = (f[2] - f[0]) + (to[2] - to[0]) - (from[2] - from[0]);
+                let shift = f[0] + (to[0] - from[0]) - l.rect[0];
+                let style =
+                    pdfcraft_engine::BlockStyle { width: Some(width), offset: (shift.abs() > 1e-6).then_some([shift, 0.0]), ..Default::default() };
+                // Rows that end early (a heading over its value) keep their break; rows the old
+                // width wrapped rewrap at the new one.
+                let text = draft.unwrap_or_else(|| l.rewrap_text(&doc.text_lines(page)));
+                Edit::EditTextBlock { page, block: d.block, text, style }
             } else if let Some(text) = draft {
                 let style = pdfcraft_engine::BlockStyle { offset: Some([to[0] - from[0], to[1] - from[1]]), ..Default::default() };
                 Edit::EditTextBlock { page, block: d.block, text, style }
@@ -916,12 +991,12 @@ pub(crate) fn page_input(
         let l = &lines[hit];
         let source_lines = doc.text_lines(page);
         let text = l.editor_text.clone();
-        // Screen pixels per point, from the box's width.
-        let scale = (boxes[hit].width() - 4.0) / ((l.rect[2] - l.rect[0]).max(1.0) as f32);
-        // How far the editor box may grow: a single-line paragraph's rewrite grows to the
-        // page's right edge, a multi-line paragraph rewraps to its own width.
-        let right = xf.rect.right().min(view.viewport_rect().right()) - 6.0;
-        let max_width = if l.rows.len() == 1 { (right - boxes[hit].left()).max(boxes[hit].width()) } else { boxes[hit].width() };
+        // The text's own box (its ink); the frame drawn around it is where it wraps.
+        let ink = xf.user_rect(info, page, l.rect.map(|v| v as f32));
+        // Screen pixels per point, from the text's width.
+        let scale = ink.width() / ((l.rect[2] - l.rect[0]).max(1.0) as f32);
+        let f = frame(l);
+        let max_width = ((f[2] - f[0]) as f32 * scale).max(ink.width());
         view.line_editor = Some(LineEditor {
             selection: None,
             font_resource: None,
@@ -929,8 +1004,10 @@ pub(crate) fn page_input(
             block: hit,
             text: text.clone(),
             original: text,
-            rect: boxes[hit],
+            rect: ink,
             source_rect: l.rect.map(|v| v as f32),
+            wrap_width: (f[2] - f[0]) as f32,
+            kept_width: kept_width_of(view, page, hit, doc.edit_generation()),
             multiline: l.rows.len() > 1,
             source: Some((l.clone(), source_lines)),
             fonts: install_source_fonts(ui.ctx(), doc, page),
@@ -1161,8 +1238,10 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
         return None;
     }
     ed.rect = xf.user_rect(info, ed.page, ed.source_rect);
-    ed.max_width = ed.rect.width();
     let scale = (ed.rect.width() / (ed.source_rect[2] - ed.source_rect[0]).abs().max(0.01)).max(0.01);
+    // Where the engine wraps the paragraph (its frame), in the editor's pixels.
+    let wrap = (ed.wrap_width * scale).max(ed.rect.width()).max(1.0);
+    ed.max_width = ed.rect.width();
     ed.size = (ed.look.size as f32 * scale).clamp(1.0, 300.0);
     let font = editor_font(&ed.look, ed.size);
     let text_color = color32(ed.look.color);
@@ -1171,24 +1250,26 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
         ctx,
         |ui| {
             // The editor opens at the source size. Once text changes, show the real draft
-            // extent: single rows grow toward the page edge, paragraphs rewrap at their
-            // source width, and the visible frame grows/shrinks vertically with their rows.
-            // An OCR phrase (several stretched words on one scanned line) also grows rightwards.
+            // extent: a single row grows up to where it wraps, paragraphs rewrap at their
+            // frame's width (the engine's), and the visible frame grows/shrinks vertically with
+            // their rows. An OCR phrase (several stretched words on one scanned line) also grows.
             let single_run = ed.source.as_ref().is_some_and(|(block, _)| block.lines.len() == 1 || block.invisible);
             let width = if !ed.multiline && single_run && !ed.text.contains('\n') && ed.has_changes() {
                 let job = editor_job(ui, ed, &ed.text, scale, f32::INFINITY);
                 let natural = ui.fonts_mut(|f| f.layout_job(job)).size().x;
-                natural.max(ed.size * 0.4).min((xf.rect.right() - ed.rect.left() - 36.0 * scale).max(ed.rect.width()))
+                natural.max(ed.size * 0.4).min(wrap)
             } else {
-                ed.rect.width().max(1.0)
+                wrap
             };
             ui.set_width(width);
             let measured = editor_galley(ui, ed, &ed.text, scale, width);
             ed.overflow = ed.has_changes() && (measured.rect.width() > ed.rect.width() + 1.5 || measured.rect.height() > ed.rect.height() + 1.5);
             let visible = Rect::from_min_size(ed.rect.min, measured.rect.size().max(egui::vec2(1.0, 1.0)));
             // Unsupported source programs use an interface fallback whose glyph advances
-            // can differ from the PDF's. Keep every visible row inside the growing frame.
-            let live = draft_rect.map_or(visible, |bounds| bounds.union(visible));
+            // can differ from the PDF's. Keep every visible row inside the growing frame, and
+            // the frame as wide as where the text wraps.
+            let wrapped = Rect::from_min_size(ed.rect.min, egui::vec2(wrap, visible.height()));
+            let live = draft_rect.map_or(visible, |bounds| bounds.union(visible)).union(wrapped);
             ui.painter().rect_stroke(live.expand(2.0), CornerRadius::ZERO, Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
             // White, unless the text is too pale to read on white (white text from a coloured
             // banner, #913): then a dark box, with a caret that shows on it.
@@ -1284,6 +1365,8 @@ mod tests {
             original: block.text.clone(),
             rect: Rect::NOTHING,
             source_rect: block.rect.map(|v| v as f32),
+            wrap_width: (block.wrap[1] - block.wrap[0]) as f32,
+            kept_width: None,
             multiline: block.rows.len() > 1,
             source: None,
             fonts: BTreeMap::new(),

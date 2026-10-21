@@ -425,7 +425,8 @@ pub struct DocView {
     pub picked_image: Option<crate::image_pick::PickedImage>,
     /// A paragraph box being dragged (moved, or resized from its right edge) in Edit text.
     pub block_drag: Option<crate::edit_text_ui::BlockDrag>,
-    /// The width a paragraph box was last dragged to, kept until the document changes.
+    /// The explicit width a paragraph was last rewritten at, kept (and sent with its next rewrites)
+    /// until anything else changes the document.
     pub(crate) kept_width: Option<crate::edit_text_ui::KeptWidth>,
     /// Commenting state: selected comment, gestures, composer.
     pub comments: crate::comments::CommentView,
@@ -578,10 +579,11 @@ impl DocView {
         }
     }
 
-    /// Edit text: the paragraph boxes as shown on `page` (user space), with the width a handle
-    /// drag set kept in them. Empty until the page has been drawn in Edit text.
+    /// Edit text: the paragraph boxes as shown on `page` (user space). Across, a box spans where
+    /// its text wraps when rewritten (the engine's `TextBlock::wrap`, or the width a handle drag
+    /// set); up and down, its rows. Empty until the page has been drawn in Edit text.
     pub fn shown_text_boxes(&self, page: usize) -> Vec<(String, [f64; 4])> {
-        self.edit_lines.get(&page).map(|(_, l)| l.iter().map(|b| (b.text.clone(), b.rect)).collect()).unwrap_or_default()
+        self.edit_lines.get(&page).map(|(_, l)| l.iter().map(|b| (b.text.clone(), crate::edit_text_ui::frame(b))).collect()).unwrap_or_default()
     }
 
     /// Where `page` is drawn on screen this frame (`None` when it is not on screen).

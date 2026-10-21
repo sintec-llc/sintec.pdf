@@ -113,6 +113,7 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
                 editor_text: String::new(),
                 spans: Vec::new(),
                 rect,
+                wrap: [rect[0], rect[2]],
                 base_font: first.base_font.clone(),
                 size: first.size,
                 bold: first.bold,
@@ -156,9 +157,98 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
         }
         block.text.push_str(row_text.trim_matches(paragraph_separator));
         block.rect = union(block.rect, rect);
+        block.wrap = [block.rect[0], block.rect[2]];
         block.rows.push(row);
     }
     blocks
+}
+
+impl TextBlock {
+    /// The paragraph's text for rewrapping it at another width ([`BlockStyle::width`]). Rows the
+    /// width wrapped (soft breaks) are joined as in [`TextBlock::text`]. A row that ends early,
+    /// where the next row's first word would have fitted (a heading over its value, a table cell's
+    /// own lines), keeps its break as a newline, so a rewrap never merges them. Equal to `text`
+    /// when every break is soft. `lines` is the page's [`text_lines`].
+    ///
+    /// The next word's width is estimated from its row's average advance; a break the estimate
+    /// can't place is treated as soft.
+    pub fn rewrap_text(&self, lines: &[TextLine]) -> String {
+        let rows: Vec<&str> = self.editor_text.split('\n').collect();
+        if rows.len() != self.rows.len() || rows.len() < 2 {
+            return self.text.clone();
+        }
+        let size = if self.size.is_finite() && self.size > 0.0 { self.size } else { 1.0 };
+        let hard = |i: usize| -> bool {
+            let (Some(row), Some(next), Some(next_text)) =
+                (self.rows.get(i).and_then(|r| row_rect(r, lines)), self.rows.get(i + 1).and_then(|r| row_rect(r, lines)), rows.get(i + 1))
+            else {
+                return false;
+            };
+            let next_text = next_text.trim_matches(paragraph_separator);
+            let chars = next_text.chars().count();
+            let word = next_text.split(paragraph_separator).next().map_or(0, |w| w.chars().count());
+            if chars == 0 || word == 0 {
+                return false;
+            }
+            let word_width = (next[2] - next[0]).max(0.0) * word as f64 / chars as f64;
+            let fits = row[2] + 0.3 * size + word_width + 0.2 * size;
+            fits.is_finite() && fits < self.rect[2]
+        };
+        if !(0..rows.len().saturating_sub(1)).any(hard) {
+            return self.text.clone();
+        }
+        let mut text = String::new();
+        for (i, row) in rows.iter().enumerate() {
+            if i > 0 {
+                if hard(i - 1) {
+                    text.push('\n');
+                } else if text.ends_with('-') {
+                    text.pop();
+                } else {
+                    text.push(' ');
+                }
+            }
+            text.push_str(row.trim_matches(paragraph_separator));
+        }
+        text
+    }
+}
+
+/// The free space a rewrite without an explicit width lets paragraph `index` wrap in: its left and
+/// right edges in user space (x), with the paragraph moved by `offset`. `em` is the text size (the
+/// narrowest a paragraph wraps at) and `rtl` says the text runs right to left.
+///
+/// - A paragraph of several rows keeps its width: it rewraps at its extent.
+/// - A single row grows towards the page's right margin (36 pt in from the crop box), to the left
+///   when right to left, stopping half an em before the next paragraph on its row (a table's next
+///   cell), so typing into one cell wraps instead of running over its neighbour.
+/// - An OCR line (invisible text over a scan) grows to the margin: its words are separate
+///   paragraphs, and wrapping would put the new text over the scanned line below.
+///
+/// Never narrower than the text's own extent. Text drawn by vector rulings (table borders) is not
+/// considered: only text stops a row.
+pub(crate) fn auto_wrap(blocks: &[TextBlock], index: usize, crop: [f64; 4], offset: [f64; 2], em: f64, rtl: bool) -> [f64; 2] {
+    let Some(b) = blocks.get(index) else { return [0.0, 0.0] };
+    let [dx, dy] = offset.map(|v| if v.is_finite() { v } else { 0.0 });
+    let r = [b.rect[0] + dx, b.rect[1] + dy, b.rect[2] + dx, b.rect[3] + dy];
+    let extent = (r[2] - r[0]).max(0.0);
+    let em = if em.is_finite() && em > 0.0 { em } else { 0.0 };
+    let own = extent.max(em);
+    if b.rows.len() > 1 {
+        return [r[0], r[0] + own];
+    }
+    let gap = em * 0.5;
+    // Paragraphs beside this one: they share some of its height.
+    let beside = blocks.iter().enumerate().filter(|(j, o)| *j != index && !b.invisible && o.rect[1] < r[3] && o.rect[3] > r[1]).map(|(_, o)| o.rect);
+    let width = if rtl {
+        let limit = beside.filter(|o| o[2] <= r[0] + 0.5).map(|o| o[2] + gap).fold(crop[0] + 36.0, f64::max);
+        own.max(r[2] - limit)
+    } else {
+        let limit = beside.filter(|o| o[0] >= r[2] - 0.5).map(|o| o[0] - gap).fold(crop[2] - 36.0, f64::min);
+        own.max(limit - r[0])
+    };
+    let width = if width.is_finite() { width.min(14_400.0) } else { own };
+    if rtl { [r[2] - width, r[2]] } else { [r[0], r[0] + width] }
 }
 
 /// Sintec.PDF: the full face loaded into the page (`PCFull…`, see `register_text_font`) that
@@ -232,6 +322,7 @@ fn shape_source(
 
 /// Rewrite visual rows while keeping the source style on each surviving character. Resource
 /// names may differ between Unicode subsets of the same face; encoding searches those subsets.
+/// Without an explicit [`BlockStyle::width`] the rows wrap at `auto_width` (see [`auto_wrap`]).
 pub(super) fn rewrite_styled_block(
     doc: &mut Document,
     page: usize,
@@ -239,6 +330,7 @@ pub(super) fn rewrite_styled_block(
     lines: &[TextLine],
     text: Option<&str>,
     style: &BlockStyle,
+    auto_width: f64,
 ) -> Result<LineEdit, EditError> {
     let first = block.lines.first().and_then(|i| lines.get(*i)).ok_or_else(|| EditError::Invalid("the paragraph has no source runs".into()))?;
     let draft = match text {
@@ -369,12 +461,9 @@ pub(super) fn rewrite_styled_block(
     if !dx.is_finite() || !dy.is_finite() || style.width.is_some_and(|w| !w.is_finite()) {
         return Err(EditError::Invalid("the paragraph's position and width must be finite".into()));
     }
-    // A rewritten OCR line grows to the right rather than wrapping onto the scanned line below.
-    let natural = if block.invisible {
-        (p.crop(doc)[2] - 36.0 - (block.rect[0] + dx)).max(block.rect[2] - block.rect[0])
-    } else {
-        block.rect[2] - block.rect[0]
-    };
+    // A rewritten OCR line grows to the right rather than wrapping onto the scanned line below; a
+    // single row grows up to its neighbour or the margin; several rows keep their width.
+    let natural = if auto_width.is_finite() { auto_width } else { block.rect[2] - block.rect[0] };
     let width = style.width.unwrap_or(natural).clamp(1.0, 14_400.0);
     // Each tuple is a character, its source style and an encodable resource name.
     let mut chars = Vec::new();

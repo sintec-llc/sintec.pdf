@@ -236,6 +236,9 @@ fn paragraph(app: &mut PdfCraftApp, i: usize, ui: &mut egui::Ui, t: &Tokens) {
                 && let Some(block) = doc.text_blocks(ed.page).get(ed.block)
             {
                 ed.refresh_source(block, doc.text_lines(ed.page));
+                if let Some(width) = app.views.get(i).and_then(|v| crate::edit_text_ui::kept_width_of(v, ed.page, ed.block, doc.edit_generation())) {
+                    ed.keep_wrap(width);
+                }
                 ed.fonts = crate::edit_text_ui::install_source_fonts(ui.ctx(), doc, ed.page);
             }
         }
