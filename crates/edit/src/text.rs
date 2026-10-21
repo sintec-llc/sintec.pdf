@@ -360,7 +360,13 @@ struct Origin {
 pub struct TextBlock {
     /// The lines' text joined with spaces (lines that ended in a hyphen are joined directly).
     pub text: String,
+    /// The text's ink extent (user space).
     pub rect: [f64; 4],
+    /// Where a rewrite without an explicit width ([`BlockStyle::width`]) wraps the text: its left
+    /// and right edges in user space, along x. PDFs store no wrap width, so this is derived from
+    /// the layout by the same rule [`rewrite_block`] uses (see [`text_blocks`]); readers that
+    /// don't compute it ([`reading_blocks`]) leave the text's extent here.
+    pub wrap: [f64; 2],
     pub base_font: String,
     pub size: f64,
     pub bold: bool,
@@ -1745,10 +1751,26 @@ fn coincident_ops(lines: &[TextLine], rects: &[[f64; 4]]) -> std::collections::H
     drop
 }
 
-/// The paragraphs on a page (0-based).
+/// The paragraphs on a page (0-based), each with the width a rewrite wraps it at
+/// ([`TextBlock::wrap`]).
 pub fn text_blocks(doc: &Document, page: usize) -> Result<Vec<TextBlock>, EditError> {
     let lines = text_lines(doc, page)?;
-    Ok(group_blocks(&lines))
+    let mut blocks = group_blocks(&lines);
+    let crop = page_dict(doc, page)?.crop(doc);
+    let wraps: Vec<[f64; 2]> = (0..blocks.len())
+        .map(|i| blocks.get(i).map_or([0.0, 0.0], |b| regions::auto_wrap(&blocks, i, crop, [0.0, 0.0], b.size, anchored_rtl(&b.text))))
+        .collect();
+    for (b, wrap) in blocks.iter_mut().zip(wraps) {
+        b.wrap = wrap;
+    }
+    Ok(blocks)
+}
+
+/// Does a rewrite of a single row of `text` keep its right edge and grow to the left? Hebrew text
+/// is written back by the single-style path, which anchors right-to-left lines on the right; other
+/// right-to-left scripts need shaping and are laid out left-anchored by the styled path.
+fn anchored_rtl(text: &str) -> bool {
+    crate::bidi::rtl_base(text) && text.chars().any(crate::bidi::is_hebrew)
 }
 
 /// Remove a paragraph's glyphs for a temporary editor background. Numeric TJ adjustments
@@ -1928,7 +1950,9 @@ pub(crate) fn rewrite_block_with_limit(
                 && style.family.is_none()
                 && style.bold.is_none())
     {
-        return rewrite_styled_block(doc, page, &b, &lines, text, style);
+        // The styled path lays rows out from their left edge, right to left or not.
+        let [left, right] = regions::auto_wrap(&blocks, block, p.crop(doc), style.offset.unwrap_or([0.0, 0.0]), style.size.unwrap_or(b.size), false);
+        return rewrite_styled_block(doc, page, &b, &lines, text, style, right - left);
     }
     let streams = content_streams(doc, &p.dict);
     let pieces = Pieces::join(&streams.iter().map(|(_, d)| d.as_slice()).collect::<Vec<_>>());
@@ -1970,16 +1994,18 @@ pub(crate) fn rewrite_block_with_limit(
     // Right-to-left text (more Hebrew or Arabic letters than Latin) is right-aligned unless an
     // alignment is asked for, and a single right-to-left line keeps its right edge as it grows.
     let rtl = crate::bidi::rtl_base(&text);
-    let anchored_right = rtl && style.width.is_none() && members.len() == 1;
+    let anchored_right = rtl && style.width.is_none() && b.rows.len() <= 1;
     // A paragraph keeps its width (or takes the one asked for); a single line grows to the right
-    // (to the left when right-to-left), up to the page's margin.
+    // (to the left when right-to-left), up to the page's margin or the next paragraph on its row
+    // (the same rule `text_blocks` reports as `TextBlock::wrap`).
     let width = match style.width {
         // Capped at the largest page PDF allows (14 400 pt).
         Some(w) if w.is_finite() => w.clamp(size * k, 14_400.0),
         Some(_) => return Err(EditError::Invalid("the paragraph's width must be a number".into())),
-        None if anchored_right => (b.rect[2] - b.rect[0]).max(size * k).max(b.rect[2] + dx - (p.crop(doc)[0] + 36.0)),
-        None if members.len() == 1 => (b.rect[2] - b.rect[0]).max(size * k).max(p.crop(doc)[2] - 36.0 - (b.rect[0] + dx)),
-        None => (b.rect[2] - b.rect[0]).max(size * k),
+        None => {
+            let [left, right] = regions::auto_wrap(&blocks, block, p.crop(doc), [dx, dy], size * k, rtl);
+            right - left
+        }
     };
     if !width.is_finite() {
         return Err(EditError::Invalid("the paragraph's width must be a number".into()));

@@ -2746,8 +2746,10 @@ fn dragging_a_paragraph_moves_it_and_its_edge_rewraps_it() {
     assert!(near(moved.rect[0], before.rect[0] + 30.0) && near(moved.rect[1], before.rect[1] + 50.0), "{:?} → {:?}", before.rect, moved.rect);
     assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().can_undo(), Some("Move object"));
     // Drag the handle on its right edge in to about 45 pt wide: "Page" and "1" rewrap onto two lines.
-    let edge = screen(moved.rect[2], (moved.rect[1] + moved.rect[3]) / 2.0) + egui::vec2(2.0, 0.0);
-    let narrower = (moved.rect[2] - moved.rect[0] - 45.0) as f32 * k;
+    // 015: a single line's box reaches where it wraps (the page's margin), not just its ink.
+    let shown = h.state().views[0].shown_text_boxes(0)[0].1;
+    let edge = screen(shown[2], (moved.rect[1] + moved.rect[3]) / 2.0) + egui::vec2(2.0, 0.0);
+    let narrower = (shown[2] - shown[0] - 45.0) as f32 * k;
     drag(&mut h, edge, edge - egui::vec2(narrower, 0.0));
     let s = h.state();
     let doc = s.session.get(s.views[0].id).unwrap();
@@ -3206,15 +3208,18 @@ fn a_quick_flick_on_either_edge_rewraps_the_paragraph() {
     // Grab edges near the box's top: a rewrapped box reaches the window's bottom, where the
     // tool's toast sits over the page and takes the press.
     let grip_y = |b: &pdfcraft_engine::TextBlock| b.rect[3] - 6.0;
-    // Narrow "Page 1" from its right edge to about 45 pt: it rewraps onto two lines.
+    // Narrow "Page 1" from its right edge to about 45 pt: it rewraps onto two lines. 015: the
+    // box's right edge is where the line wraps (the page's margin), not the end of its ink.
     let b = block(&h);
-    let edge = screen(b.rect[2], grip_y(&b)) + egui::vec2(2.0, 0.0);
-    flick(&mut h, edge, edge - egui::vec2((b.rect[2] - b.rect[0] - 45.0) as f32 * k, 0.0));
+    let shown = h.state().views[0].shown_text_boxes(0)[0].1;
+    let edge = screen(shown[2], grip_y(&b)) + egui::vec2(2.0, 0.0);
+    flick(&mut h, edge, edge - egui::vec2((shown[2] - shown[0] - 45.0) as f32 * k, 0.0));
     let text: Vec<String> = lines(&h).iter().map(|l| l.text.clone()).collect();
     assert_eq!(text, ["Page", "1"], "narrowed from the right edge");
     // Flick the right edge outward, past the box and its handle: back onto one line.
     let b = block(&h);
-    let edge = screen(b.rect[2], grip_y(&b)) + egui::vec2(2.0, 0.0);
+    let shown = h.state().views[0].shown_text_boxes(0)[0].1;
+    let edge = screen(shown[2], grip_y(&b)) + egui::vec2(2.0, 0.0);
     flick(&mut h, edge, edge + egui::vec2(80.0 * k, 0.0));
     let text: Vec<String> = lines(&h).iter().map(|l| l.text.clone()).collect();
     assert_eq!(text, ["Page 1"], "widened by a fast drag that left the handle at once");
@@ -3748,10 +3753,14 @@ fn inline_editor_preserves_source_font_and_previews_live_bounds() {
         egui::pos2(page.left() + measured[2] as f32 * scale, page.top() + (300.0 - measured[1] as f32) * scale),
     )
     .expand(2.0);
+    // 015: the frame also spans where the paragraph wraps (its `TextBlock::wrap`), so it is the
+    // draft's PDF geometry widened, if need be, to the wrap width the rewrite uses.
+    let wrap_right = page.left() + (source.rect[0] + (source.wrap[1] - source.wrap[0])) as f32 * scale + 2.0;
+    let expected_frame = egui::Rect::from_min_max(expected_frame.min, egui::pos2(expected_frame.max.x.max(wrap_right), expected_frame.max.y));
     let live = frame(&h);
     assert!(
         (live.min - expected_frame.min).length() < 0.1 && (live.max - expected_frame.max).length() < 0.1,
-        "the live frame shows the same PDF geometry as Apply/Save"
+        "the live frame shows the same PDF geometry as Apply/Save: {live:?} vs {expected_frame:?}"
     );
     assert!(!dirty(&h), "draft measurement does not modify the document");
     h.key_press_modifiers(Modifiers::COMMAND, Key::Enter);
@@ -4317,9 +4326,11 @@ fn a_single_word_cell_clamps_to_its_own_width() {
     let mut h = table_cells_harness();
     let before = h.state().views[0].shown_text_boxes(0).into_iter().find(|(t, _)| t.starts_with("Сеть")).unwrap().1;
     let rows = doc_rows(&h);
-    let after = drag_cell_edge(&mut h, "Сеть", true, -15.0);
+    // 015: a one-line cell's box reaches where it wraps (here the page's margin), so the drag
+    // goes in past the word ("Сеть" is 4 Courier glyphs of 7.2 pt) to reach the clamp.
+    let after = drag_cell_edge(&mut h, "Сеть", true, -(before[2] - before[0] - 10.0));
     assert_eq!(doc_rows(&h), rows, "one word cannot wrap");
-    assert!(((after[2] - after[0]) - (before[2] - before[0])).abs() < 1.5, "clamped to the word: {before:?} → {after:?}");
+    assert!(((after[2] - after[0]) - 28.8).abs() < 1.5, "clamped to the word: {before:?} → {after:?}");
 }
 
 #[test]
