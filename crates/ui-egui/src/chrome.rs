@@ -286,7 +286,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     }
                     // Updates are one click away from anywhere in the app (Help ▸ Check for updates),
                     // with the running version beside the button.
-                    if widgets::ghost_button(ui, "", tl!("Check updates")).on_hover_text(pdfcraft_engine::links::APP_PAGE).clicked() {
+                    if widgets::ghost_button_sized(ui, "", tl!("Check updates"), tab_h).on_hover_text(pdfcraft_engine::links::APP_PAGE).clicked() {
                         app.execute("help.check_updates");
                     }
                     let t = theme::Tokens::get(ui.ctx());
