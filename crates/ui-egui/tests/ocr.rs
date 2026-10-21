@@ -1,10 +1,13 @@
 //! Scan & OCR ▸ Recognize text in the real shell (egui_kittest): the dialog, the run and its
 //! result (skipped without the OCR models: `cargo xtask models`).
 
+#[path = "support/mod.rs"]
+mod support;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use pdfcraft_engine::{AddedText, Edit, Session, export};
 use pdfcraft_ui_egui::PdfCraftApp;
+use support::standard_faces;
 
 /// A one-page PDF that is only a picture of a sentence.
 fn scan() -> Vec<u8> {
@@ -19,6 +22,7 @@ fn scan() -> Vec<u8> {
 fn recognize_text_dialog_adds_searchable_text() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         app.open_bytes("scan.pdf", None, scan()).unwrap();
         app.run_inline = true;
@@ -84,6 +88,7 @@ fn recognize_text_can_read_pictures_on_pages_with_text() {
     };
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         app.open_bytes("hybrid.pdf", None, hybrid).unwrap();
         app.run_inline = true;
@@ -123,6 +128,7 @@ fn an_ocr_word_opens_for_editing_and_stays_open() {
     use pdfcraft_engine::ocr::PlacedWord;
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         app.open_bytes("scan.pdf", None, scan()).unwrap();
         let id = app.views[0].id;

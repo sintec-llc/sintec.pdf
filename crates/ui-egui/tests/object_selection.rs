@@ -1,9 +1,12 @@
 //! Multi-object editing through the real shell. Synthetic artwork and standard-font text only.
+#[path = "support/mod.rs"]
+mod support;
 use egui::{Key, Modifiers, Pos2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use pdfcraft_engine::{AddedText, Edit, EditableObject};
 use pdfcraft_ui_egui::PdfCraftApp;
+use support::standard_faces;
 
 fn fixture(clipping: bool) -> Vec<u8> {
     fixture_with_background(clipping, false)
@@ -57,6 +60,7 @@ fn harness_with(clipping: bool) -> Harness<'static, PdfCraftApp> {
 fn harness_document(clipping: bool, background: bool) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.session = pdfcraft_engine::Session::new().with_clock(|| 1_700_000_000);
         app.set_option("language", "en").unwrap();
         app.open_bytes("group.pdf", None, fixture_with_background(clipping, background)).unwrap();

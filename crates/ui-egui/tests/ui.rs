@@ -363,7 +363,7 @@ fn the_integrated_title_bar_is_the_traffic_light_band() {
         app.open_bytes("band.pdf", None, FIXTURE.to_vec()).unwrap();
     });
     let band = 28.0;
-    for label in ["Home", "band.pdf", "Open", "Discord", "Keyboard shortcuts"] {
+    for label in ["Home", "band.pdf", "Open", "Check updates", "Keyboard shortcuts"] {
         let r = h.get_by_label(label).rect();
         assert!(r.top() >= 0.0 && r.bottom() <= band, "{label}: {r:?} inside the {band} pt title bar");
         assert!(r.height() >= 24.0, "{label}: {r:?} stays clickable");

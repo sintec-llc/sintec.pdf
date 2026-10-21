@@ -1,7 +1,10 @@
 //! The UI control channel (M3.9): an agent can see the widget tree, click, type, press keys,
 //! run commands, change view options and take screenshots of the running app.
 
+#[path = "support/mod.rs"]
+mod support;
 use std::sync::{Arc, Mutex};
+use support::standard_faces;
 
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
@@ -47,6 +50,7 @@ fn harness_pages_at(pages: usize, width: f32, scale: f32) -> (Harness<'static, P
     let s = slot.clone();
     let mut h = Harness::builder().with_size(egui::vec2(width, 900.0)).with_pixels_per_point(scale).build_eframe(move |cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         *s.lock().unwrap() = Some(app.attach_control(&cc.egui_ctx));
         app.open_bytes("doc.pdf", None, fixture(pages)).unwrap();

@@ -2,10 +2,13 @@
 //! really produces, on a synthetic table-like page: a multi-word cell beside a one-word cell, a
 //! heading over its value, and a paragraph soft-wrapped onto five rows. Also after a width drag
 //! (widening or narrowing), and on a quarter-turned page.
+#[path = "support/mod.rs"]
+mod support;
 use egui::Pos2;
 use egui_kittest::Harness;
 use pdfcraft_engine::Edit;
 use pdfcraft_ui_egui::PdfCraftApp;
+use support::standard_faces;
 
 const PARAGRAPH: &str = "the quick brown fox jumps over the lazy dog while seven bold zebras quietly graze near a calm river bank";
 /// Courier 12: every character (and space) is 7.2 pt.
@@ -55,25 +58,6 @@ fn fixture() -> Vec<u8> {
     }
     out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
     out
-}
-
-fn standard_faces() -> Vec<pdfcraft_engine::text_fonts::FontFile> {
-    ["Arial", "Times New Roman", "Courier New"]
-        .map(|family| pdfcraft_engine::text_fonts::FontFile {
-            path: std::path::PathBuf::from(format!("/nonexistent/{family}.ttf")),
-            family: family.into(),
-            face: family.replace(' ', ""),
-            style: pdfcraft_fonts::embedding::FaceStyle {
-                weight: 400,
-                italic: false,
-                monospace: family == "Courier New",
-                serif: Some(family == "Times New Roman"),
-                cyrillic: true,
-            },
-            widths: Vec::new(),
-            bundled: false,
-        })
-        .to_vec()
 }
 
 fn harness(rotation: i64) -> Harness<'static, PdfCraftApp> {

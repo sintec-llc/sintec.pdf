@@ -281,6 +281,14 @@ fn key(key: egui::Key, modifiers: egui::Modifiers) -> egui::Event {
 
 /// Deliver `events` together, in one frame.
 fn one_frame(h: &mut Harness<'static, PdfCraftApp>, events: Vec<egui::Event>) {
+    // The shortcut modifier as a keyboard reports it: ⌘ on macOS, Ctrl elsewhere, plus the logical `command`.
+    let held = egui::Modifiers { mac_cmd: cfg!(target_os = "macos"), ctrl: !cfg!(target_os = "macos"), ..egui::Modifiers::COMMAND };
+    let events = events.into_iter().map(|e| match e {
+        egui::Event::Key { key, physical_key, pressed, repeat, modifiers } if modifiers.command => {
+            egui::Event::Key { key, physical_key, pressed, repeat, modifiers: held }
+        }
+        other => other,
+    });
     h.input_mut().events.extend(events);
     h.run_steps(1);
 }
