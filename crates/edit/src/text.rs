@@ -2424,12 +2424,15 @@ pub(crate) fn translate_blocks(doc: &mut Document, page: usize, indexes: &[usize
     Ok(())
 }
 
+// Declared at file level: a `#[path]` inside an inline module is resolved through the directories
+// `text/tests/`, which do not exist, and only Windows lets `..` pass through them.
+#[cfg(test)]
+#[path = "../../engine/tests/support/font_fixture.rs"]
+mod font_fixture;
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[path = "../../../../engine/tests/support/font_fixture.rs"]
-    mod font_fixture;
 
     /// A one-page document with composite font `F1` (`/BaseFont /CIDFont+F1`) embedding `program`.
     fn cid_document(program: Vec<u8>) -> Document {
