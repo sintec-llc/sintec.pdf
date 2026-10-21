@@ -5,7 +5,7 @@
     wix build pdfcraft.wxs installer-ui.wxs -arch x64 -d Version=1.2.3 -d BinDir=... -d IconPath=... -o out.msi
 
   Per-machine install into Program Files, a Start Menu shortcut, a desktop shortcut (on by default,
-  optional), an App Paths entry, Sintec.PDF registered as a PDF handler (offered under "Open with"
+  optional, and an update keeps it only if it is still there), an App Paths entry, Sintec.PDF registered as a PDF handler (offered under "Open with"
   and in Default apps, never forced as the default), and "Edit with Sintec.PDF" on PDF files'
   right-click menu (on by default, optional). Files opened with Sintec.PDF arrive on its command
   line.
@@ -37,10 +37,20 @@
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/sintec-llc/sintec.pdf" />
     <Property Id="ARPURLUPDATEINFO" Value="https://github.com/sintec-llc/sintec.pdf/releases" />
     <Property Id="ARPHELPLINK" Value="https://github.com/sintec-llc/sintec.pdf/issues" />
-    <!-- Desktop shortcut (#143): on by default, a checkbox in the full-UI welcome dialog, and
-         INSTALLDESKTOPSHORTCUT=0 on the msiexec command line for unattended installs. Secure, so the
-         choice made in the (unelevated) UI reaches the elevated install. -->
-    <Property Id="INSTALLDESKTOPSHORTCUT" Value="1" Secure="yes" />
+    <!-- Desktop shortcut (#143): on by default for a first install, a checkbox in the full-UI
+         welcome dialog, and INSTALLDESKTOPSHORTCUT=0 on the msiexec command line for unattended
+         installs. Secure, so the choice made in the (unelevated) UI reaches the elevated install.
+         An update keeps the shortcut only if it is still on the desktop (#1058): the launcher
+         updates with /passive and no properties, so deleting the shortcut is the only way its
+         users can say no. A value given on the command line wins. -->
+    <Property Id="INSTALLDESKTOPSHORTCUT" Secure="yes" />
+    <Property Id="EXISTINGDESKTOPSHORTCUT">
+      <DirectorySearch Id="DesktopSearch" Path="[DesktopFolder]" Depth="0">
+        <FileSearch Name="Sintec.PDF.lnk" />
+      </DirectorySearch>
+    </Property>
+    <SetProperty Id="INSTALLDESKTOPSHORTCUT" Value="1" After="AppSearch" Sequence="first"
+        Condition="NOT INSTALLDESKTOPSHORTCUT AND (NOT WIX_UPGRADE_DETECTED OR EXISTINGDESKTOPSHORTCUT)" />
     <!-- Every install, upgrade, repair and removal of this package writes a verbose log to %TEMP%
          (MSI*.LOG), however it was started (double-click, the in-app updater, Programs), so a
          missing installation on someone's PC can be traced afterwards. -->
