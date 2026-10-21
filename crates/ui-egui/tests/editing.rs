@@ -3221,7 +3221,9 @@ fn a_quick_flick_on_either_edge_rewraps_the_paragraph() {
     // Flick the left edge inward: it rewraps and its left side follows the pointer.
     let b = block(&h);
     let edge = screen(b.rect[0], grip_y(&b)) - egui::vec2(2.0, 0.0);
-    let inward = (b.rect[2] - b.rect[0] - 45.0) as f32;
+    // The box still shows the width the previous drag gave it, wider than its text.
+    let shown = h.state().views[0].shown_text_boxes(0)[0].1;
+    let inward = (shown[2] - shown[0] - 45.0) as f32;
     flick(&mut h, edge, edge + egui::vec2(inward * k, 0.0));
     let after = lines(&h);
     let text: Vec<String> = after.iter().map(|l| l.text.clone()).collect();
@@ -4191,4 +4193,142 @@ fn private_new_chinese_keyboard_input_preserves_font_layout_and_saved_pixels() {
     }
     assert_eq!(std::fs::read(path).unwrap(), original);
     println!("verified Chinese keyboard insertion/deletion and save/reopen rendering on {pages} pages");
+}
+
+/// A table-like page with Russian cells in a monospaced font with a ToUnicode map (a synthetic
+/// stand-in for a real table export): rows far enough apart to stay separate paragraphs.
+fn table_cells_fixture() -> Vec<u8> {
+    let cells = [("Доступ к сети Московского офиса", 255), ("имя входа (login)", 200), ("Сеть", 145), ("one two three", 90)];
+    let mut codes: Vec<char> = Vec::new();
+    for (text, _) in cells {
+        for c in text.chars().filter(|c| !c.is_ascii()) {
+            if !codes.contains(&c) {
+                codes.push(c);
+            }
+        }
+    }
+    let code_of = |c: char| if c.is_ascii() { c as u32 } else { 0x80 + codes.iter().position(|x| *x == c).unwrap_or(0) as u32 };
+    let mut body = String::new();
+    for (text, y) in cells {
+        let hex: String = text.chars().map(|c| format!("{:02X}", code_of(c))).collect();
+        body += &format!("BT /F1 12 Tf 20 {y} Td <{hex}> Tj ET\n");
+    }
+    let mut cmap = String::from("/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n1 begincodespacerange <00> <FF> endcodespacerange\n");
+    cmap += "1 beginbfrange <20> <7E> <0020> endbfrange\n";
+    cmap += &format!("{} beginbfchar\n", codes.len());
+    for (i, c) in codes.iter().enumerate() {
+        cmap += &format!("<{:02X}> <{:04X}>\n", 0x80 + i, *c as u32);
+    }
+    cmap += "endbfchar\nendcmap end end\n";
+    let widths = vec!["600"; 256].join(" ");
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [4 0 R] /Count 1 /MediaBox [0 0 400 300] >>".into(),
+        format!("<< /Type /Font /Subtype /Type1 /BaseFont /Courier /FirstChar 0 /LastChar 255 /Widths [{widths}] /ToUnicode 6 0 R >>"),
+        "<< /Type /Page /Parent 2 0 R /Contents 5 0 R /Resources << /Font << /F1 3 0 R >> >> >>".into(),
+        format!("<< /Length {} >>\nstream\n{body}\nendstream", body.len()),
+        format!("<< /Length {} >>\nstream\n{cmap}\nendstream", cmap.len()),
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    out
+}
+
+fn table_cells_harness() -> Harness<'static, PdfCraftApp> {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("table.pdf", None, table_cells_fixture()).expect("table fixture opens");
+        app.fonts.installed_override = Some(standard_faces());
+        assert!(app.execute("edit.edit_text"));
+        app
+    });
+    h.run_steps(4);
+    h
+}
+
+/// Drag the right (or left) width handle of the cell reading `text` by `by` points; returns the
+/// box shown afterwards.
+fn drag_cell_edge(h: &mut Harness<'static, PdfCraftApp>, text: &str, right: bool, by: f64) -> [f64; 4] {
+    let shown = |h: &Harness<'static, PdfCraftApp>| h.state().views[0].shown_text_boxes(0).into_iter().find(|(t, _)| t.starts_with(text));
+    let (_, b) = shown(h).unwrap_or_else(|| panic!("no cell {text}: {:?}", h.state().views[0].shown_text_boxes(0)));
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 400.0;
+    let x = if right { b[2] } else { b[0] };
+    let from = egui::pos2(r.left() + x as f32 * k + if right { 2.0 } else { -2.0 }, r.top() + (300.0 - b[3] as f32 + 6.0) * k);
+    flick(h, from, from + egui::vec2(by as f32 * k, 0.0));
+    h.run_steps(2);
+    shown(h).unwrap_or_else(|| panic!("cell {text} vanished: {:?}", h.state().views[0].shown_text_boxes(0))).1
+}
+
+fn doc_rows(h: &Harness<'static, PdfCraftApp>) -> Vec<String> {
+    let s = h.state();
+    s.session.get(s.views[0].id).unwrap().text_lines(0).iter().map(|l| l.text.trim_end().to_owned()).collect()
+}
+
+#[test]
+fn widening_a_single_line_cell_keeps_the_box_wide_after_release() {
+    let mut h = table_cells_harness();
+    let rows = doc_rows(&h);
+    assert!(rows.contains(&"имя входа (login)".to_owned()) && rows.contains(&"Сеть".to_owned()), "{rows:?}");
+    let before = h.state().views[0].shown_text_boxes(0).into_iter().find(|(t, _)| t.starts_with("имя")).unwrap().1;
+    let after = drag_cell_edge(&mut h, "имя", true, 60.0);
+    assert!((after[2] - after[0]) > (before[2] - before[0]) + 50.0, "{before:?} → {after:?}");
+    assert_eq!(doc_rows(&h), rows, "the text and the other cells are untouched");
+    // Idle frames keep the wide box.
+    h.run_steps(3);
+    let still = h.state().views[0].shown_text_boxes(0).into_iter().find(|(t, _)| t.starts_with("имя")).unwrap().1;
+    assert_eq!(still, after);
+}
+
+#[test]
+fn widening_then_narrowing_a_cell_works_from_the_shown_box() {
+    let mut h = table_cells_harness();
+    let first = drag_cell_edge(&mut h, "one two", true, 50.0);
+    let second = drag_cell_edge(&mut h, "one two", true, -30.0);
+    assert!((second[2] - first[2] + 30.0).abs() < 3.0, "{first:?} → {second:?}");
+}
+
+#[test]
+fn narrowing_a_multi_word_cell_rewraps_it_and_keeps_it_narrow() {
+    let mut h = table_cells_harness();
+    let before = h.state().views[0].shown_text_boxes(0).into_iter().find(|(t, _)| t.starts_with("Доступ")).unwrap().1;
+    let width = before[2] - before[0];
+    let after = drag_cell_edge(&mut h, "Доступ", true, -(width - 130.0));
+    let rows = doc_rows(&h);
+    assert!(rows.len() > 4, "the cell wrapped onto more rows: {rows:?}");
+    assert!(rows.iter().all(|r| r.chars().count() <= 18), "{rows:?}");
+    let w = after[2] - after[0];
+    assert!((100.0..=135.0).contains(&w), "the box stays at about the dragged width, not {w} ({after:?})");
+}
+
+#[test]
+fn a_single_word_cell_clamps_to_its_own_width() {
+    let mut h = table_cells_harness();
+    let before = h.state().views[0].shown_text_boxes(0).into_iter().find(|(t, _)| t.starts_with("Сеть")).unwrap().1;
+    let rows = doc_rows(&h);
+    let after = drag_cell_edge(&mut h, "Сеть", true, -15.0);
+    assert_eq!(doc_rows(&h), rows, "one word cannot wrap");
+    assert!(((after[2] - after[0]) - (before[2] - before[0])).abs() < 1.5, "clamped to the word: {before:?} → {after:?}");
+}
+
+#[test]
+fn the_longest_word_limits_how_narrow_a_cell_gets() {
+    let mut h = table_cells_harness();
+    let after = drag_cell_edge(&mut h, "Доступ", true, -400.0);
+    let w = after[2] - after[0];
+    // "Московского" is 11 Courier glyphs of 7.2 pt.
+    assert!((w - 79.2).abs() < 3.0, "shows the clamped width, not {w}: {after:?}");
+    let rows = doc_rows(&h);
+    assert!(rows.iter().any(|r| r == "Московского"), "{rows:?}");
 }

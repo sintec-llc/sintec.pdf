@@ -369,6 +369,43 @@ pub struct BlockDrag {
     grip: Grip,
 }
 
+/// The width a paragraph box was dragged to. A block's rect is its text's extent, so without this
+/// the box would snap back on release (widening a single line changes no text at all).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct KeptWidth {
+    page: usize,
+    block: usize,
+    /// In user space.
+    width: f64,
+    /// The document generation: the one the drag was made at, then (once the drag's own edit has
+    /// landed, `adopted`) the one the box belongs to. Any later change drops it.
+    generation: u64,
+    adopted: bool,
+}
+
+/// Apply the kept width to a freshly read page's blocks. The box shows the larger of the dragged
+/// width and the text's extent, so narrowing below the longest word shows the clamped width.
+pub(crate) fn keep_width(view: &mut DocView, page: usize, generation: u64, blocks: &mut [pdfcraft_engine::TextBlock]) {
+    let Some(mut k) = view.kept_width.filter(|k| k.page == page) else { return };
+    if k.generation != generation {
+        if k.adopted {
+            view.kept_width = None;
+            return;
+        }
+        k.adopted = true;
+        k.generation = generation;
+        view.kept_width = Some(k);
+    } else if !k.adopted {
+        return;
+    }
+    if let Some(b) = blocks.get_mut(k.block)
+        && k.width.is_finite()
+        && k.width > b.rect[2] - b.rect[0]
+    {
+        b.rect[2] = b.rect[0] + k.width.min(14_400.0);
+    }
+}
+
 /// How far an edge grip reaches outside a box's edge (screen pixels); with [`EDGE_INSIDE`] the
 /// grabbable strip is 24 px wide.
 const EDGE_REACH: f32 = 14.0;
@@ -797,6 +834,11 @@ pub(crate) fn page_input(
                 // rect is its text extent, so after saving the width reads back as the widest row.
                 let width = (l.rect[2] - l.rect[0]) + (to[2] - to[0]) - (from[2] - from[0]);
                 let shift = to[0] - from[0];
+                // The block's rect is its text extent, which would snap the box back; the dragged
+                // width is kept for it until the document changes again (see `keep_width`).
+                if preview != b {
+                    view.kept_width = Some(KeptWidth { page, block: d.block, width, generation: doc.edit_generation(), adopted: false });
+                }
                 let style = pdfcraft_engine::BlockStyle { width: Some(width), offset: (shift != 0.0).then_some([shift, 0.0]), ..Default::default() };
                 Edit::EditTextBlock { page, block: d.block, text: draft.unwrap_or_else(|| l.text.clone()), style }
             } else if let Some(text) = draft {

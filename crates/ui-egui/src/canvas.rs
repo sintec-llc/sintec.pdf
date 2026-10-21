@@ -425,6 +425,8 @@ pub struct DocView {
     pub picked_image: Option<crate::image_pick::PickedImage>,
     /// A paragraph box being dragged (moved, or resized from its right edge) in Edit text.
     pub block_drag: Option<crate::edit_text_ui::BlockDrag>,
+    /// The width a paragraph box was last dragged to, kept until the document changes.
+    pub(crate) kept_width: Option<crate::edit_text_ui::KeptWidth>,
     /// Commenting state: selected comment, gestures, composer.
     pub comments: crate::comments::CommentView,
     pub measure: crate::measure_ui::MeasureView,
@@ -576,6 +578,12 @@ impl DocView {
         }
     }
 
+    /// Edit text: the paragraph boxes as shown on `page` (user space), with the width a handle
+    /// drag set kept in them. Empty until the page has been drawn in Edit text.
+    pub fn shown_text_boxes(&self, page: usize) -> Vec<(String, [f64; 4])> {
+        self.edit_lines.get(&page).map(|(_, l)| l.iter().map(|b| (b.text.clone(), b.rect)).collect()).unwrap_or_default()
+    }
+
     /// Where `page` is drawn on screen this frame (`None` when it is not on screen).
     pub fn page_screen_rect(&self, page: usize) -> Option<Rect> {
         self.screen_xforms.iter().find(|(p, _)| *p == page).map(|(_, xf)| xf.rect)
@@ -716,6 +724,7 @@ impl DocView {
             image_selection: None,
             picked_image: None,
             block_drag: None,
+            kept_width: None,
             pending_action: None,
             insert_at: None,
             grid_gap: None,
@@ -2871,7 +2880,8 @@ fn page_view(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 let lines = match view.edit_lines.get(&i) {
                     Some((g, l)) if *g == generation => l.clone(),
                     _ => {
-                        let l = doc.text_blocks(i);
+                        let mut l = doc.text_blocks(i);
+                        crate::edit_text_ui::keep_width(view, i, generation, &mut l);
                         view.edit_lines.insert(i, (generation, l.clone()));
                         l
                     }
