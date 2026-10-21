@@ -229,7 +229,14 @@ fn nothing_pops_up_when_up_to_date_failing_skipped_or_recently_checked() {
 #[test]
 fn skip_this_version_is_remembered() {
     let (mut h, _) = automatic("v99.0.0", "{}");
-    settle(&mut h);
+    // The check runs on a worker thread: wait for the pop-up itself, not just for "Checking" to go.
+    for _ in 0..400 {
+        h.run_steps(2);
+        if h.query_by_label("Skip this version").is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     h.get_by_label("Skip this version").click();
     settle(&mut h);
     assert_eq!(h.state().update_skipped.as_deref(), Some("v99.0.0"));

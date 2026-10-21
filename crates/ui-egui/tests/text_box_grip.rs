@@ -1,9 +1,12 @@
 //! The paragraph box's move grip and width handles (Edit PDF tool): reachable from the box, held
 //! until release, usable while the box is open for typing and on rotated pages.
+#[path = "support/mod.rs"]
+mod support;
 use egui::Pos2;
 use egui_kittest::Harness;
 use pdfcraft_engine::Edit;
 use pdfcraft_ui_egui::PdfCraftApp;
+use support::standard_faces;
 
 fn fixture() -> Vec<u8> {
     let body = "BT /F1 14 Tf 16 TL 60 200 Td (The quick brown fox jumps) Tj T* (over the lazy dog again) Tj ET";
@@ -27,25 +30,6 @@ fn fixture() -> Vec<u8> {
     }
     out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
     out
-}
-
-fn standard_faces() -> Vec<pdfcraft_engine::text_fonts::FontFile> {
-    ["Arial", "Times New Roman", "Courier New"]
-        .map(|family| pdfcraft_engine::text_fonts::FontFile {
-            path: std::path::PathBuf::from(format!("/nonexistent/{family}.ttf")),
-            family: family.into(),
-            face: family.replace(' ', ""),
-            style: pdfcraft_fonts::embedding::FaceStyle {
-                weight: 400,
-                italic: false,
-                monospace: family == "Courier New",
-                serif: Some(family == "Times New Roman"),
-                cyrillic: true,
-            },
-            widths: Vec::new(),
-            bundled: false,
-        })
-        .to_vec()
 }
 
 fn harness(rotation: i64) -> Harness<'static, PdfCraftApp> {

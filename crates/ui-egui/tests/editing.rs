@@ -1,12 +1,15 @@
 //! Headless UI tests for editing and saving: the organize toolbar, selection, undo/redo keys,
 //! save/save-as, the unsaved-changes prompt and editable document properties.
 
+#[path = "support/mod.rs"]
+mod support;
 use egui::accesskit::Role;
 use egui::{Key, Modifiers};
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
 use pdfcraft_render::{PageRenderer, RenderRequest, RequestKind};
 use pdfcraft_ui_egui::{CloseRequest, Dialog, PdfCraftApp};
+use support::standard_faces;
 
 /// An `n`-page document with a proper xref table; page `i` shows "Page i+1".
 fn fixture(n: usize) -> Vec<u8> {
@@ -32,28 +35,6 @@ fn fixture(n: usize) -> Vec<u8> {
     }
     out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
     out
-}
-
-/// The machine's own fonts must not decide what Bold draws in or whether Edit PDF suggests a
-/// substitution: Arial, Times New Roman and Courier New "installed", as regular faces that are not
-/// on disk (so a styled edit falls back to the standard PDF fonts).
-fn standard_faces() -> Vec<pdfcraft_engine::text_fonts::FontFile> {
-    ["Arial", "Times New Roman", "Courier New"]
-        .map(|family| pdfcraft_engine::text_fonts::FontFile {
-            path: std::path::PathBuf::from(format!("/nonexistent/{family}.ttf")),
-            family: family.into(),
-            face: family.replace(' ', ""),
-            style: pdfcraft_fonts::embedding::FaceStyle {
-                weight: 400,
-                italic: false,
-                monospace: family == "Courier New",
-                serif: Some(family == "Times New Roman"),
-                cyrillic: true,
-            },
-            widths: Vec::new(),
-            bundled: false,
-        })
-        .to_vec()
 }
 
 fn harness(pages: usize, setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, PdfCraftApp> {
@@ -2373,6 +2354,7 @@ fn switching_from_a_narrow_editor_keeps_one_frame_and_a_wide_heading_on_one_line
     );
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         app.open_bytes("editor.pdf", None, bytes).unwrap();
         app
@@ -2484,6 +2466,7 @@ fn double_drawn() -> Vec<u8> {
 fn editing_a_double_drawn_line_replaces_every_copy() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         app.open_bytes("bold.pdf", None, double_drawn()).expect("opens");
         app
@@ -3463,6 +3446,7 @@ fn one_editor_contains_mixed_styles_and_visual_rows() {
     );
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         app.open_bytes("mixed.pdf", None, bytes).unwrap();
         app
@@ -3816,6 +3800,7 @@ fn clipped_artwork_with_labels_drawn(own_clip: bool) -> Vec<u8> {
 fn cropped_images_do_not_intercept_text_and_stay_inside_each_page() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         app.open_bytes("clipped.pdf", None, clipped_artwork_with_labels()).unwrap();
         app
@@ -3867,6 +3852,7 @@ fn cropped_images_do_not_intercept_text_and_stay_inside_each_page() {
 fn cropped_image_corner_resize_keeps_opposite_corner_and_scales_crop() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         app.open_bytes("clipped.pdf", None, clipped_artwork_with_labels_drawn(true)).unwrap();
         app
