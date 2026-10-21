@@ -120,6 +120,19 @@ fn settle(h: &mut Harness<'static, PdfCraftApp>) {
     h.run_steps(2);
 }
 
+/// Like [`settle`], but first waits until the source has been asked at least once: the automatic
+/// check starts on a worker thread, so "Checking" may not have appeared yet on a slow machine.
+fn settle_asked(h: &mut Harness<'static, PdfCraftApp>, calls: &std::sync::atomic::AtomicUsize) {
+    for _ in 0..400 {
+        h.run_steps(2);
+        if calls.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    settle(h);
+}
+
 #[test]
 fn versions_compare_by_number() {
     assert!(is_newer("v0.2.0", "0.1.1"));
@@ -188,7 +201,7 @@ const NOW: i64 = 1_800_000_000;
 #[test]
 fn a_newer_version_found_by_itself_pops_up() {
     let (mut h, calls) = automatic("v99.0.0", "{}");
-    settle(&mut h);
+    settle_asked(&mut h, &calls);
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1, "asked once at start");
     h.get_by_label_contains("Sintec.PDF 99.0.0 is available");
     assert_eq!(h.state().update_last_check, NOW, "the time is remembered");
@@ -204,12 +217,12 @@ fn a_newer_version_found_by_itself_pops_up() {
 fn nothing_pops_up_when_up_to_date_failing_skipped_or_recently_checked() {
     // Up to date: asked, but quiet.
     let (mut h, calls) = automatic("v0.0.1", "{}");
-    settle(&mut h);
+    settle_asked(&mut h, &calls);
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     assert!(h.query_by_label_contains("is available").is_none() && h.query_by_label_contains("up to date").is_none());
     // Skipped version: asked, but not offered.
     let (mut h, calls) = automatic("v99.0.0", r#"{"update_skipped": "v99.0.0"}"#);
-    settle(&mut h);
+    settle_asked(&mut h, &calls);
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     assert!(h.query_by_label_contains("is available").is_none());
     // Checked an hour ago (an earlier run): not asked at all.
