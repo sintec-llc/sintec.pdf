@@ -246,6 +246,11 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         }
         return false;
     }
+    if crate::edit_text_ui::on_move_grip(view, xf, info, page, p) {
+        // A paragraph's move grip: the text editor's box drag takes this press.
+        s.clear();
+        return false;
+    }
     let objects = match s.inventory(doc, page) {
         Ok(objects) => objects,
         Err(_) => {

@@ -4,13 +4,15 @@
 //! it joins that window; dragged along its own strip it moves there. Every window shows the same
 //! tools and panels for its own tabs, and pages drag between documents in any windows.
 //!
-//! The windows are egui viewports in this one process, so they share the documents, undo history,
-//! settings and clipboard. `DocView::window` says which window shows a tab (0: the main window);
+//! The desktop app opens a torn-off tab in a process of its own ([`crate::tear_off`]); these
+//! windows are the fallback where it can't. They are egui viewports in this one process, so they
+//! share the documents, undo history, settings and clipboard. `DocView::window` says which window shows a tab (0: the main window);
 //! while a window is drawn, `active` is its shown tab and `current_window` is its id.
 //!
 //! A drag started in one window gets every pointer event until the button is let go, wherever the
 //! pointer is, so a drop onto another window is found from where each window drew its tab strip
-//! and Pages panel last frame, in screen points ([`crate::WindowGeometry`]).
+//! and Pages panel last frame, in screen points ([`crate::WindowGeometry`]). Windows of other
+//! processes publish their strips through [`crate::tab_transfer`].
 
 use egui::{Context, Pos2, Rect, Ui, Vec2, vec2};
 use pdfcraft_engine::DocId;
@@ -106,7 +108,8 @@ impl PdfCraftApp {
         }
     }
 
-    /// Open tab `doc` in a new window, at `at` on the screen when known.
+    /// Open tab `doc` in a new window of this process, at `at` on the screen when known (see
+    /// [`Self::detach_tab`] for a process of its own).
     pub fn tear_off_tab(&mut self, doc: DocId, at: Option<Pos2>) {
         let id = self.next_window_id;
         self.next_window_id = self.next_window_id.saturating_add(1);
@@ -219,18 +222,27 @@ impl PdfCraftApp {
             let t = theme::Tokens::get(&ctx);
             chrome::tab_strip(self, ui);
             chrome::mode_bar(self, ui);
-            if self.active.is_some() {
+            // As the main window: the docking workspace lays out the tool panels, the inspector and
+            // the page; Read mode shows the page with only the navigation panes.
+            let shown = self.active.filter(|&i| self.views.get(i).is_some_and(|v| v.window == id));
+            if shown.is_some() {
                 chrome::right_rail(self, ui);
-                if self.right.is_some() && self.mode != Mode::Read {
-                    panels::right_panel(self, ui);
+                if self.mode == Mode::Read && self.right.is_some() {
+                    egui::Panel::right("read_right_panel")
+                        .resizable(true)
+                        .default_size(330.0)
+                        .size_range(260.0..=520.0)
+                        .frame(egui::Frame::NONE)
+                        .show(ui, |ui| panels::right_panel(self, ui));
                 }
             }
-            if self.left_open && self.mode != Mode::Read {
-                panels::left_panel(self, ui);
-            }
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| {
-                if let Some(i) = self.active.filter(|&i| self.views.get(i).is_some_and(|v| v.window == id)) {
-                    crate::canvas::document_area(self, i, ui);
+                if let Some(i) = shown {
+                    if self.mode == Mode::Read {
+                        crate::canvas::document_area(self, i, ui);
+                    } else {
+                        crate::docking::show(self, ui);
+                    }
                 }
             });
             crate::widgets::page_cursor_only_on_the_page(&ctx);

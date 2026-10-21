@@ -2,14 +2,18 @@
 //!
 //! The engine reduces each page to [`Page`]: paragraphs (text, box, size, bold/italic) and
 //! images (encoded bytes and box), in reading order. The writers turn that into a flowing
-//! document: headings are the paragraphs set larger than the body text, and images sit where
-//! they fall between paragraphs.
+//! document: headings are the paragraphs set larger than the body text. Word keeps pages with
+//! rotated text, or text overlapped by artwork or watermark-sized text, as positioned, editable
+//! shapes to avoid reflowing overlays; other pages flow with images inline.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+mod lattice;
+mod pptx;
 mod xlsx;
 mod zip;
 
+pub use pptx::pptx;
 pub use xlsx::xlsx;
 pub use zip::Zip;
 
@@ -50,7 +54,7 @@ pub(crate) mod tests_support {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Block {
     pub text: String,
-    /// [x0, y0, x1, y1] in user space (y up).
+    /// [x0, y0, x1, y1] on the displayed page in points (y up).
     pub rect: [f64; 4],
     /// Font size in points.
     pub size: f64,
@@ -58,6 +62,8 @@ pub struct Block {
     pub italic: bool,
     /// Text fill colour as sRGB components in 0..=1 (black when unknown).
     pub color: [f64; 3],
+    /// Counterclockwise baseline angle in user space (degrees).
+    pub rotation: f64,
 }
 
 /// An image of a page.
@@ -67,6 +73,10 @@ pub struct Image {
     pub ext: &'static str,
     pub bytes: Vec<u8>,
     pub rect: [f64; 4],
+    /// Width and height before rotation, in points.
+    pub size: [f64; 2],
+    /// Counterclockwise rotation in user space (degrees).
+    pub rotation: f64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -75,10 +85,17 @@ pub struct Page {
     pub height: f64,
     pub blocks: Vec<Block>,
     pub images: Vec<Image>,
+    /// Sintec.PDF: the straight horizontal and vertical lines the page draws, `[x0, y0, x1, y1]`
+    /// on the displayed page (y up): ruled tables are read from them ([`lattice`]).
+    pub rules: Vec<[f64; 4]>,
+    /// Sintec.PDF: the page's text lines (finer than [`Page::blocks`]), which ruled tables place
+    /// into their cells.
+    pub lines: Vec<Block>,
 }
 
 /// One cell of a detected table. `span` is how many grid columns the cell covers (a header
-/// row that stretches over sub-columns).
+/// row that stretches over sub-columns), `rowspan` how many rows. A cell whose `continued` is set
+/// is the part of a cell above that spans into this row: writers merge it (Word) or skip it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cell {
     pub text: String,
@@ -88,6 +105,20 @@ pub struct Cell {
     /// Text fill colour as sRGB components in 0..=1.
     pub color: [f64; 3],
     pub span: usize,
+    pub rowspan: usize,
+    pub continued: bool,
+}
+
+impl Cell {
+    /// A one-grid-cell cell with this text and style.
+    pub fn new(text: impl Into<String>, size: f64, bold: bool, italic: bool, color: [f64; 3]) -> Cell {
+        Cell { text: text.into(), size, bold, italic, color, span: 1, rowspan: 1, continued: false }
+    }
+
+    /// An empty cell (a hole in the grid).
+    pub fn empty() -> Cell {
+        Cell::new("", 11.0, false, false, [0.0; 3])
+    }
 }
 
 /// A table detected from the page's text layout: rows of cells, and the left edge of each
@@ -97,6 +128,12 @@ pub struct Table {
     pub rect: [f64; 4],
     pub cols: Vec<f64>,
     pub rows: Vec<Vec<Cell>>,
+    /// Drawn with lines on the page (a ruled table): writers draw its borders. Tables found
+    /// from text alignment alone have none.
+    pub ruled: bool,
+    /// For a ruled table, the top edge of each row and the table's bottom (user space, y up,
+    /// descending), so writers can size the rows.
+    pub row_edges: Vec<f64>,
 }
 
 /// What goes into the output, in order.
@@ -139,7 +176,7 @@ const COL_TOL: f64 = 4.0;
 /// more columns doesn't open. It also bounds a table's size: every row is materialized to all
 /// its columns, so a hostile page laid out as a staircase of blocks would otherwise make
 /// (blocks / 2)² cells.
-const MAX_COLS: usize = 63;
+pub(crate) const MAX_COLS: usize = 63;
 /// A cell is short: taller blocks are body text (or a multi-column layout), not table cells.
 fn is_cell_like(b: &Block) -> bool {
     (b.rect[3] - b.rect[1]) <= b.size * 5.0 && !b.text.trim().is_empty()
@@ -148,7 +185,7 @@ fn is_cell_like(b: &Block) -> bool {
 /// Detect tables in a page's blocks from their text layout: columns are left edges shared by
 /// several short blocks, rows are blocks whose vertical spans overlap. Returns the tables and,
 /// per block, whether a table consumed it (so `items` can drop it from the paragraph flow).
-fn tables(blocks: &[Block]) -> (Vec<Table>, Vec<bool>) {
+pub(crate) fn tables(blocks: &[Block]) -> (Vec<Table>, Vec<bool>) {
     let mut consumed = vec![false; blocks.len()];
     // Candidate columns: cluster the left edges of cell-like blocks.
     let mut xs: Vec<(f64, usize)> = blocks.iter().enumerate().filter(|(_, b)| is_cell_like(b)).map(|(i, b)| (b.rect[0], i)).collect();
@@ -238,7 +275,7 @@ fn tables(blocks: &[Block]) -> (Vec<Table>, Vec<bool>) {
                 let b = &blocks[bi];
                 let Some(slot) = edges.iter().position(|e| (*e - b.rect[0]).abs() <= COL_TOL) else { continue };
                 let span = edges[slot + 1..].iter().filter(|e| **e > b.rect[0] + COL_TOL && **e < b.rect[2] - COL_TOL).count() + 1;
-                let cell = Cell { text: b.text.trim().to_string(), size: b.size, bold: b.bold, italic: b.italic, color: b.color, span };
+                let cell = Cell { span, ..Cell::new(b.text.trim(), b.size, b.bold, b.italic, b.color) };
                 match &mut slots[slot] {
                     Some(c) => {
                         c.text.push(' ');
@@ -259,7 +296,7 @@ fn tables(blocks: &[Block]) -> (Vec<Table>, Vec<bool>) {
                     }
                     None => {
                         column += 1;
-                        materialized.push(Cell { text: String::new(), size: 11.0, bold: false, italic: false, color: [0.0; 3], span: 1 });
+                        materialized.push(Cell::empty());
                     }
                 }
             }
@@ -274,7 +311,7 @@ fn tables(blocks: &[Block]) -> (Vec<Table>, Vec<bool>) {
             right,
             used.iter().map(|&i| blocks[i].rect[3]).fold(f64::MIN, f64::max),
         ];
-        out.push(Table { rect, cols: edges, rows: rows_out });
+        out.push(Table { rect, cols: edges, rows: rows_out, ruled: false, row_edges: Vec::new() });
     };
     // Runs of consecutive multi-column rows are tables. Rows on either side of a run that
     // hold a single cell wide enough to span two columns (a header band, a totals row) join
@@ -323,6 +360,65 @@ fn tables(blocks: &[Block]) -> (Vec<Table>, Vec<bool>) {
     (out, consumed)
 }
 
+/// Sintec.PDF: join one-line blocks that are pieces of one line. Some producers (1C among them)
+/// end a text run at every punctuation mark, and each piece reads as its own block: "Внимание",
+/// "!", "Оплата данного счета…". Consecutive pieces on one baseline, in one size, that touch or
+/// nearly touch become one block again; a space goes between them unless punctuation says
+/// otherwise.
+pub fn join_fragments(blocks: Vec<Block>) -> Vec<Block> {
+    fn one_line(b: &Block) -> bool {
+        b.rect[3] - b.rect[1] < b.size.max(1.0) * 1.8 && b.rotation.abs() < 0.1
+    }
+    let mut out: Vec<Block> = Vec::with_capacity(blocks.len());
+    for b in blocks {
+        if let Some(o) = out.last_mut() {
+            let size = o.size.max(b.size).max(1.0);
+            let same_line = ((o.rect[1] + o.rect[3]) - (b.rect[1] + b.rect[3])).abs() / 2.0 < size * 0.35;
+            let same_size = (o.size - b.size).abs() <= size * 0.25;
+            let gap = b.rect[0] - o.rect[2];
+            if one_line(o) && one_line(&b) && same_line && same_size && gap > -size * 0.3 && gap < size * 0.35 {
+                let quotes_open = o.text.matches('"').count() % 2 == 1;
+                let tight_before =
+                    b.text.starts_with(['.', ',', '!', '?', ':', ';', ')', ']', '»', '%', '-']) || (b.text.starts_with('"') && quotes_open);
+                let tight_after = o.text.ends_with(['(', '[', '«', '-', '/']) || (o.text.ends_with('"') && quotes_open);
+                if !(tight_before || tight_after) {
+                    o.text.push(' ');
+                }
+                o.text.push_str(&b.text);
+                o.rect = [o.rect[0].min(b.rect[0]), o.rect[1].min(b.rect[1]), o.rect[2].max(b.rect[2]), o.rect[3].max(b.rect[3])];
+                continue;
+            }
+        }
+        out.push(b);
+    }
+    out
+}
+
+/// Sintec.PDF: a page's tables. Ruled tables ([`lattice`]) come first; the blocks they cover
+/// leave the flow, and tables found from text alignment ([`tables`]) are read from the rest.
+/// Returns the tables and, per block, whether a table consumed it.
+pub(crate) fn page_tables(p: &Page) -> (Vec<Table>, Vec<bool>) {
+    let ruled = lattice::ruled_tables(p);
+    let inside = |b: &Block| {
+        let (cx, cy) = ((b.rect[0] + b.rect[2]) / 2.0, (b.rect[1] + b.rect[3]) / 2.0);
+        ruled.iter().any(|t| cx > t.rect[0] && cx < t.rect[2] && cy > t.rect[1] && cy < t.rect[3])
+    };
+    let mut consumed: Vec<bool> = p.blocks.iter().map(inside).collect();
+    let rest: Vec<usize> = (0..p.blocks.len()).filter(|&i| !consumed.get(i).copied().unwrap_or(true)).collect();
+    let rest_blocks: Vec<Block> = rest.iter().filter_map(|&i| p.blocks.get(i).cloned()).collect();
+    let (aligned, used) = tables(&rest_blocks);
+    for (k, &i) in rest.iter().enumerate() {
+        if used.get(k).copied().unwrap_or(false)
+            && let Some(c) = consumed.get_mut(i)
+        {
+            *c = true;
+        }
+    }
+    let mut all = ruled;
+    all.extend(aligned);
+    (all, consumed)
+}
+
 fn items(pages: &[Page]) -> Vec<Item<'_>> {
     let body = body_size(pages);
     let mut out = Vec::new();
@@ -330,7 +426,7 @@ fn items(pages: &[Page]) -> Vec<Item<'_>> {
         if i > 0 {
             out.push(Item::PageBreak);
         }
-        let (tables, consumed) = tables(&p.blocks);
+        let (tables, consumed) = page_tables(p);
         // Blocks and images by their top edge, top to bottom.
         let mut parts: Vec<(f64, f64, Item)> = p
             .blocks
@@ -354,7 +450,7 @@ fn allowed(c: char) -> bool {
     matches!(c, '\t' | '\n' | '\r') || !(c.is_ascii_control() || c == '\u{FFFE}' || c == '\u{FFFF}')
 }
 
-fn esc(s: &str) -> String {
+pub(crate) fn esc(s: &str) -> String {
     let mut o = String::with_capacity(s.len());
     for c in s.chars().filter(|c| allowed(*c)) {
         match c {
@@ -410,15 +506,18 @@ table{{border-collapse:collapse;margin:1em 0}}td,th{{border:1px solid #999;paddi
                 s.push_str("<table>\n");
                 for row in &t.rows {
                     s.push_str("<tr>");
-                    for c in row {
-                        let mut body = esc(&c.text);
+                    for c in row.iter().filter(|c| !c.continued) {
+                        let mut body = esc(&c.text).replace('\n', "<br>");
                         if c.italic {
                             body = format!("<em>{body}</em>");
                         }
                         if c.bold {
                             body = format!("<strong>{body}</strong>");
                         }
-                        let span = if c.span > 1 { format!(" colspan=\"{}\"", c.span) } else { String::new() };
+                        let mut span = if c.span > 1 { format!(" colspan=\"{}\"", c.span) } else { String::new() };
+                        if c.rowspan > 1 {
+                            span.push_str(&format!(" rowspan=\"{}\"", c.rowspan));
+                        }
                         let style = hex(c.color).map_or(String::new(), |h| format!(" style=\"color:#{h}\""));
                         s.push_str(&format!("<td{span}{style}>{body}</td>"));
                     }
@@ -438,13 +537,13 @@ table{{border-collapse:collapse;margin:1em 0}}td,th{{border:1px solid #999;paddi
 }
 
 /// A colour's 8-bit sRGB components (NaN and out-of-range values clamp; NaN reads as 0).
-fn rgb8(c: [f64; 3]) -> [u8; 3] {
+pub(crate) fn rgb8(c: [f64; 3]) -> [u8; 3] {
     // The value is clamped to 0..=255 before the cast, so it cannot truncate.
     c.map(|v| if v.is_finite() { (v.clamp(0.0, 1.0) * 255.0).round() as u8 } else { 0 })
 }
 
 /// The colour as `RRGGBB`, or `None` for black (the default every format already uses).
-fn hex(c: [f64; 3]) -> Option<String> {
+pub(crate) fn hex(c: [f64; 3]) -> Option<String> {
     let [r, g, b] = rgb8(c);
     (r | g | b != 0).then(|| format!("{r:02X}{g:02X}{b:02X}"))
 }
@@ -466,38 +565,72 @@ fn run_xml(text: &str, size: f64, bold: bool, italic: bool, color: [f64; 3]) -> 
     format!("<w:r><w:rPr>{rpr}</w:rPr><w:t xml:space=\"preserve\">{}</w:t></w:r>", esc(text))
 }
 
-/// One Word table: explicit single borders (so it renders without a table style), a grid sized
-/// from the detected column edges, `gridSpan` for spanning cells, empty cells for holes.
+/// One Word table: a grid sized from the detected column edges, `gridSpan` for spanning cells,
+/// `vMerge` for cells spanning rows, empty cells for holes. A ruled table gets single borders and
+/// its rows' heights; one found from alignment alone gets explicitly absent borders (alignment
+/// cannot prove the PDF draws rules).
 fn docx_table(t: &Table) -> String {
     let mut edges = t.cols.clone();
     edges.push(t.rect[2]);
     let widths: Vec<i64> = edges.windows(2).map(|w| ((w[1] - w[0]).max(20.0) * 20.0).round().clamp(60.0, 31680.0) as i64).collect();
-    let border = "<w:top w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>";
     let mut s = String::from("<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/><w:tblBorders>");
-    for b in [
-        border,
-        "<w:left w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>",
-        "<w:bottom w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>",
-        "<w:right w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>",
-        "<w:insideH w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>",
-        "<w:insideV w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"999999\"/>",
-    ] {
-        s.push_str(b);
+    for edge in ["top", "left", "bottom", "right", "insideH", "insideV"] {
+        if t.ruled {
+            s.push_str(&format!("<w:{edge} w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>"));
+        } else {
+            s.push_str(&format!("<w:{edge} w:val=\"nil\"/>"));
+        }
     }
-    s.push_str("</w:tblBorders></w:tblPr><w:tblGrid>");
+    s.push_str("</w:tblBorders>");
+    if t.ruled {
+        s.push_str(
+            "<w:tblLayout w:type=\"fixed\"/><w:tblCellMar><w:left w:w=\"57\" w:type=\"dxa\"/><w:right w:w=\"57\" w:type=\"dxa\"/></w:tblCellMar>",
+        );
+    }
+    s.push_str("</w:tblPr><w:tblGrid>");
     for w in &widths {
         s.push_str(&format!("<w:gridCol w:w=\"{w}\"/>"));
     }
     s.push_str("</w:tblGrid>");
-    for row in &t.rows {
+    for (ri, row) in t.rows.iter().enumerate() {
         s.push_str("<w:tr>");
+        // A ruled row is at least as tall as on the page (twentieths of a point, Word's range).
+        if let (true, Some(top), Some(bottom)) = (t.ruled, t.row_edges.get(ri), t.row_edges.get(ri + 1)) {
+            let h = top - bottom;
+            if h.is_finite() && h > 0.0 {
+                s.push_str(&format!(
+                    "<w:trPr><w:trHeight w:val=\"{}\" w:hRule=\"atLeast\"/></w:trPr>",
+                    (h * 20.0).round().clamp(1.0, 31680.0) as i64
+                ));
+            }
+        }
+        let mut column = 0usize;
         for c in row {
             let span = if c.span > 1 { format!("<w:gridSpan w:val=\"{}\"/>", c.span) } else { String::new() };
-            let w: i64 = widths.iter().take(c.span.min(widths.len())).sum();
-            s.push_str(&format!(
-                "<w:tc><w:tcPr><w:tcW w:w=\"{w}\" w:type=\"dxa\"/>{span}</w:tcPr><w:p>{}</w:p></w:tc>",
-                run_xml(&c.text, c.size, c.bold, c.italic, c.color)
-            ));
+            let merge = if c.continued {
+                "<w:vMerge/>"
+            } else if c.rowspan > 1 {
+                "<w:vMerge w:val=\"restart\"/>"
+            } else {
+                ""
+            };
+            let w: i64 = widths.iter().skip(column).take(c.span.max(1)).sum();
+            column = column.saturating_add(c.span.max(1));
+            // One paragraph per line of the cell's text.
+            let paras: String = if c.continued || c.text.is_empty() {
+                "<w:p/>".to_string()
+            } else {
+                c.text
+                    .split('\n')
+                    .map(|line| {
+                        format!(
+                            "<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\"/></w:pPr>{}</w:p>",
+                            run_xml(line, c.size, c.bold, c.italic, c.color)
+                        )
+                    })
+                    .collect()
+            };
+            s.push_str(&format!("<w:tc><w:tcPr><w:tcW w:w=\"{w}\" w:type=\"dxa\"/>{span}{merge}</w:tcPr>{paras}</w:tc>"));
         }
         // Pad the grid so every row covers all columns (Word rejects short rows).
         let used: usize = row.iter().map(|c| c.span).sum();
@@ -510,45 +643,149 @@ fn docx_table(t: &Table) -> String {
     s
 }
 
-/// A Word document (.docx, Office Open XML): Heading 1/2 and Normal paragraphs, images inline at
-/// their size on the page, page breaks between pages.
-pub fn docx(pages: &[Page], title: &str) -> Vec<u8> {
-    // The first page's size, within what Word accepts (0.1 to 22 in; a long receipt is taller),
-    // in twips. Margins are 1 in, less on small pages so text keeps room.
+/// Pages with rotated text, or text that actually overlaps an image or an oversized
+/// (watermark-like) text block, cannot be put in paragraph flow without changing their layout.
+/// Keep those pages as editable, absolutely positioned text boxes. Every other page, including
+/// one with a logo or a big title that sits clear of the text, flows as paragraphs and tables.
+fn positioned(page: &Page) -> bool {
+    if page.blocks.iter().any(|b| b.rotation.abs() > 0.1) {
+        return true;
+    }
+    let body = body_size(std::slice::from_ref(page)).max(1.0);
+    let overlays = page
+        .images
+        .iter()
+        .map(|im| (im.rect, None))
+        .chain(page.blocks.iter().enumerate().filter(|(_, b)| b.size >= 2.0 * body).map(|(i, b)| (b.rect, Some(i))));
+    // Bound the pairwise test on hostile pages (many overlays times many blocks): past the
+    // budget, keep the default flowing layout.
+    let mut budget: usize = 1_000_000;
+    for (r, own) in overlays {
+        for (i, b) in page.blocks.iter().enumerate() {
+            if budget == 0 {
+                return false;
+            }
+            budget -= 1;
+            if Some(i) != own && overlaps(r, b.rect) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Whether two [x0, y0, x1, y1] boxes share more than a hairline (0.5 pt each way); boxes that
+/// only touch, or hostile non-finite coordinates, do not count.
+fn overlaps(a: [f64; 4], b: [f64; 4]) -> bool {
+    let w = a[2].min(b[2]) - a[0].max(b[0]);
+    let h = a[3].min(b[3]) - a[1].max(b[1]);
+    w.is_finite() && h.is_finite() && w > 0.5 && h > 0.5
+}
+
+/// Bound every value written into a shape's style, including hostile PDF coordinates.
+fn layout_number(n: f64) -> f64 {
+    if n.is_finite() { n.clamp(-1584.0, 1584.0) } else { 0.0 }
+}
+
+fn positioned_page<'a>(page: &'a Page, media: &mut Vec<(String, &'a Image)>, shape_id: &mut usize) -> String {
+    // One 1 pt paragraph anchors the whole page. Shapes never reserve body space, so even a
+    // page-sized watermark cannot push the invoice footer onto another page.
+    let mut s = String::from("<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"20\" w:lineRule=\"exact\"/></w:pPr>");
+    let body = body_size(std::slice::from_ref(page)).max(1.0);
+    for b in &page.blocks {
+        *shape_id = shape_id.saturating_add(1);
+        let rotation = layout_number(-b.rotation).rem_euclid(360.0);
+        let (sin, cos) = rotation.to_radians().sin_cos();
+        let (bw, bh) = (layout_number(b.rect[2] - b.rect[0]).max(1.0), layout_number(b.rect[3] - b.rect[1]).max(1.0));
+        let h = if b.rotation.abs() > 0.1 { layout_number(b.size).max(1.0) } else { bh };
+        // Recover the unrotated width from the axis-aligned box. Use the larger axis so
+        // quarter turns and 45-degree watermarks do not divide by (nearly) zero.
+        let w = if b.rotation.abs() <= 0.1 {
+            bw
+        } else if cos.abs() >= sin.abs() {
+            (bw - h * sin.abs()) / cos.abs()
+        } else {
+            (bh - h * cos.abs()) / sin.abs()
+        };
+        let w = layout_number(w).max(1.0);
+        let (x, y) = (layout_number(b.rect[0] + (bw - w) / 2.0), layout_number(page.height - b.rect[3] + (bh - h) / 2.0));
+        let z = if b.size >= 2.0 * body { -2 } else { 1 };
+        let style = format!(
+            "position:absolute;margin-left:{x:.3}pt;margin-top:{y:.3}pt;width:{w:.3}pt;height:{h:.3}pt;rotation:{rotation:.3};z-index:{z};mso-position-horizontal-relative:page;mso-position-vertical-relative:page"
+        );
+        s.push_str(&format!(
+            "<w:r><w:pict><v:rect id=\"Text{}\" style=\"{style}\" filled=\"f\" stroked=\"f\"><v:textbox inset=\"0,0,0,0\" style=\"mso-fit-shape-to-text:t\"><w:txbxContent><w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\"/></w:pPr>{}</w:p></w:txbxContent></v:textbox><w10:wrap type=\"none\"/></v:rect></w:pict></w:r>",
+            shape_id, run_xml(&b.text, b.size, b.bold, b.italic, b.color)
+        ));
+    }
+    for im in &page.images {
+        *shape_id = shape_id.saturating_add(1);
+        let n = media.len().saturating_add(1);
+        let (w, h) = (layout_number(im.size[0]).max(1.0), layout_number(im.size[1]).max(1.0));
+        let (x, y) = (layout_number((im.rect[0] + im.rect[2] - w) / 2.0), layout_number(page.height - (im.rect[1] + im.rect[3] + h) / 2.0));
+        let rotation = layout_number(-im.rotation).rem_euclid(360.0);
+        s.push_str(&format!("<w:r><w:pict><v:rect id=\"Image{shape_id}\" style=\"position:absolute;margin-left:{x:.3}pt;margin-top:{y:.3}pt;width:{w:.3}pt;height:{h:.3}pt;rotation:{rotation:.3};z-index:-1;mso-position-horizontal-relative:page;mso-position-vertical-relative:page\" stroked=\"f\"><v:imagedata r:id=\"rIdImg{n}\"/><w10:wrap type=\"none\"/></v:rect></w:pict></w:r>"));
+        media.push((format!("image{n}.{}", im.ext), im));
+    }
+    s.push_str("</w:p>");
+    s
+}
+
+fn word_page_size(page: &Page) -> (i64, i64) {
     let twips = |pt: f64| if pt.is_finite() { (pt * 20.0).round().clamp(144.0, 31680.0) as i64 } else { 12240 };
-    let (pw, ph) = pages.first().map_or((12240, 15840), |p| (twips(p.width), twips(p.height)));
+    (twips(page.width), twips(page.height))
+}
+
+fn section(page: &Page) -> String {
+    let (pw, ph) = word_page_size(page);
     let (mx, my) = ((pw / 8).min(1440), (ph / 8).min(1440));
-    // Images are at most the text width, in points.
-    let text_w = (pw - 2 * mx) as f64 / 20.0;
+    format!(
+        "<w:sectPr><w:type w:val=\"nextPage\"/><w:pgSz w:w=\"{pw}\" w:h=\"{ph}\"/><w:pgMar w:top=\"{my}\" w:right=\"{mx}\" w:bottom=\"{my}\" w:left=\"{mx}\" w:header=\"{}\" w:footer=\"{}\" w:gutter=\"0\"/></w:sectPr>",
+        my / 2,
+        my / 2
+    )
+}
+
+/// A Word document (.docx, Office Open XML). Ordinary pages flow as paragraphs and tables;
+/// pages with rotated text, or text that overlaps artwork, use floating shapes to retain their layout.
+pub fn docx(pages: &[Page], title: &str) -> Vec<u8> {
     let mut body = String::new();
     let mut media: Vec<(String, &Image)> = Vec::new();
     // Word needs a paragraph between adjacent tables and after the last one in the body.
     let mut after_table = false;
     let run = |b: &Block| run_xml(&b.text, b.size, b.bold, b.italic, b.color);
-    for it in items(pages) {
-        match &it {
-            Item::Para(b, lvl) => {
-                let style = match lvl {
-                    1 => "<w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr>",
-                    2 => "<w:pPr><w:pStyle w:val=\"Heading2\"/></w:pPr>",
-                    _ => "",
-                };
-                body.push_str(&format!("<w:p>{style}{}</w:p>", run(b)));
-            }
-            Item::Table(t) => {
-                if after_table {
-                    body.push_str("<w:p/>");
-                }
-                body.push_str(&docx_table(t));
-            }
-            Item::Img(im) => {
-                let n = media.len() + 1;
-                let name = format!("image{n}.{}", im.ext);
-                // Size on the page, in EMU (12700 per point), at most the text width.
-                let (w, h) = ((im.rect[2] - im.rect[0]).max(1.0), (im.rect[3] - im.rect[1]).max(1.0));
-                let k = (text_w / w).min(1.0);
-                let (cx, cy) = ((w * k * 12700.0) as i64, (h * k * 12700.0) as i64);
-                body.push_str(&format!(
+    let mut shape_id = 0usize;
+    for (page_index, page) in pages.iter().enumerate() {
+        let (pw, _) = word_page_size(page);
+        let text_w = (pw - 2 * (pw / 8).min(1440)) as f64 / 20.0;
+        if positioned(page) {
+            body.push_str(&positioned_page(page, &mut media, &mut shape_id));
+            after_table = false;
+        } else {
+            for it in items(std::slice::from_ref(page)) {
+                match &it {
+                    Item::Para(b, lvl) => {
+                        let style = match lvl {
+                            1 => "<w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr>",
+                            2 => "<w:pPr><w:pStyle w:val=\"Heading2\"/></w:pPr>",
+                            _ => "",
+                        };
+                        body.push_str(&format!("<w:p>{style}{}</w:p>", run(b)));
+                    }
+                    Item::Table(t) => {
+                        if after_table {
+                            body.push_str("<w:p/>");
+                        }
+                        body.push_str(&docx_table(t));
+                    }
+                    Item::Img(im) => {
+                        let n = media.len() + 1;
+                        let name = format!("image{n}.{}", im.ext);
+                        // Size on the page, in EMU (12700 per point), at most the text width.
+                        let (w, h) = ((im.rect[2] - im.rect[0]).max(1.0), (im.rect[3] - im.rect[1]).max(1.0));
+                        let k = (text_w / w).min(1.0);
+                        let (cx, cy) = ((w * k * 12700.0) as i64, (h * k * 12700.0) as i64);
+                        body.push_str(&format!(
                     "<w:p><w:r><w:drawing><wp:inline><wp:extent cx=\"{cx}\" cy=\"{cy}\"/><wp:docPr id=\"{n}\" name=\"Picture {n}\"/>\
 <a:graphic xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">\
 <pic:pic xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:nvPicPr><pic:cNvPr id=\"{n}\" name=\"{name}\"/><pic:cNvPicPr/></pic:nvPicPr>\
@@ -556,22 +793,33 @@ pub fn docx(pages: &[Page], title: &str) -> Vec<u8> {
 <pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>\
 </a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
                 ));
-                media.push((name, im));
+                        media.push((name, im));
+                    }
+                    Item::PageBreak => body.push_str("<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>"),
+                }
+                after_table = matches!(it, Item::Table(_));
             }
-            Item::PageBreak => body.push_str("<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>"),
         }
-        after_table = matches!(it, Item::Table(_));
-    }
-    if after_table {
-        body.push_str("<w:p/>");
+        // Section breaks carry this source page's size and create exactly one next page.
+        // The last section must be a direct child of the body (OOXML 17.6.17).
+        if page_index + 1 < pages.len() {
+            body.push_str(&format!(
+                "<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"20\" w:lineRule=\"exact\"/>{}</w:pPr></w:p>",
+                section(page)
+            ));
+        } else {
+            if after_table || page.blocks.is_empty() && page.images.is_empty() {
+                body.push_str("<w:p><w:pPr><w:spacing w:after=\"0\" w:line=\"20\" w:lineRule=\"exact\"/></w:pPr></w:p>");
+            }
+            body.push_str(&section(page));
+        }
+        after_table = false;
     }
     let doc = format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
 <w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" \
-xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\"><w:body>{body}\
-<w:sectPr><w:pgSz w:w=\"{pw}\" w:h=\"{ph}\"/><w:pgMar w:top=\"{my}\" w:right=\"{mx}\" w:bottom=\"{my}\" w:left=\"{mx}\" w:header=\"{}\" w:footer=\"{}\" w:gutter=\"0\"/></w:sectPr></w:body></w:document>",
-        my / 2,
-        my / 2
+xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\"><w:body>{body}\
+</w:body></w:document>"
     );
     let mut types = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\
@@ -626,6 +874,7 @@ fn rtf_text(s: &str) -> String {
                 o.push('\\');
                 o.push(c);
             }
+            '\n' => o.push_str("\\line "),
             c if (c as u32) < 128 => o.push(c),
             c => {
                 // \uN with a ? fallback; UTF-16 units as signed 16-bit numbers.
@@ -695,6 +944,14 @@ pub fn rtf(pages: &[Page]) -> String {
                     let mut column = 0;
                     for c in row {
                         column += c.span.max(1);
+                        if c.continued {
+                            s.push_str("\\clvmrg");
+                        } else if c.rowspan > 1 {
+                            s.push_str("\\clvmgf");
+                        }
+                        if t.ruled {
+                            s.push_str("\\clbrdrt\\brdrs\\brdrw10\\clbrdrl\\brdrs\\brdrw10\\clbrdrb\\brdrs\\brdrw10\\clbrdrr\\brdrs\\brdrw10");
+                        }
                         if let Some(x) = cellx.get(column.min(cellx.len()).saturating_sub(1)) {
                             s.push_str(&format!("\\cellx{x}"));
                         }
@@ -733,6 +990,7 @@ mod tests {
             bold,
             italic: false,
             color: [0.0; 3],
+            rotation: 0.0,
         };
         Page {
             width: 612.0,
@@ -747,7 +1005,10 @@ mod tests {
                 ext: "png",
                 bytes: b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x02\0\0\0\x03".to_vec(),
                 rect: [72.0, 450.0, 272.0, 600.0],
+                size: [200.0, 150.0],
+                rotation: 0.0,
             }],
+            ..Default::default()
         }
     }
 
@@ -776,8 +1037,74 @@ mod tests {
         }
     }
 
+    #[test]
+    fn word_does_not_invent_borders_for_aligned_invoice_fields() {
+        let xml = part(&docx(&[table_page()], "Invoice"), "word/document.xml");
+        assert!(xml.contains("<w:tbl>"));
+        assert!(!xml.contains("w:val=\"single\""), "text alignment is not evidence of a border: {xml}");
+        assert!(xml.contains("<w:insideH w:val=\"nil\"/>"));
+    }
+
+    #[test]
+    fn word_keeps_a_page_with_a_clear_image_and_big_title_in_flow() {
+        // page() has a picture between paragraphs and a 24 pt title over 11 pt body text, but
+        // nothing overlaps: it must stay flowing paragraphs with the image inline.
+        let xml = part(&docx(&[page()], "Report"), "word/document.xml");
+        assert!(!xml.contains("position:absolute"), "nothing overlaps, so nothing floats: {xml}");
+        assert!(xml.contains("<wp:inline>"), "the picture stays inline: {xml}");
+        assert!(xml.contains("<w:pStyle w:val=\"Heading1\"/>"), "the title stays a heading: {xml}");
+        let (title, body) = (xml.find(">Annual Report</w:t>"), xml.find(">Body text after the picture"));
+        assert!(title.is_some() && body.is_some() && title < body, "reading order kept: {xml}");
+        // The same page with the picture moved over the body text floats.
+        let mut over = page();
+        over.images[0].rect = [72.0, 380.0, 272.0, 530.0];
+        let xml = part(&docx(&[over], "Report"), "word/document.xml");
+        assert!(xml.contains("position:absolute"), "an image over text floats: {xml}");
+    }
+
+    #[test]
+    fn word_overlap_does_not_consume_invoice_body_space() {
+        let mut p = table_page();
+        p.blocks.push(Block {
+            text: "DRAFT".into(),
+            rect: [100.0, 200.0, 500.0, 700.0],
+            size: 100.0,
+            bold: false,
+            italic: false,
+            color: [0.8; 3],
+            rotation: 0.0,
+        });
+        p.images = page().images;
+        let xml = part(&docx(&[p], "Invoice"), "word/document.xml");
+        assert!(xml.contains("position:absolute"), "overlapping text must float: {xml}");
+        assert!(!xml.contains("<wp:inline>"), "images must not displace invoice text");
+        assert!(!xml.contains("<w:tbl>"), "the source text boxes must keep their positions");
+        assert_eq!(xml.matches(">DRAFT</w:t>").count(), 1);
+        assert_eq!(xml.matches("w:type=\"page\"").count(), 0);
+        assert!(xml.contains("margin-left:72.000pt;margin-top:160.000pt"), "Meter field keeps its source position: {xml}");
+        let watermark = xml.split(">DRAFT</w:t>").next().unwrap().rsplit("<v:rect ").next().unwrap();
+        assert!(watermark.contains("z-index:-2"), "watermark is behind foreground graphics");
+        let image = xml.split("<v:imagedata ").next().unwrap().rsplit("<v:rect ").next().unwrap();
+        assert!(image.contains("z-index:-1"), "foreground graphics cover the watermark");
+    }
+
+    #[test]
+    fn word_rotated_pages_keep_separate_page_sizes_and_unique_shapes() {
+        let mut p = table_page();
+        p.blocks[0].rotation = 45.0;
+        let mut second = p.clone();
+        second.width = 400.0;
+        second.height = 500.0;
+        let xml = part(&docx(&[p, second], "Two invoices"), "word/document.xml");
+        assert!(xml.contains("rotation:315.000"), "PDF y-up becomes Word y-down");
+        assert_eq!(xml.matches("<w:sectPr>").count(), 2);
+        assert!(xml.contains("<w:pgSz w:w=\"8000\" w:h=\"10000\"/>"));
+        assert_eq!(xml.matches("id=\"Text1\"").count(), 1);
+        assert_eq!(xml.matches(">Meter</w:t>").count(), 2);
+    }
+
     /// One part of a package written by [`Zip`], inflated.
-    fn part(zip: &[u8], name: &str) -> String {
+    pub(crate) fn part(zip: &[u8], name: &str) -> String {
         let at = |i: usize, n: usize| zip[i..i + n].iter().rev().fold(0usize, |v, b| v << 8 | *b as usize);
         let mut i = 0;
         while zip[i..].starts_with(b"PK\x03\x04") {
@@ -806,6 +1133,7 @@ mod tests {
             bold: false,
             italic: false,
             color: [0.0; 3],
+            rotation: 0.0,
         });
         let xml = part(&docx(&[p.clone()], "Receipt\u{1}"), "word/document.xml");
         assert!(xml.contains(">Total 4.50\tGBP</w:t>"), "{xml}");
@@ -833,9 +1161,13 @@ mod tests {
         let h = html(&[p.clone()], "Colour");
         assert!(h.contains("<h1 style=\"color:#0D3B2E\">Annual Report</h1>"), "{h}");
         assert!(h.contains("<p style=\"color:#00FF00\">"), "{h}");
-        let r = rtf(&[p]);
+        let r = rtf(&[p.clone()]);
         assert!(r.contains("{\\colortbl;\\red13\\green59\\blue46;\\red0\\green255\\blue0;}"), "{r}");
         assert!(r.contains("\\cf1 Annual Report"), "{r}");
+        let ppt = pptx(&[p], "Colour");
+        let pxml = part(&ppt, "ppt/slides/slide1.xml");
+        assert!(pxml.contains("<a:srgbClr val=\"0D3B2E\"/>"), "{pxml}");
+        assert!(pxml.contains("<a:srgbClr val=\"00FF00\"/>"), "out-of-range values clamp: {pxml}");
         // A table cell keeps its colour too.
         let mut t = table_page();
         t.blocks[0].color = [1.0, 0.0, 0.0];
@@ -847,7 +1179,15 @@ mod tests {
     #[test]
     fn rtf_escapes_and_sizes() {
         let mut p = page();
-        p.blocks.push(Block { text: "Café {x}".into(), rect: [72.0, 100.0, 200.0, 110.0], size: 10.0, bold: false, italic: true, color: [0.0; 3] });
+        p.blocks.push(Block {
+            text: "Café {x}".into(),
+            rect: [72.0, 100.0, 200.0, 110.0],
+            size: 10.0,
+            bold: false,
+            italic: true,
+            color: [0.0; 3],
+            rotation: 0.0,
+        });
         let r = rtf(&[p]);
         assert!(r.starts_with("{\\rtf1") && r.ends_with('}'));
         assert!(r.contains("\\fs48\\b Annual Report"));
@@ -863,6 +1203,7 @@ mod tests {
             bold: false,
             italic: false,
             color: [0.0; 3],
+            rotation: 0.0,
         };
         Page {
             width: 612.0,
@@ -885,9 +1226,11 @@ mod tests {
                     bold: false,
                     italic: false,
                     color: [0.0; 3],
+                    rotation: 0.0,
                 },
             ],
             images: Vec::new(),
+            ..Default::default()
         }
     }
 
@@ -911,12 +1254,20 @@ mod tests {
         assert!(table_xml.contains("<w:gridSpan w:val=\"2\"/>"), "{table_xml}");
         assert_eq!(table_xml.matches("<w:tr>").count(), 4);
 
-        let r = rtf(&[p]);
+        let r = rtf(std::slice::from_ref(&p));
         assert!(r.contains("\\trowd"), "{r}");
         assert_eq!(r.matches("\\row").count(), 4);
         // Boundaries precede the cells; "Totals" spans two columns, so it ends at the third edge.
         assert!(r.contains("\\trowd\\trgaph108\\cellx4640\\cellx7840\\cellx9920{"), "{r}");
         assert!(r.contains("\\trowd\\trgaph108\\cellx7840{\\intbl\\fs22 Totals}\\cell\\row"), "{r}");
+
+        let pt = pptx(std::slice::from_ref(&p), "Bill");
+        assert!(pt.starts_with(b"PK"));
+        assert!(pt.windows(b"ppt/slides/slide1.xml".len()).any(|w| w == b"ppt/slides/slide1.xml"));
+        let slide_xml = part(&pt, "ppt/slides/slide1.xml");
+        assert!(slide_xml.contains("<a:tbl>"));
+        assert!(slide_xml.contains("gridSpan=\"2\""));
+        assert_eq!(slide_xml.matches("<a:tr ").count(), 4);
     }
 
     #[test]
@@ -928,7 +1279,7 @@ mod tests {
             .map(|i| {
                 let (row, col) = (i / 2, i / 2 + i % 2);
                 let (x, y) = (10.0 + col as f64 * 20.0, 10_000.0 - row as f64 * 14.0);
-                Block { text: "x".into(), rect: [x, y, x + 8.0, y + 12.0], size: 11.0, bold: false, italic: false, color: [0.0; 3] }
+                Block { text: "x".into(), rect: [x, y, x + 8.0, y + 12.0], size: 11.0, bold: false, italic: false, color: [0.0; 3], rotation: 0.0 }
             })
             .collect();
         let started = std::time::Instant::now();
@@ -947,11 +1298,20 @@ mod tests {
                 .flat_map(|row| {
                     (0..n).map(move |col| {
                         let (x, y) = (20.0 + col as f64 * 22.0, 700.0 - row as f64 * 14.0);
-                        Block { text: (col + 1).to_string(), rect: [x, y, x + 8.0, y + 8.0], size: 8.0, bold: false, italic: false, color: [0.0; 3] }
+                        Block {
+                            text: (col + 1).to_string(),
+                            rect: [x, y, x + 8.0, y + 8.0],
+                            size: 8.0,
+                            bold: false,
+                            italic: false,
+                            color: [0.0; 3],
+                            rotation: 0.0,
+                        }
                     })
                 })
                 .collect(),
             images: Vec::new(),
+            ..Default::default()
         };
         let grid_cols = |p: &Page| part(&docx(std::slice::from_ref(p), "Grid"), "word/document.xml").matches("<w:gridCol ").count();
         assert_eq!(grid_cols(&grid(63)), 63, "63 columns is still a table");
@@ -968,6 +1328,7 @@ mod tests {
             bold: false,
             italic: false,
             color: [0.0; 3],
+            rotation: 0.0,
         };
         let p = Page {
             width: 612.0,
@@ -979,8 +1340,43 @@ mod tests {
                 para("Second right block, still a tall flowing paragraph rather than a cell.", 320.0, 400.0),
             ],
             images: Vec::new(),
+            ..Default::default()
         };
         let h = html(&[p], "Paper");
         assert!(!h.contains("<table>"), "tall two-column text must stay paragraphs: {h}");
+    }
+
+    #[test]
+    fn pieces_of_one_line_join_with_spaces_where_punctuation_wants_them() {
+        let piece = |text: &str, x0: f64, x1: f64| Block {
+            text: text.into(),
+            rect: [x0, 700.0, x1, 709.0],
+            size: 9.0,
+            bold: false,
+            italic: false,
+            color: [0.0; 3],
+            rotation: 0.0,
+        };
+        let joined = join_fragments(vec![
+            piece("Внимание", 62.4, 99.0),
+            piece("!", 98.9, 103.2),
+            piece("Оплата", 103.4, 130.0),
+            piece("ПАО", 130.2, 150.0),
+            piece("\"", 150.0, 155.0),
+            piece("Сбербанк", 155.2, 190.0),
+            piece("\"", 190.0, 195.0),
+            piece("СчТ", 195.2, 210.0),
+            piece("-084981", 210.0, 240.0),
+            piece("3-", 240.1, 245.0),
+            piece("х", 245.0, 250.0),
+            // Far to the right: another column, not part of the line.
+            piece("Итого", 400.0, 430.0),
+        ]);
+        assert_eq!(joined.len(), 2);
+        assert_eq!(joined[0].text, "Внимание! Оплата ПАО \"Сбербанк\" СчТ-084981 3-х");
+        assert_eq!(joined[0].rect, [62.4, 700.0, 250.0, 709.0]);
+        // A multi-line paragraph is never joined to the next piece.
+        let tall = Block { rect: [50.0, 650.0, 100.0, 709.0], ..piece("a b c", 0.0, 0.0) };
+        assert_eq!(join_fragments(vec![tall, piece("d", 100.0, 110.0)]).len(), 2);
     }
 }

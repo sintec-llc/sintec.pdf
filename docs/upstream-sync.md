@@ -37,6 +37,7 @@ Resolve conflicts by these rules (they cover most of them):
 | `crates/ui-egui/src/i18n/ru.tsv` | keep **both** sides' entries |
 | other `crates/ui-egui/src/i18n/*.tsv`, the interface `LANGUAGES` list, `DATE_LANGUAGES` | keep **ours**: Sintec.PDF ships English and Russian only, so delete upstream's other catalogs (`git rm`) and leave their rows out of both lists |
 | `crates/ocr/` | keep **ours** (46 languages through PP-OCRv5) until upstream's OCR beats it; see [M10](#m10-compare-and-keep-the-better-one) |
+| `crates/print/src/spool.rs` | upstream's craft-print types and CUPS code, **our** Windows path: sheets rendered to images and printed through .NET, PowerShell scripts on stdin (craft-print's Windows path passes a large script as `-Command <script>`, which antivirus behaviour engines flag; synced 0.7.1, 2026-10-14) |
 | code | merge by hand; prefer upstream's design and re-apply our behaviour on top |
 
 Then:

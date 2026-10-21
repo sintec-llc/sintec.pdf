@@ -295,6 +295,7 @@ mod tests {
         assert!(pdf.contains("<string>com.adobe.pdf</string>"), "claim PDFs by UTI, not just extension/MIME");
         assert!(pdf.contains("<string>Editor</string>"), "PDF role stays Editor");
         assert!(pdf.contains("<string>Alternate</string>"), "rank stays Alternate: offered without taking over Preview");
+        assert!(pdf.contains("<key>CFBundleTypeIconFile</key>"), "declares document icon file for Finder");
     }
 
     // Sintec.PDF has its own macOS bundle id, so it never shares LaunchServices registrations or a

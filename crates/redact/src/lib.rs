@@ -37,6 +37,9 @@ pub enum RedactError {
     Unreadable(usize),
     #[error("redaction could not be verified: {0} item(s) were still found under the marks, so nothing was changed")]
     Residue(usize),
+    /// A mark's overlay text has a character Helvetica can't draw; nothing was redacted.
+    #[error("{0}")]
+    Undrawable(String),
     #[error("page {0} has vertical-writing text under a redaction mark, which Sintec.PDF cannot remove yet, so nothing was changed")]
     VerticalText(usize),
     #[error(transparent)]
@@ -276,12 +279,22 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
     if chosen.is_empty() {
         return Err(RedactError::NothingToApply);
     }
+    // Overlay text is drawn in Helvetica; applying can't be undone in the file, so text it can't
+    // draw (a mark another program made) is refused before anything changes, never burnt in as `?`.
+    if let Some((m, c)) = chosen.iter().find_map(|m| pdfcraft_fonts::first_undrawable(&m.overlay).map(|c| (m, c))) {
+        return Err(RedactError::Undrawable(format!(
+            "{}; change or clear that mark's overlay text, then apply again (nothing was redacted)",
+            pdfcraft_fonts::undrawable_message(&format!("the overlay text of a redaction mark on page {}", m.page + 1), c)
+        )));
+    }
     let mut report = Report { marks: chosen.len(), ..Report::default() };
     let mut by_page: Vec<usize> = chosen.iter().map(|m| m.page).collect();
     by_page.sort_unstable();
     by_page.dedup();
     report.pages = by_page.len();
     let mut doomed_fields: Vec<String> = Vec::new();
+    // The original image and form XObjects the rewrite drops or replaces, on any page.
+    let mut doomed_xobjects: Vec<ObjRef> = Vec::new();
     let widget_owner: Vec<(ObjRef, String)> =
         pdfcraft_forms::fields(doc).into_iter().flat_map(|f| f.widgets.iter().map(|w| (w.obj, f.name.clone())).collect::<Vec<_>>()).collect();
 
@@ -304,6 +317,7 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
         if out.vertical {
             return Err(RedactError::VerticalText(pi + 1));
         }
+        doomed_xobjects.extend_from_slice(&out.doomed);
         let mut new_list = list.clone();
         let mut changed = false;
         for (i, new) in out.streams.into_iter().enumerate() {
@@ -322,7 +336,7 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
             changed = true;
         }
         if changed || !out.xobjects.is_empty() || !out.replaced.is_empty() {
-            let mut res = resources;
+            let mut res = resources.clone();
             if !out.xobjects.is_empty() || !out.replaced.is_empty() {
                 let mut xo = res.get(b"XObject").and_then(|x| doc.resolve(x).as_dict().cloned()).unwrap_or_default();
                 // A full save keeps whatever is still referenced: unlink the originals this page no
@@ -347,8 +361,12 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
             // Tags must not keep what the page no longer shows.
             let after = doc.get(page.obj).as_dict().cloned().unwrap_or_default();
             let (_, new_data) = page_streams(doc, &after, pi)?;
-            let (changed_ids, empty_ids) = tags::touched(&data.join(&b'\n'), &new_data.join(&b'\n'));
-            report.tags += tags::clean(doc, page.obj, &changed_ids, &empty_ids)?;
+            let (changed_ids, empty_ids) = tags::touched(doc, &resources, &data.join(&b'\n'), &new_data.join(&b'\n'));
+            report.tags += tags::clean(doc, page.obj, None, &changed_ids, &empty_ids)?;
+        }
+
+        for (old, new, changed, empty) in out.tag_changes {
+            report.tags += tags::clean(doc, page.obj, Some((old, new)), &changed, &empty)?;
         }
 
         // 2. Annotations: the marks, and whatever lies under them (with their pop-ups).
@@ -449,6 +467,10 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
             pdfcraft_edit::stamp(doc, pi, "Redaction", content)?;
         }
     }
+
+    // A removed image or form must not stay reachable through another resource dictionary (an
+    // inherited or shared /Resources): a full save keeps whatever is still referenced.
+    interp::unlink_doomed(doc, &doomed_xobjects)?;
 
     // 5. Verify: nothing readable may remain under a region.
     let mut residue = 0;

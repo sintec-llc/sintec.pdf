@@ -30,6 +30,20 @@ pub fn from_text_unicode(title: &str, text: &str, page: (f64, f64), font_size: f
     let upem = f64::from(metrics.units_per_em.max(1));
     let glyph_metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
     let gid_of = |c: char| charmap.map(c).map(|g| g.to_u32());
+    // Never silent (AGENTS.md §4): a character the font has no glyph for would print as a
+    // placeholder box, so the text is refused, naming it, rather than written that way.
+    let undrawable = text
+        .lines()
+        .enumerate()
+        .find_map(|(i, line)| line.chars().find(|c| !matches!(c, '\r' | '\t' | '\u{c}' | ' ') && gid_of(*c).is_none()).map(|c| (i, c)));
+    if let Some((line, c)) = undrawable {
+        return Err(CreateError::Invalid(format!(
+            "the text font can't draw \"{}\" (U+{:04X}) (line {}); only Latin, Cyrillic and Greek text can be made into a PDF this way for now",
+            c.escape_debug(),
+            u32::from(c),
+            line + 1
+        )));
+    }
     // The fallback for characters the font lacks.
     let missing = gid_of('?').unwrap_or(0);
     let advance_units = gid_of('M').and_then(|g| glyph_metrics.advance_width(g.into())).map_or(600.0, f64::from);

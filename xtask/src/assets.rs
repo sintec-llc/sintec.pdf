@@ -362,6 +362,42 @@ fn models_attribution(m: &Manifest) -> String {
     s
 }
 
+/// `cargo xtask fonts [DIR]`: fetch the metric-compatible substitute fonts (`kind = "substitute-font"`:
+/// Carlito, Caladea, Tinos, Cousine, PT Sans) into `assets/substitute-fonts/` (git-ignored), where the
+/// editor looks for bundled fonts. Each comes with its licence, and `ATTRIBUTION.txt` credits them all.
+pub fn fonts(args: &[String]) -> Result<()> {
+    let root = root();
+    let m = load(&root)?;
+    let dir = args.first().map(PathBuf::from).unwrap_or_else(|| root.join("assets/substitute-fonts"));
+    for p in fetch_all(&m, &dir, "substitute-font")? {
+        println!("fonts: {}", p.display());
+    }
+    std::fs::write(dir.join("ATTRIBUTION.txt"), fonts_attribution(&m))?;
+    Ok(())
+}
+
+/// The credits shipped beside the substitute fonts (the OFL requires the notice to travel with them).
+fn fonts_attribution(m: &Manifest) -> String {
+    let mut s = String::from(
+        "Sintec.PDF includes these open fonts, unmodified, as stand-ins for common document fonts.
+",
+    );
+    for f in m.fetched.iter().filter(|f| f.kind == "substitute-font") {
+        let _ = write!(
+            s,
+            "
+{}
+  {}
+  by {}
+  from {}
+  licence: {} ({}; full text in {}.LICENCE.txt)
+",
+            f.file, f.title, f.author, f.source, f.licence, f.licence_url, f.file
+        );
+    }
+    s
+}
+
 /// ATTRIBUTION.md, generated from the manifest.
 pub fn render_markdown(m: &Manifest) -> String {
     let mut s = String::new();
@@ -401,7 +437,7 @@ pub fn render_markdown(m: &Manifest) -> String {
         );
     }
     s.push_str(&format!(
-        "\n## Downloaded at build time ({})\n\nFonts are fetched by `cargo xtask demo-pdf` into `target/demo-fonts/`, OCR models by `cargo xtask models` into `assets/models/`; each is verified by SHA-256 and never committed.\n\n| File | Title | Author | Licence | Source | Used for |\n|---|---|---|---|---|---|\n",
+        "\n## Downloaded at build time ({})\n\nFonts are fetched by `cargo xtask demo-pdf` into `target/demo-fonts/`, OCR models by `cargo xtask models` into `assets/models/`, substitute fonts by `cargo xtask fonts` into `assets/substitute-fonts/`; each is verified by SHA-256 and never committed.\n\n| File | Title | Author | Licence | Source | Used for |\n|---|---|---|---|---|---|\n",
         m.fetched.len()
     ));
     for f in &m.fetched {
@@ -440,6 +476,18 @@ mod tests {
         let models: Vec<_> = m.fetched.iter().filter(|f| f.kind == "model").collect();
         assert!(!models.is_empty());
         for f in models {
+            assert!(text.contains(&f.file) && text.contains(&f.author) && text.contains(&f.licence), "{}", f.file);
+        }
+    }
+
+    /// The release packages ship assets/substitute-fonts as fetched: every font is credited there.
+    #[test]
+    fn fonts_attribution_credits_every_font() {
+        let m = load(&root()).unwrap();
+        let text = fonts_attribution(&m);
+        let fonts: Vec<_> = m.fetched.iter().filter(|f| f.kind == "substitute-font").collect();
+        assert!(fonts.len() >= 20);
+        for f in fonts {
             assert!(text.contains(&f.file) && text.contains(&f.author) && text.contains(&f.licence), "{}", f.file);
         }
     }

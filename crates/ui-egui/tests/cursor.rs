@@ -47,6 +47,9 @@ fn clickables_show_the_hand_and_the_page_does_not() {
     h.state_mut().execute("app.preferences");
     // The dialog sizes itself over its first frames.
     h.run_steps(10);
+    // The preferences scroll: bring the checkbox into view first (scrolling animates).
+    h.get_by_label("Check for updates automatically").scroll_to_me();
+    h.run_steps(10);
     let check = h.get_by_label("Check for updates automatically").rect().center();
     assert_eq!(cursor_at(&mut h, check), CursorIcon::PointingHand, "checkbox");
     // Empty space in the dialog keeps the arrow.

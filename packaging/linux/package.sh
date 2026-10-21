@@ -74,6 +74,8 @@ mkdir -p "$STAGE/usr/share/doc/pdfcraft"
 copy_docs "$STAGE/usr/share/doc/pdfcraft"
 # OCR models: the app finds them at <bin>/../share/pdfcraft/models, so in every format below.
 stage_models "$STAGE/usr/share/pdfcraft/models"
+# Substitute fonts: <bin>/../share/pdfcraft/fonts.
+stage_fonts "$STAGE/usr/share/pdfcraft/fonts"
 
 if command -v desktop-file-validate >/dev/null; then
   desktop-file-validate "$STAGE/usr/share/applications/$APP_ID.desktop"

@@ -113,8 +113,10 @@ fn outline_len(doc: &Document, first: Option<&Object>, depth: usize) -> usize {
     n
 }
 
+/// A comment as the comments list sees it, less file attachments (removed with Attachments) and
+/// redaction marks.
 fn is_comment(subtype: &[u8]) -> bool {
-    !matches!(subtype, b"Link" | b"Widget" | b"Popup" | b"FileAttachment" | b"Redact")
+    !matches!(subtype, b"FileAttachment" | b"Redact") && pdfcraft_annot::is_comment_subtype(&String::from_utf8_lossy(subtype))
 }
 
 /// The layers that are off in the default configuration.
@@ -142,6 +144,8 @@ fn content_pass(doc: &mut Document, text: bool, layers: bool, write: bool) -> Re
         return Ok(0);
     }
     let mut total = 0;
+    // The original image and form XObjects the rewrite drops or replaces, on any page.
+    let mut doomed = Vec::new();
     let n = pdfcraft_model::pages(doc).len();
     for pi in 0..n {
         let page = pdfcraft_model::pages(doc).swap_remove(pi);
@@ -166,6 +170,7 @@ fn content_pass(doc: &mut Document, text: bool, layers: bool, write: bool) -> Re
         if !write {
             continue;
         }
+        doomed.extend_from_slice(&out.doomed);
         let mut new_list = list.clone();
         let mut changed = false;
         for (i, new) in out.streams.into_iter().enumerate() {
@@ -203,6 +208,9 @@ fn content_pass(doc: &mut Document, text: bool, layers: bool, write: bool) -> Re
             })?;
         }
     }
+    // What a page no longer draws must not stay reachable through an inherited or shared
+    // /Resources either.
+    crate::interp::unlink_doomed(doc, &doomed)?;
     Ok(total)
 }
 

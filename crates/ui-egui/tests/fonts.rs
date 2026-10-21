@@ -99,7 +99,7 @@ fn telugu_ui_text_uses_craft_fonts() {
 #[test]
 fn system_fallback_fills_missing_scripts() {
     assert!(!theme::font_definitions().font_data.contains_key(theme::SYSTEM_FALLBACK));
-    let defs = theme::installed_font_definitions();
+    let defs = theme::installed_font_definitions(theme::CjkPreference::Default);
     if !defs.font_data.contains_key(theme::SYSTEM_FALLBACK) {
         eprintln!("skipping system_fallback_fills_missing_scripts: no installed fallback font (or PDFCRAFT_SYSTEM_FONTS=0)");
         assert!(defs.families.values().all(|stack| !stack.iter().any(|n| n == theme::SYSTEM_FALLBACK)));
@@ -115,6 +115,29 @@ fn system_fallback_fills_missing_scripts() {
         assert!(fonts.has_glyphs(&id, "Sintec.PDF"), "{id:?}");
     }
     assert!(layout_widths(&mut fonts, ARABIC).iter().all(|w| w.is_finite() && *w > 0.0));
+}
+
+/// On a machine with a suitable installed Devanagari font, the installed definitions include
+/// it and Hindi text has glyphs; the embedded-only definitions never name it.
+#[test]
+fn system_fallback_covers_devanagari() {
+    assert!(!theme::font_definitions().font_data.contains_key(theme::SYSTEM_DEVANAGARI_FALLBACK));
+    let defs = theme::installed_font_definitions(theme::CjkPreference::Default);
+    if !defs.font_data.contains_key(theme::SYSTEM_DEVANAGARI_FALLBACK) {
+        eprintln!("skipping system_fallback_covers_devanagari: no installed Devanagari fallback font (or PDFCRAFT_SYSTEM_FONTS=0)");
+        assert!(defs.families.values().all(|stack| !stack.iter().any(|n| n == theme::SYSTEM_DEVANAGARI_FALLBACK)));
+        return;
+    }
+    for (family, stack) in &defs.families {
+        assert!(stack.iter().any(|n| n == theme::SYSTEM_DEVANAGARI_FALLBACK), "{family:?}: {stack:?}");
+        assert_eq!(stack.iter().filter(|n| *n == theme::SYSTEM_DEVANAGARI_FALLBACK).count(), 1, "{family:?}");
+    }
+    let mut fonts = Fonts::new(TextOptions::default(), defs);
+    const DEVANAGARI: &str = "हिंदी पाठ सम्पादन";
+    for id in families() {
+        assert!(fonts.has_glyphs(&id, DEVANAGARI), "{id:?} lacks {DEVANAGARI}");
+    }
+    assert!(layout_widths(&mut fonts, DEVANAGARI).iter().all(|w| w.is_finite() && *w > 0.0));
 }
 
 /// Without craft-fonts the interface fonts still install and lay out any text (Japanese falls

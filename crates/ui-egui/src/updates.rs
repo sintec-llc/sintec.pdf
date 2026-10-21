@@ -256,10 +256,12 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut update: Option<Release> = None;
     let mut later: Option<String> = None;
     let mut skip: Option<String> = None;
-    let modal = crate::widgets::modal(ctx, egui::Id::new("updates")).show(ctx, |ui| {
-        crate::widgets::dialog_spacing(ui);
-        ui.set_width(440.0);
-        ui.label(egui::RichText::new(tl!("Check for updates")).font(theme::semibold(16.0)));
+    let modal = crate::widgets::show_modal(ctx, "updates", |ui| {
+        ui.set_width(420.0);
+        ui.horizontal(|ui| {
+            ui.add(crate::icons::image("cloud", 22.0, t.accent));
+            ui.label(egui::RichText::new(tl!("Check for updates")).font(theme::semibold(16.0)));
+        });
         ui.add_space(8.0);
         let mut offer: Option<Release> = None;
         match &app.updates.check {

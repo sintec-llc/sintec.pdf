@@ -66,7 +66,7 @@ impl SignatureDrag {
         let scale = scale.min(crate::canvas::BASE_SIDE / p.width.max(p.height).max(1.0));
         let tag = (scale * 1000.0) as u64;
         if layers.tag != Some(tag) {
-            layers.renderer.set_queue(vec![RenderRequest { page, scale, tag, ..Default::default() }]);
+            layers.renderer.set_queue(vec![RenderRequest { page, scale, tag, preview: true, ..Default::default() }]);
             layers.tag = Some(tag);
         }
         if let Some(out) = layers.renderer.try_recv()
@@ -76,7 +76,7 @@ impl SignatureDrag {
                 layers.received_tag = Some(tag);
                 layers.background = Some(ctx.load_texture(
                     "signature-drag-background",
-                    ColorImage::from_rgba_premultiplied([out.width as usize, out.height as usize], &out.rgba),
+                    crate::canvas::texture_image([out.width as usize, out.height as usize], out.rgba),
                     TextureOptions::LINEAR,
                 ));
             } else {
