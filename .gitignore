@@ -10,3 +10,9 @@ plan/
 /assets/substitute-fonts
 # A craft-fonts checkout used as the optional CRAFT_FONTS_DIR build input (CI and releases put it here).
 /craft-fonts
+/target-*
+/agent-worktrees
+/agent-scripts-*
+/scripts-*
+/shots-*
+/wip-*
