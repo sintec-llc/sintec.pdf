@@ -176,13 +176,30 @@ pub fn ghost_button_sized(ui: &mut egui::Ui, icon: &str, label: &str, height: f3
 /// over a whole area.
 const HAND_MAX_SIDE: f32 = 200.0;
 
+/// Where [`page_layer`] keeps this frame's in-page layers.
+fn page_layers_id() -> egui::Id {
+    egui::Id::new("sintec-page-layers")
+}
+
+/// Count `layer` as part of the page this frame: an editor floating over the page (a paragraph or
+/// added text being typed), whose own cursor (the I-beam) [`page_cursor_only_on_the_page`] keeps.
+pub fn page_layer(ctx: &egui::Context, layer: egui::LayerId) {
+    ctx.data_mut(|d| {
+        let layers = d.get_temp_mut_or_default::<Vec<egui::LayerId>>(page_layers_id());
+        if !layers.contains(&layer) {
+            layers.push(layer);
+        }
+    });
+}
+
 /// Called once the page has drawn: the document tools set their cursor (I-beam, crosshair…)
 /// from the pointer's position on the page, but a dialog, its backdrop, a menu or a toast may
 /// cover the page there. Over anything above the window's panels the page's cursor is dropped,
-/// so what is on top decides.
+/// so what is on top decides; the page's own editors ([`page_layer`]) count as the page.
 pub fn page_cursor_only_on_the_page(ctx: &egui::Context) {
+    let page_layers = ctx.data_mut(|d| d.remove_temp::<Vec<egui::LayerId>>(page_layers_id())).unwrap_or_default();
     let Some(pos) = ctx.pointer_hover_pos() else { return };
-    if ctx.layer_id_at(pos).is_some_and(|l| l.order != egui::Order::Background) && ctx.dragged_id().is_none() {
+    if ctx.layer_id_at(pos).is_some_and(|l| l.order != egui::Order::Background && !page_layers.contains(&l)) && ctx.dragged_id().is_none() {
         ctx.set_cursor_icon(egui::CursorIcon::Default);
     }
 }

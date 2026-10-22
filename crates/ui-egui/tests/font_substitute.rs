@@ -56,6 +56,8 @@ fn text_the_font_cant_show_opens_the_substitution_dialog() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("invoice.pdf", None, fixture()).expect("fixture opens");
+        // No installed face to substitute with: the dialog asks, whatever this machine has.
+        app.fonts.installed_override = Some(Vec::new());
         app
     });
     h.run_steps(3);

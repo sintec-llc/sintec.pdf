@@ -232,7 +232,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         } else {
             s.gesture = Some(gesture);
         }
-        ui.ctx().set_cursor_icon(if gesture.marquee { egui::CursorIcon::Crosshair } else { egui::CursorIcon::Grabbing });
+        ui.ctx().set_cursor_icon(if gesture.marquee { egui::CursorIcon::Crosshair } else { egui::CursorIcon::Move });
         return true;
     }
     let Some(p) = pointer.filter(|p| xf.rect.contains(*p) && ui.clip_rect().contains(*p) && resp.rect.contains(*p)) else {
@@ -242,7 +242,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         if s.page == Some(page) && !s.selected.is_empty() {
             let union = s.selected.iter().fold(Rect::NOTHING, |r, o| r.union(screen(xf, info, page, o)));
             if union.contains(p) {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
             }
             return true;
         }
@@ -305,7 +305,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
     // selects it (for the arrow keys), a drag moves it. Its text keeps the caret.
     if let Some(block) = view.line_editor.as_ref().filter(|e| e.page == page && !e.has_changes()).map(|e| e.block)
         && let Some(object) = objects.iter().find(|o| o.target == ObjectTarget { kind: ObjectKind::Text, index: block })
-        && on_frame(screen(xf, info, page, object), p)
+        && on_frame(open_frame(view, page, block).unwrap_or_else(|| screen(xf, info, page, object)), p)
     {
         s.clear();
         s.page = Some(page);
@@ -326,9 +326,15 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
     true
 }
 
+/// The frame the text editor drew around paragraph `block` on `page` (screen), when it is open.
+/// It spans where the paragraph wraps, which can reach past its ink.
+fn open_frame(view: &DocView, page: usize, block: usize) -> Option<Rect> {
+    view.open_frame.filter(|(p, b, _)| (*p, *b) == (page, block)).map(|(_, _, r)| r)
+}
+
 /// Whether `p` is on the frame drawn around a paragraph open for typing (`r`, screen): just
 /// outside the text, where a press would otherwise close the paragraph.
-fn on_frame(r: Rect, p: Pos2) -> bool {
+pub(crate) fn on_frame(r: Rect, p: Pos2) -> bool {
     r.expand(2.0 + FRAME_REACH).contains(p) && !r.expand(2.0).contains(p)
 }
 

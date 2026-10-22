@@ -2413,6 +2413,51 @@ fn switching_from_a_narrow_editor_keeps_one_frame_and_a_wide_heading_on_one_line
     assert!(!dirty(&h));
 }
 
+/// #2022: clicking straight into another text box while one is open for typing must apply the
+/// open paragraph first; the typed text used to be dropped with the editor that switched away.
+#[test]
+fn switching_straight_to_another_box_applies_the_open_paragraph() {
+    let bytes = source_font_fixture_with_text("BT /F1 24 Tf 20 220 Td (Top) Tj ET BT /F2 24 Tf 20 120 Td (Bottom) Tj ET");
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("boxes.pdf", None, bytes).expect("opens");
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 300.0;
+    let mut blocks = {
+        let s = h.state();
+        s.session.get(s.views[0].id).unwrap().text_blocks(0)
+    };
+    blocks.sort_by(|a, b| b.rect[1].partial_cmp(&a.rect[1]).unwrap_or(std::cmp::Ordering::Equal));
+    assert_eq!(blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>(), ["Top", "Bottom"], "two editable boxes");
+    let center = |b: &pdfcraft_engine::TextBlock| {
+        egui::pos2(r.left() + ((b.rect[0] + b.rect[2]) / 2.0) as f32 * k, r.top() + (300.0 - (b.rect[1] + b.rect[3]) / 2.0) as f32 * k)
+    };
+    // Open the top box and type into it.
+    click_at(&mut h, center(&blocks[0]));
+    let ed = h.state().views[0].line_editor.clone().expect("the top box opens for typing");
+    assert_eq!(ed.text, "Top");
+    h.state_mut().views[0].line_editor.as_mut().unwrap().text = "Top edited".into();
+    h.run_steps(1);
+    // Click straight into the bottom box: the open paragraph is applied, and the bottom box opens.
+    click_at(&mut h, center(&blocks[1]));
+    let s = h.state();
+    let doc = s.session.get(s.views[0].id).unwrap();
+    assert_eq!(
+        doc.text_blocks(0).iter().map(|b| b.text.clone()).collect::<Vec<_>>(),
+        ["Top edited", "Bottom"],
+        "the typed text is applied, not dropped"
+    );
+    assert_eq!(doc.can_undo(), Some("Edit text"));
+    let ed = s.views[0].line_editor.clone().expect("the bottom box is now open");
+    assert_eq!(ed.text, "Bottom");
+}
+
 #[test]
 fn editing_existing_text_in_place() {
     let mut h = harness(1, |_| {});
@@ -2440,6 +2485,89 @@ fn editing_existing_text_in_place() {
     assert_eq!(doc.can_undo(), Some("Edit text"));
     assert_eq!(doc.text_lines(0)[0].text, "Chapter One");
     assert_eq!(texts_of(s, 0), ["Chapter One"], "the page shows it");
+}
+
+#[test]
+fn text_tool_clicking_source_text_edits_instead_of_adding_a_copy() {
+    let mut h = harness(1, |_| {});
+    assert!(h.state_mut().execute("edit.text"));
+    h.run_steps(2);
+    let page = h.state().views[0].page_screen_rect(0).unwrap();
+    let blank = egui::pos2(page.left() + 0.2 * page.width(), page.top() + 0.1 * page.height());
+    h.hover_at(blank);
+    h.run_steps(1);
+    h.drag_at(blank);
+    h.run_steps(1);
+    h.drop_at(blank);
+    h.run_steps(3);
+    h.event(egui::Event::Text("Keep this note".into()));
+    h.run_steps(3);
+    let point = egui::pos2(page.left() + 40.0 / 200.0 * page.width(), page.top() + 142.0 / 300.0 * page.height());
+    h.hover_at(point);
+    h.run_steps(1);
+    h.drag_at(point);
+    h.run_steps(1);
+    h.drop_at(point);
+    h.run_steps(4);
+    assert!(h.state().views[0].content.draft.is_none(), "clicking source text must not start an added layer");
+    assert_eq!(h.state().views[0].line_editor.as_ref().unwrap().text, "Page 1");
+    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().added().len(), 1, "the previous draft is kept");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    h.event(egui::Event::Text("Replacement".into()));
+    h.run_steps(3);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Enter);
+    h.run_steps(3);
+    assert_eq!(page_texts(h.state()), ["Keep this note\nReplacement"]);
+    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().added().len(), 1, "editing the source adds no second layer");
+}
+
+#[test]
+fn text_tool_mixed_style_row_grows_in_the_editor_and_saved_pdf() {
+    let bytes = source_font_fixture_with_text("BT /F1 12 Tf 20 220 Td (Small ) Tj /F2 12 Tf (row) Tj ET");
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("mixed-row.pdf", None, bytes).unwrap();
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let page = h.state().views[0].page_screen_rect(0).unwrap();
+    let point = egui::pos2(page.left() + 25.0 / 300.0 * page.width(), page.top() + 75.0 / 300.0 * page.height());
+    h.hover_at(point);
+    h.run_steps(1);
+    h.drag_at(point);
+    h.run_steps(1);
+    h.drop_at(point);
+    h.run_steps(4);
+    let replacement = "Small row with more words";
+    h.key_press_modifiers(Modifiers::COMMAND, Key::End);
+    h.event(egui::Event::Text(" with more words".into()));
+    h.run_steps(4);
+    let galley = h
+        .output()
+        .shapes
+        .iter()
+        .find_map(|s| match &s.shape {
+            egui::Shape::Text(t) if t.galley.text() == replacement => Some(&t.galley),
+            _ => None,
+        })
+        .expect("the draft is painted");
+    assert_eq!(galley.rows.len(), 1, "mixed source runs grow as one visual row");
+    if let Ok(path) = std::env::var("PDFCRAFT_MIXED_ROW_SHOT") {
+        h.render().unwrap().save(path).unwrap();
+    }
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Enter);
+    h.run_steps(3);
+    let state = h.state();
+    let doc = state.session.get(state.views[0].id).unwrap();
+    assert_eq!(doc.text_blocks(0)[0].editor_text, replacement);
+    assert_eq!(doc.text_blocks(0)[0].rows.len(), 1);
+    let bytes = state.session.save_bytes(state.views[0].id).unwrap();
+    let mut reopened = pdfcraft_engine::Session::new();
+    let id = reopened.open("again.pdf", None, bytes, None).unwrap();
+    assert_eq!(reopened.get(id).unwrap().text_blocks(0)[0].rows.len(), 1);
 }
 
 /// One page whose only line is drawn twice at the same spot (fake bold, as many generated
@@ -4031,6 +4159,74 @@ fn cropped_image_corner_resize_keeps_opposite_corner_and_scales_crop() {
     assert_eq!(reopened.get(re).unwrap().page_images(0), h.state().session.get(id).unwrap().page_images(0));
 }
 
+/// While a corner is dragged, the image's pixels are drawn in the blue frame, not left at their
+/// old size until release (#1671).
+#[test]
+fn image_pixels_follow_the_frame_while_a_corner_is_dragged() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("clipped.pdf", None, clipped_artwork_with_labels_drawn(true)).unwrap();
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.state_mut().views[0].set_zoom(1.2);
+    h.run_steps(4);
+    let page = h.state().views[0].page_screen_rect(0).unwrap();
+    let at = |x: f32, y: f32| egui::pos2(page.left() + x / 200.0 * page.width(), page.top() + (300.0 - y) / 300.0 * page.height());
+    let p = at(95.0, 195.0);
+    h.hover_at(p);
+    h.run_steps(1);
+    h.drag_at(p);
+    h.run_steps(1);
+    h.drop_at(p);
+    h.run_steps(3);
+    assert!(h.state().views[0].image_selection.is_some());
+    let frame = |h: &Harness<'static, PdfCraftApp>| {
+        h.output().shapes.iter().find_map(|s| match &s.shape {
+            egui::Shape::Rect(r) if r.stroke.color == egui::Color32::from_rgb(0x14, 0x73, 0xE6) && r.rect.width() > 20.0 => Some(r.rect),
+            _ => None,
+        })
+    };
+    // Textured meshes smaller than the page: the page raster itself always covers the page.
+    let pictures = |h: &Harness<'static, PdfCraftApp>| -> Vec<egui::Rect> {
+        h.output()
+            .shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default() => Some(m.calc_bounds()),
+                _ => None,
+            })
+            .filter(|b| b.width() < page.width() - 1.0)
+            .collect()
+    };
+    let start = frame(&h).expect("the selected image has a frame");
+    let (grip, fixed) = (start.right_top(), start.left_bottom());
+    for factor in [0.6, 1.3] {
+        let to = fixed + (grip - fixed) * factor;
+        h.hover_at(grip);
+        h.run_steps(1);
+        h.drag_at(grip);
+        h.run_steps(1);
+        for k in 1..=4 {
+            h.hover_at(grip + (to - grip) * (k as f32 / 4.0));
+            h.run_steps(1);
+        }
+        let live = frame(&h).expect("the drag shows its frame");
+        assert!((live.width() - start.width() * factor).abs() < 1.0, "the frame follows the grip: {live:?} from {start:?}");
+        let drawn = pictures(&h);
+        assert!(
+            drawn.iter().any(|b| (b.min - live.min).length() < 0.5 && (b.max - live.max).length() < 0.5),
+            "the picture is drawn in the frame {live:?}, not only at {drawn:?}"
+        );
+        h.drop_at(to);
+        h.run_steps(4);
+        h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+        h.run_steps(4);
+    }
+}
+
 /// Exercise actual pointer gestures on each cropped placement, without capturing private pixels.
 #[test]
 #[ignore = "requires an explicitly supplied local PDF with cropped artwork"]
@@ -4443,4 +4639,87 @@ fn the_longest_word_limits_how_narrow_a_cell_gets() {
     assert!((w - 79.2).abs() < 3.0, "shows the clamped width, not {w}: {after:?}");
     let rows = doc_rows(&h);
     assert!(rows.iter().any(|r| r == "Московского"), "{rows:?}");
+}
+
+/// Moving text shows the four-way arrow wherever a drag would move it (#1520 follow-up): over a
+/// closed paragraph, on the frame of an open one, and while dragging. Inside the open one the
+/// pointer reads as text; on a closed one's edge, as the rewrap handle.
+#[test]
+fn moving_text_offers_the_four_way_arrow() {
+    let mut h = harness(2, |_| {});
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let id = h.state().views[0].id;
+    let block = h.state().session.get(id).unwrap().text_blocks(0)[0].clone();
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 200.0;
+    let screen = |x: f64, y: f64| egui::pos2(r.left() + x as f32 * k, r.top() + (300.0 - y as f32) * k);
+    let centre = screen((block.rect[0] + block.rect[2]) / 2.0, (block.rect[1] + block.rect[3]) / 2.0);
+    let cursor_at = |h: &mut Harness<'static, PdfCraftApp>, at: egui::Pos2| {
+        h.hover_at(at);
+        h.run_steps(2);
+        h.output().platform_output.cursor_icon
+    };
+    // A closed paragraph: a drag moves it; its left edge rewraps it.
+    assert_eq!(cursor_at(&mut h, centre), egui::CursorIcon::Move);
+    assert_eq!(cursor_at(&mut h, screen(block.rect[0], (block.rect[1] + block.rect[3]) / 2.0)), egui::CursorIcon::ResizeHorizontal);
+    // While it is being dragged.
+    h.hover_at(centre);
+    h.run_steps(1);
+    h.drag_at(centre);
+    h.run_steps(1);
+    // Up and right: dragged down, the paragraph would sit under the floating page toolbar.
+    let mid = centre + egui::vec2(20.0 * k, -10.0 * k);
+    h.hover_at(mid);
+    h.run_steps(2);
+    assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::Move);
+    h.drop_at(mid);
+    h.run_steps(4);
+    let moved = h.state().session.get(id).unwrap().text_blocks(0)[0].clone();
+    assert!((moved.rect[0] - block.rect[0] - 20.0).abs() < 1.5, "{:?} → {:?}", block.rect, moved.rect);
+    // Open: text inside, the frame moves it.
+    let centre = screen((moved.rect[0] + moved.rect[2]) / 2.0, (moved.rect[1] + moved.rect[3]) / 2.0);
+    click_at(&mut h, centre);
+    assert!(h.state().views[0].line_editor.is_some());
+    assert_eq!(cursor_at(&mut h, centre), egui::CursorIcon::Text);
+    let frame = screen((moved.rect[0] + moved.rect[2]) / 2.0, moved.rect[3]) - egui::vec2(0.0, 4.0);
+    assert_eq!(cursor_at(&mut h, frame), egui::CursorIcon::Move);
+}
+
+/// Move by frame, where the frame is wider than the text: an open one-line cell's frame reaches
+/// where it wraps (015), past its ink, and a drag on the frame there moves the paragraph as it
+/// does over the text. (The frame grab used to be measured from the ink, so this press started a
+/// marquee instead.)
+#[test]
+fn the_open_paragraphs_frame_moves_it_past_its_ink() {
+    let mut h = table_cells_harness();
+    let cell = |h: &Harness<'static, PdfCraftApp>| {
+        let s = h.state();
+        s.session.get(s.views[0].id).unwrap().text_blocks(0).into_iter().find(|b| b.text.starts_with("Сеть")).expect("the cell").rect
+    };
+    let ink = cell(&h);
+    let frame = h.state().views[0].shown_text_boxes(0).into_iter().find(|(t, _)| t.starts_with("Сеть")).unwrap().1;
+    assert!(frame[2] > ink[2] + 60.0, "the frame reaches past the ink: {frame:?} vs {ink:?}");
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 400.0;
+    let screen = |x: f64, y: f64| egui::pos2(r.left() + x as f32 * k, r.top() + (300.0 - y as f32) * k);
+    click_at(&mut h, screen((ink[0] + ink[2]) / 2.0, (ink[1] + ink[3]) / 2.0));
+    assert!(h.state().views[0].line_editor.is_some(), "the cell opens for typing");
+    h.run_steps(2);
+    // On the frame's top edge, 40 pt right of the text.
+    let from = screen(ink[2] + 40.0, ink[3]) - egui::vec2(0.0, 5.0);
+    let to = from + egui::vec2(30.0 * k, -15.0 * k);
+    h.hover_at(from);
+    h.run_steps(2);
+    assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::Move, "the frame offers the move");
+    h.drag_at(from);
+    h.run_steps(1);
+    for step in 1..=4 {
+        h.hover_at(from + (to - from) * (step as f32 / 4.0));
+        h.run_steps(1);
+    }
+    h.drop_at(to);
+    h.run_steps(4);
+    let moved = cell(&h);
+    assert!((moved[0] - ink[0] - 30.0).abs() < 1.5 && (moved[1] - ink[1] - 15.0).abs() < 1.5, "{ink:?} → {moved:?}");
 }

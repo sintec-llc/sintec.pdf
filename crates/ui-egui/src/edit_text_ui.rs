@@ -15,11 +15,17 @@ use crate::canvas::{DocView, PageXform};
 
 const ACCENT: Color32 = Color32::from_rgb(0x14, 0x73, 0xE6);
 
+#[derive(Clone, Copy, PartialEq)]
+enum TextTarget {
+    Block(usize),
+    Added(usize),
+}
+
 /// A cached, read-only page background. The source glyphs are removed before rasterization;
 /// colour, pictures and unselected text beneath the editor remain visible.
 #[derive(Default)]
 pub(crate) struct TextBackground {
-    key: Option<(u64, usize, usize)>,
+    key: Option<(u64, usize, TextTarget)>,
     renderer: Option<pdfcraft_render::RenderPool>,
     texture: Option<egui::TextureHandle>,
     tag: Option<u64>,
@@ -33,12 +39,26 @@ impl TextBackground {
         self.renderer.is_some() && self.received != self.tag
     }
 
-    pub fn prepare(&mut self, ctx: &egui::Context, doc: &pdfcraft_engine::Document, editor: Option<&LineEditor>, scale: f32) {
-        let key = editor.map(|ed| (doc.edit_generation(), ed.page, ed.block));
+    pub fn prepare(
+        &mut self,
+        ctx: &egui::Context,
+        doc: &pdfcraft_engine::Document,
+        editor: Option<&LineEditor>,
+        draft: Option<&crate::content_ui::TextDraft>,
+        scale: f32,
+    ) {
+        let key = editor
+            .map(|ed| (doc.edit_generation(), ed.page, TextTarget::Block(ed.block)))
+            .or_else(|| draft.and_then(|d| d.index.map(|index| (doc.edit_generation(), d.page, TextTarget::Added(index)))));
         if self.key != key {
             *self = Self { key, ..Default::default() };
-            if let Some((_, page, block)) = key {
-                self.renderer = doc.text_edit_preview(page, block).ok().map(|p| p.renderer());
+            if let Some((_, page, target)) = key {
+                self.renderer = match target {
+                    TextTarget::Block(block) => doc.text_edit_preview(page, block),
+                    TextTarget::Added(index) => doc.added_text_preview(page, index),
+                }
+                .ok()
+                .map(|p| p.renderer());
             }
         }
         if let Some(ed) = editor {
@@ -51,8 +71,12 @@ impl TextBackground {
         }
         let (Some((_, page, _)), Some(renderer)) = (self.key, self.renderer.as_ref()) else { return };
         let Some(p) = doc.info.pages.get(page) else { return };
+        // One raster stands in for the page's tiles while a paragraph is open, so everything
+        // around the editor is drawn from it: at the tiling threshold it stays sharp on a Retina
+        // display up to about 2.5x on a Letter or A4 page, where the backdrop side (2048) went
+        // soft past 1.2x.
         let max_side = ctx.input(|i| i.max_texture_side) as f32;
-        let scale = scale.min(crate::canvas::BASE_SIDE.min(max_side) / p.width.max(p.height).max(1.0));
+        let scale = scale.min(crate::canvas::TILE_THRESHOLD.min(max_side) / p.width.max(p.height).max(1.0));
         let tag = (scale * 1000.0) as u64;
         if self.tag != Some(tag) {
             renderer.set_queue(vec![pdfcraft_render::RenderRequest { page, scale, tag, ..Default::default() }]);
@@ -79,11 +103,26 @@ impl TextBackground {
     }
 
     pub fn ready(&self, page: usize, block: usize) -> bool {
-        self.key.is_some_and(|(_, p, b)| (p, b) == (page, block)) && self.texture.is_some()
+        self.key.is_some_and(|(_, p, target)| (p, target) == (page, TextTarget::Block(block))) && self.texture.is_some()
     }
 
-    pub fn paint(&self, painter: &egui::Painter, xf: &PageXform, page: usize, editor: Option<&LineEditor>) {
-        let Some(_) = editor.filter(|ed| ed.page == page && self.ready(page, ed.block)) else { return };
+    pub fn ready_added(&self, page: usize, index: usize) -> bool {
+        self.key.is_some_and(|(_, p, target)| (p, target) == (page, TextTarget::Added(index))) && self.texture.is_some()
+    }
+
+    pub fn paint(
+        &self,
+        painter: &egui::Painter,
+        xf: &PageXform,
+        page: usize,
+        editor: Option<&LineEditor>,
+        draft: Option<&crate::content_ui::TextDraft>,
+    ) {
+        let ready = editor.is_some_and(|ed| ed.page == page && self.ready(page, ed.block))
+            || draft.is_some_and(|d| d.page == page && d.index.is_some_and(|index| self.ready_added(page, index)));
+        if !ready {
+            return;
+        }
         let Some(tex) = &self.texture else { return };
         // Font metrics can underestimate the actual glyph ink. Paint the complete textless
         // page so overhanging glyphs cannot remain outside the estimated source rectangle.
@@ -311,7 +350,7 @@ pub(crate) fn family_of(name: &str) -> pdfcraft_engine::FontFamily {
     source_look(name, 12.0, [0.0; 3], false, false).family
 }
 
-fn editor_font(look: &pdfcraft_engine::AddedText, size: f32) -> FontId {
+pub(crate) fn editor_font(look: &pdfcraft_engine::AddedText, size: f32) -> FontId {
     let family = match (look.family, look.bold) {
         (pdfcraft_engine::FontFamily::Courier, _) => FontFamily::Monospace,
         (_, true) => FontFamily::Name("semibold".into()),
@@ -722,6 +761,28 @@ pub(crate) fn image_input(
             let target = Rect::from_min_max(preview.min + (raw.min - b.min) * factor, preview.min + (raw.max - b.min) * factor);
             let visible = preview.intersect(xf.rect);
             if visible.is_positive() {
+                // The pixels follow the frame: the page raster's picture of the image, stretched
+                // into the preview over a blank where it was. Re-rendering every frame of a drag
+                // would lag; the edit renders it properly on release.
+                if preview != b
+                    && let Some(tex) = view.page_raster(page)
+                {
+                    let clipped = painter.with_clip_rect(painter.clip_rect().intersect(xf.rect));
+                    clipped.rect_filled(b, CornerRadius::ZERO, Color32::WHITE);
+                    let mut mesh = egui::Mesh::with_texture(tex);
+                    for (from, to) in [
+                        (b.left_top(), preview.left_top()),
+                        (b.right_top(), preview.right_top()),
+                        (b.right_bottom(), preview.right_bottom()),
+                        (b.left_bottom(), preview.left_bottom()),
+                    ] {
+                        let (u, v) = xf.screen_to_norm(from);
+                        mesh.vertices.push(egui::epaint::Vertex { pos: to, uv: Pos2::new(u, v), color: Color32::WHITE });
+                    }
+                    mesh.add_triangle(0, 1, 2);
+                    mesh.add_triangle(0, 2, 3);
+                    clipped.add(egui::Shape::mesh(mesh));
+                }
                 painter.rect_filled(visible, CornerRadius::ZERO, ACCENT.gamma_multiply(0.04));
                 painter.rect_stroke(visible, CornerRadius::ZERO, Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
                 handles(preview);
@@ -738,7 +799,7 @@ pub(crate) fn image_input(
             ui.ctx().set_cursor_icon(match opposite {
                 Some(fixed) if (start.x - fixed.x) * (start.y - fixed.y) < 0.0 => egui::CursorIcon::ResizeNeSw,
                 Some(_) => egui::CursorIcon::ResizeNwSe,
-                None => egui::CursorIcon::Grabbing,
+                None => egui::CursorIcon::Move,
             });
             return true;
         }
@@ -814,6 +875,58 @@ pub(crate) fn image_input(
     true
 }
 
+/// Open paragraph `block` on `page` in the inline editor. Its geometry and source are read from
+/// the `lines` handed in, so callers pass the document's current inventory.
+fn open_editor(
+    ui: &egui::Ui,
+    xf: &PageXform,
+    doc: &pdfcraft_engine::Document,
+    lines: &[pdfcraft_engine::TextBlock],
+    page: usize,
+    block: usize,
+    view: &mut DocView,
+) {
+    view.pending_text_open = None;
+    let Some(l) = lines.get(block) else { return };
+    let info = &doc.info;
+    view.image_selection = None;
+    // Sintec.PDF: start looking for installed fonts now, so a substitute is ready if the
+    // typed text needs one (see `font_substitute`).
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = crate::files::installed_font_files(ui.ctx());
+    let source_lines = doc.text_lines(page);
+    let text = l.editor_text.clone();
+    // The text's own box (its ink); the frame drawn around it is where it wraps.
+    let ink = xf.user_rect(info, page, l.rect.map(|v| v as f32));
+    // Screen pixels per point, from the text's width.
+    let scale = ink.width() / ((l.rect[2] - l.rect[0]).max(1.0) as f32);
+    let f = frame(l);
+    let max_width = ((f[2] - f[0]) as f32 * scale).max(ink.width());
+    view.line_editor = Some(LineEditor {
+        selection: None,
+        font_resource: None,
+        page,
+        block,
+        text: text.clone(),
+        original: text,
+        rect: ink,
+        source_rect: l.rect.map(|v| v as f32),
+        wrap_width: (f[2] - f[0]) as f32,
+        kept_width: kept_width_of(view, page, block, doc.edit_generation()),
+        multiline: l.rows.len() > 1,
+        source: Some((l.clone(), source_lines)),
+        fonts: install_source_fonts(ui.ctx(), doc, page),
+        overflow: false,
+        max_width,
+        size: (l.size as f32 * scale).clamp(8.0, 72.0),
+        focus: true,
+        look: look_for(doc, page, l),
+        look0: look_for(doc, page, l),
+        extras: Extras::default(),
+        extras0: Extras::default(),
+    });
+}
+
 /// Lines and their screen boxes for a page; hover outlines, click opens the editor. Returns
 /// `true` when the pointer was used.
 #[allow(clippy::too_many_arguments)]
@@ -840,6 +953,16 @@ pub(crate) fn page_input(
         if active != Some(i) {
             painter.rect_stroke(*b, CornerRadius::same(2), Stroke::new(0.75, ACCENT.gamma_multiply(0.35)), egui::StrokeKind::Outside);
         }
+    }
+    // A box a switching click asked for opens now, once the edit queued with that click has
+    // applied and `lines`/`boxes` are the document's new inventory (#2022).
+    if allow_interaction
+        && active.is_none()
+        && view.pending_edit.is_none()
+        && let Some((open_page, block)) = view.pending_text_open
+        && open_page == page
+    {
+        open_editor(ui, xf, doc, lines, page, block, view);
     }
     if !allow_interaction {
         return false;
@@ -888,7 +1011,7 @@ pub(crate) fn page_input(
         let resizing = d.grip != Grip::Move;
         draw_handles(preview);
         ui.ctx().set_cursor_icon(match (resizing, vertical) {
-            (false, _) => egui::CursorIcon::Grabbing,
+            (false, _) => egui::CursorIcon::Move,
             (true, false) => egui::CursorIcon::ResizeHorizontal,
             (true, true) => egui::CursorIcon::ResizeVertical,
         });
@@ -980,52 +1103,36 @@ pub(crate) fn page_input(
     }
     let on_edge = grip != Grip::Move;
     draw_handles(boxes[hit]);
+    // A closed paragraph moves when dragged (the four-way arrow says so, as on the grip; a click
+    // still opens it for typing); an edge rewraps it. The open one takes the text cursor.
     ui.ctx().set_cursor_icon(if on_grip.is_some() {
         egui::CursorIcon::Move
     } else if on_edge {
         if vertical { egui::CursorIcon::ResizeVertical } else { egui::CursorIcon::ResizeHorizontal }
+    } else if active != Some(hit) {
+        egui::CursorIcon::Move
     } else {
         egui::CursorIcon::Text
     });
     // A click on the grip selects nothing: it only moves.
     if resp.clicked() && on_grip.is_none() {
         view.image_selection = None;
-        // Sintec.PDF: start looking for installed fonts now, so a substitute is ready if the
-        // typed text needs one (see `font_substitute`).
-        #[cfg(not(target_arch = "wasm32"))]
-        let _ = crate::files::installed_font_files(ui.ctx());
-        let l = &lines[hit];
-        let source_lines = doc.text_lines(page);
-        let text = l.editor_text.clone();
-        // The text's own box (its ink); the frame drawn around it is where it wraps.
-        let ink = xf.user_rect(info, page, l.rect.map(|v| v as f32));
-        // Screen pixels per point, from the text's width.
-        let scale = ink.width() / ((l.rect[2] - l.rect[0]).max(1.0) as f32);
-        let f = frame(l);
-        let max_width = ((f[2] - f[0]) as f32 * scale).max(ink.width());
-        view.line_editor = Some(LineEditor {
-            selection: None,
-            font_resource: None,
-            page,
-            block: hit,
-            text: text.clone(),
-            original: text,
-            rect: ink,
-            source_rect: l.rect.map(|v| v as f32),
-            wrap_width: (f[2] - f[0]) as f32,
-            kept_width: kept_width_of(view, page, hit, doc.edit_generation()),
-            multiline: l.rows.len() > 1,
-            source: Some((l.clone(), source_lines)),
-            fonts: install_source_fonts(ui.ctx(), doc, page),
-            overflow: false,
-            max_width,
-            size: (l.size as f32 * scale).clamp(8.0, 72.0),
-            focus: true,
-            look: look_for(doc, page, l),
-            look0: look_for(doc, page, l),
-            extras: Extras::default(),
-            extras0: Extras::default(),
-        });
+        // A click that moves the editor to another paragraph applies the open one first, so its
+        // typed text is not dropped with the switched-away editor (#2022). A click on the open
+        // box's own frame, which the editor's overlay does not cover, keeps it open instead.
+        if let Some(open) = view.line_editor.as_ref().filter(|e| e.has_changes()) {
+            if open.page == page && open.block == hit {
+                return true;
+            }
+            // `apply_edit` adds the paragraph's kept width, as for any other rewrite.
+            if let Some(edit) = view.line_editor.take().and_then(finished_edit) {
+                view.pending_edit = Some(edit);
+            }
+            // The clicked box opens next frame, from the document with that edit applied.
+            view.pending_text_open = Some((page, hit));
+            return true;
+        }
+        open_editor(ui, xf, doc, lines, page, hit, view);
     }
     true
 }
@@ -1231,6 +1338,9 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
         .as_ref()
         .is_some_and(|ed| view.text_background.ready(ed.page, ed.block) && !ed.source.as_ref().is_some_and(|(b, _)| b.invisible));
     let draft_rect = view.text_background.draft_rect.map(|r| xf.user_rect(info, page, r.map(|v| v as f32)));
+    // The open box's move grip and width edges reach over its frame; a press there grabs them.
+    let on_grip = ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| on_move_grip(view, &xf, info, page, p));
+    let mut frame_rect = None;
     let ed = view.line_editor.as_mut()?;
     if hold {
         ed.focus = true;
@@ -1252,6 +1362,8 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
     let font = editor_font(&ed.look, ed.size);
     let text_color = color32(ed.look.color);
     let mut done = None;
+    // The editor floats over the page and keeps its I-beam there (see `page_cursor_only_on_the_page`).
+    crate::widgets::page_layer(ctx, egui::LayerId::new(egui::Order::Foreground, egui::Id::new("edit-text-line")));
     egui::Area::new(egui::Id::new("edit-text-line")).order(egui::Order::Foreground).fixed_pos(Pos2::new(ed.rect.left(), ed.rect.top())).show(
         ctx,
         |ui| {
@@ -1259,7 +1371,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             // extent: a single row grows up to where it wraps, paragraphs rewrap at their
             // frame's width (the engine's), and the visible frame grows/shrinks vertically with
             // their rows. An OCR phrase (several stretched words on one scanned line) also grows.
-            let single_run = ed.source.as_ref().is_some_and(|(block, _)| block.lines.len() == 1 || block.invisible);
+            let single_run = ed.source.as_ref().is_some_and(|(block, _)| block.rows.len() == 1 || block.invisible);
             let width = if !ed.multiline && single_run && !ed.text.contains('\n') && ed.has_changes() {
                 let job = editor_job(ui, ed, &ed.text, scale, f32::INFINITY);
                 let natural = ui.fonts_mut(|f| f.layout_job(job)).size().x;
@@ -1277,6 +1389,17 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             let wrapped = Rect::from_min_size(ed.rect.min, egui::vec2(wrap, visible.height()));
             let live = draft_rect.map_or(visible, |bounds| bounds.union(visible)).union(wrapped);
             ui.painter().rect_stroke(live.expand(2.0), CornerRadius::ZERO, Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
+            frame_rect = Some(live);
+            // On the frame, a press takes hold of the box (a click selects it, a drag moves it;
+            // see `object_ui`, which does so while the text is unchanged): the pointer says so
+            // there, and reads as text inside.
+            if !on_grip
+                && !ed.has_changes()
+                && let Some(p) = ui.input(|i| i.pointer.hover_pos())
+                && crate::object_ui::on_frame(live, p)
+            {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
+            }
             // White, unless the text is too pale to read on white (white text from a coloured
             // banner, #913): then a dark box, with a caret that shows on it.
             let fill = if background_ready { Color32::TRANSPARENT } else { editor_fill(text_color) };
@@ -1328,19 +1451,22 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             });
         },
     );
+    view.open_frame = frame_rect.zip(view.line_editor.as_ref()).map(|(r, ed)| (ed.page, ed.block, r));
     match done {
-        Some(apply) => {
-            let ed = view.line_editor.take()?;
-            let style = ed.style();
-            (apply && (ed.text != ed.original || style != pdfcraft_engine::BlockStyle::default())).then_some(Edit::EditTextBlock {
-                page: ed.page,
-                block: ed.block,
-                text: ed.text,
-                style,
-            })
-        }
+        Some(apply) => view.line_editor.take().filter(|_| apply).and_then(finished_edit),
         None => None,
     }
+}
+
+/// The edit a closed editor leaves: its text and style, when either changed.
+fn finished_edit(ed: LineEditor) -> Option<Edit> {
+    let style = ed.style();
+    (ed.text != ed.original || style != pdfcraft_engine::BlockStyle::default()).then_some(Edit::EditTextBlock {
+        page: ed.page,
+        block: ed.block,
+        text: ed.text,
+        style,
+    })
 }
 
 /// Caret colour that stays visible on a field filled with `fill`: black on light fills, white on dark ones.
@@ -1353,15 +1479,13 @@ pub(crate) fn caret_color_on(fill: Color32) -> Color32 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn text_background_is_cached_without_editing_and_released_on_cancel() {
+    /// An app with one text document open, and an editor on its first paragraph.
+    fn preview_app() -> (crate::PdfCraftApp, LineEditor) {
         let mut app = crate::PdfCraftApp::new();
         let bytes = app.session.create_from_text("Preview", "Preview text").unwrap();
         app.open_bytes("preview.pdf", None, bytes.as_ref().clone()).unwrap();
         let doc = app.session.get(app.views[0].id).unwrap();
         let block = doc.text_blocks(0).remove(0);
-        let source = doc.bytes.clone();
-        let generation = doc.edit_generation();
         let ed = LineEditor {
             selection: None,
             font_resource: None,
@@ -1385,10 +1509,19 @@ mod tests {
             extras: Extras::default(),
             extras0: Extras::default(),
         };
+        (app, ed)
+    }
+
+    #[test]
+    fn text_background_is_cached_without_editing_and_released_on_cancel() {
+        let (app, ed) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        let source = doc.bytes.clone();
+        let generation = doc.edit_generation();
         let ctx = egui::Context::default();
         let mut background = TextBackground::default();
         for _ in 0..100 {
-            background.prepare(&ctx, doc, Some(&ed), 1.0);
+            background.prepare(&ctx, doc, Some(&ed), None, 1.0);
             if background.ready(0, 0) {
                 break;
             }
@@ -1397,13 +1530,37 @@ mod tests {
         assert!(background.ready(0, 0));
         assert!(!background.pending());
         let texture = background.texture.as_ref().unwrap().id();
-        background.prepare(&ctx, doc, Some(&ed), 1.0);
+        background.prepare(&ctx, doc, Some(&ed), None, 1.0);
         assert_eq!(background.texture.as_ref().unwrap().id(), texture);
         assert_eq!(doc.bytes, source);
         assert_eq!(doc.edit_generation(), generation);
         assert!(!doc.dirty && doc.can_undo().is_none());
-        background.prepare(&ctx, doc, None, 1.0);
+        background.prepare(&ctx, doc, None, None, 1.0);
         assert!(background.texture.is_none() && background.renderer.is_none());
+    }
+
+    #[test]
+    fn the_editing_background_stays_sharp_on_a_zoomed_page() {
+        // While a paragraph is open, the page around it is drawn from this one raster: it is
+        // asked for at the tiling threshold, not the 2048-pixel backdrop side, which went soft
+        // beyond about 1.2x on a Retina display.
+        let (app, ed) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        let page = &doc.info.pages[0];
+        let ctx = egui::Context::default();
+        ctx.begin_pass(egui::RawInput { max_texture_side: Some(16384), ..Default::default() });
+        let mut background = TextBackground::default();
+        background.prepare(&ctx, doc, Some(&ed), None, 8.0);
+        let expected = 8.0f32.min(crate::canvas::TILE_THRESHOLD / page.width.max(page.height));
+        assert!(expected > crate::canvas::BASE_SIDE / page.width.max(page.height), "the test page needs the larger side");
+        assert_eq!(background.tag, Some((expected * 1000.0) as u64));
+        // A GPU that can't hold such a texture caps it.
+        ctx.end_pass().textures_delta.clear();
+        ctx.begin_pass(egui::RawInput { max_texture_side: Some(2048), ..Default::default() });
+        let mut small = TextBackground::default();
+        small.prepare(&ctx, doc, Some(&ed), None, 8.0);
+        assert_eq!(small.tag, Some(((2048.0 / page.width.max(page.height)) * 1000.0) as u64));
+        ctx.end_pass().textures_delta.clear();
     }
 
     #[test]

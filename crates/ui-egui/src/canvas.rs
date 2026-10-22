@@ -30,7 +30,7 @@ const PREVIEW_TAG: u64 = 1 << 60;
 /// The tag of a raster that is out of date (shown until its replacement arrives).
 const STALE_TAG: u64 = u64::MAX;
 /// Pages whose raster would exceed this many device pixels on a side are drawn in tiles.
-const TILE_THRESHOLD: f32 = 4096.0;
+pub(crate) const TILE_THRESHOLD: f32 = 4096.0;
 /// Base device-pixel side of a page tile. The actual side grows with the zoom
 /// ([`tile_side`]), so a zoomed viewport is covered by a few tiles instead of many.
 const TILE: u32 = 1024;
@@ -395,6 +395,9 @@ pub struct DocView {
     pub(crate) open_box_zones: Vec<Rect>,
     /// The same, as the Format text panel saw it this frame: a press here belongs to the page.
     pub(crate) panel_yield: Vec<Rect>,
+    /// The frame drawn around the paragraph open for typing last frame (page, block, screen; the
+    /// stroke sits just outside it). A press on it takes hold of the box (`object_ui`).
+    pub(crate) open_frame: Option<(usize, usize, Rect)>,
     /// Pending zoom anchor: page, fractional position (also in gutters), and viewport offset.
     zoom_anchor: Option<(usize, f32, f32, Vec2)>,
     /// The page view has been shown, so its scroll offset in egui's memory is this document's.
@@ -419,6 +422,9 @@ pub struct DocView {
     /// line being edited.
     pub(crate) edit_lines: HashMap<usize, (u64, Vec<pdfcraft_engine::TextBlock>)>,
     pub line_editor: Option<crate::edit_text_ui::LineEditor>,
+    /// The box a click switched to while another paragraph was being edited: it opens once the
+    /// queued edit has applied, so its index and geometry come from the document it now is (#2022).
+    pub(crate) pending_text_open: Option<(usize, usize)>,
     pub(crate) text_background: crate::edit_text_ui::TextBackground,
     pub(crate) move_background: crate::content_ui::MoveBackground,
     /// Edit text & images: the images per page (by document generation), and the selected one.
@@ -714,6 +720,7 @@ impl DocView {
             text_panel_pointer: false,
             open_box_zones: Vec::new(),
             panel_yield: Vec::new(),
+            open_frame: None,
             zoom_anchor: None,
             shown: false,
             wheel: Default::default(),
@@ -725,6 +732,7 @@ impl DocView {
             pending_edit: None,
             edit_lines: HashMap::new(),
             line_editor: None,
+            pending_text_open: None,
             text_background: Default::default(),
             move_background: Default::default(),
             edit_images: HashMap::new(),
@@ -968,6 +976,11 @@ impl DocView {
     /// A page's thumbnail texture, when rendered.
     pub(crate) fn thumb_id(&self, page: usize) -> Option<egui::TextureId> {
         self.thumbs.get(&page).map(|t| t.tex.id())
+    }
+
+    /// The whole-page raster on screen for `page` (the low-res backdrop of a tiled page), if any.
+    pub(crate) fn page_raster(&self, page: usize) -> Option<egui::TextureId> {
+        self.pages.get(&page).map(|p| p.tex.id())
     }
 
     /// The print preview's picture of `page`: the sheet raster when it has arrived, otherwise the
@@ -2522,7 +2535,7 @@ fn page_view(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         view.prepare.selected = None;
     }
     view.objects.prepare(doc, tool == QuickTool::EditText && can_modify, ui.ctx());
-    view.text_background.prepare(ui.ctx(), doc, view.line_editor.as_ref(), scale);
+    view.text_background.prepare(ui.ctx(), doc, view.line_editor.as_ref(), view.content.draft.as_ref(), scale);
     let added = doc.added().to_vec();
     let doc_links = if tool == QuickTool::Link { doc.links().to_vec() } else { Vec::new() };
     if editing_content {
@@ -2736,7 +2749,7 @@ fn page_view(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     }
                 }
             }
-            view.text_background.paint(painter, &xf, i, view.line_editor.as_ref());
+            view.text_background.paint(painter, &xf, i, view.line_editor.as_ref(), view.content.draft.as_ref());
             if editing_content {
                 let page_tex = view.pages.get(&i).map(|p| p.tex.id());
                 view.move_background.paint(ui, painter, &xf, i, info, &view.content, page_tex);
@@ -2901,14 +2914,9 @@ fn page_view(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             let image_owns_pointer = tool == QuickTool::EditText && crate::edit_text_ui::image_owns_pointer(ui, &xf, i, info, view);
             let on_objects =
                 !image_owns_pointer && tool == QuickTool::EditText && can_modify && crate::object_ui::page_input(ui, &resp, &xf, i, doc, view);
-            let on_content = !on_objects && editing_content && can_modify && {
-                crate::content_ui::page_input(ui, &resp, &xf, i, info, &added, tool == QuickTool::AddText, &text_style, view)
-                    || tool == QuickTool::AddText
-            };
-            // Added content owns its gesture; its source text must not queue a second edit.
-            let on_edit_text = !on_objects && !on_content && tool == QuickTool::EditText && can_modify && {
+            let lines = if matches!(tool, QuickTool::AddText | QuickTool::EditText) && can_modify {
                 let generation = doc.edit_generation();
-                let lines = match view.edit_lines.get(&i) {
+                match view.edit_lines.get(&i) {
                     Some((g, l)) if *g == generation => l.clone(),
                     _ => {
                         let mut l = doc.text_blocks(i);
@@ -2916,7 +2924,45 @@ fn page_view(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                         view.edit_lines.insert(i, (generation, l.clone()));
                         l
                     }
-                };
+                }
+            } else {
+                Vec::new()
+            };
+            let over_source = tool == QuickTool::AddText
+                && pointer.is_some_and(|p| {
+                    !crate::content_ui::hits_added(&xf, info, i, &added, p)
+                        && lines.iter().any(|line| xf.user_rect(info, i, line.rect.map(|v| v as f32)).expand(2.0).contains(p))
+                });
+            let source_blocked = over_source && view.content.hold_blocked();
+            if over_source && resp.clicked() && !source_blocked {
+                if let Some(edit) = view.content.finish_draft(&added) {
+                    view.pending_edit = Some(edit);
+                }
+                view.content.selected = None;
+            }
+            let on_content = !on_objects && editing_content && can_modify && {
+                source_blocked
+                    || crate::content_ui::page_input(
+                        ui,
+                        &resp,
+                        &xf,
+                        i,
+                        info,
+                        &added,
+                        tool == QuickTool::AddText && !over_source,
+                        matches!(tool, QuickTool::AddText | QuickTool::EditText),
+                        &text_style,
+                        view,
+                    )
+                    || tool == QuickTool::AddText && !over_source
+            };
+            // Added content owns its gesture; its source text must not queue a second edit.
+            // Edit text & images boxes every paragraph and image whenever the tool is on. Only the
+            // input waits while selected objects or added content own the pointer: the boxes stay
+            // drawn instead of vanishing until the pointer comes back.
+            let others_own_pointer = on_objects || on_content;
+            let on_edit_text = (tool == QuickTool::EditText || over_source) && can_modify && {
+                let generation = doc.edit_generation();
                 let images = match view.edit_images.get(&i) {
                     Some((g, l)) if *g == generation => l.clone(),
                     _ => {
@@ -2927,10 +2973,19 @@ fn page_view(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 };
                 // Editable text takes precedence over background/overlapping artwork. Both
                 // inventories are painted every frame, even when text owns the pointer.
-                let text_used = crate::edit_text_ui::page_input(ui, &resp, &xf, i, doc, &lines, view, !image_owns_pointer);
-                let image_used =
-                    crate::edit_text_ui::image_input(ui, &resp, &xf, i, info, &images, view, &mut image_action, image_owns_pointer || !text_used);
-                text_used || image_used
+                let text_used = crate::edit_text_ui::page_input(ui, &resp, &xf, i, doc, &lines, view, !others_own_pointer && !image_owns_pointer);
+                let image_used = crate::edit_text_ui::image_input(
+                    ui,
+                    &resp,
+                    &xf,
+                    i,
+                    info,
+                    &images,
+                    view,
+                    &mut image_action,
+                    !others_own_pointer && (image_owns_pointer || !text_used),
+                );
+                !others_own_pointer && (text_used || image_used)
             };
             let on_link = tool == QuickTool::Link && can_modify && crate::link_ui::page_input(ui, &resp, &xf, i, info, &doc_links, view);
             if tool == QuickTool::Select
