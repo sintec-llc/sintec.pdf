@@ -2151,6 +2151,7 @@ signature pad	Type	Ввести
 	Create PDF from multiple files…	Создать PDF из нескольких файлов…
 	Create separate PDFs…	Создать отдельные PDF…
 	Optimizing… removing user data	Оптимизация… удаление пользовательских данных
+	Optimizing… merging image fragments	Оптимизация… объединение фрагментов изображений
 	Optimizing… image {d} of {t}	Оптимизация… изображение {d} из {t}
 	Optimizing… cleaning up	Оптимизация… очистка
 	Optimizing… merging identical objects	Оптимизация… объединение одинаковых объектов

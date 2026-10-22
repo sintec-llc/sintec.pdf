@@ -40,6 +40,7 @@ mod logging;
 #[cfg(target_os = "windows")]
 mod motion;
 mod reopen;
+mod settings;
 mod single_instance;
 mod text_scale;
 mod updates;
@@ -60,14 +61,24 @@ const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256
 /// The app was called PrintCraft before; settings saved then are under this key.
 const LEGACY_STORAGE_KEY: &str = "printcraft";
 
-/// The settings folder: `app.ron` and the `logs` folder (docs/development.md). In portable mode
-/// it is the data folder beside the executable (#157). eframe would otherwise derive it from the
-/// app id; keep it under "Sintec.PDF".
+/// The preferences folder (`app.ron`, docs/development.md). In portable mode
+/// it is the data folder beside the executable (#157). XDG desktops use the configuration base;
+/// other platforms keep eframe's "Sintec.PDF" folder. Logs and recovery stay in the data folder.
 fn settings_dir() -> Option<std::path::PathBuf> {
-    if let Some(dir) = pdfcraft_ui_egui::portable::data_dir() {
-        return Some(dir.to_path_buf());
+    let legacy = eframe::storage_dir("Sintec.PDF");
+    match settings::directory(
+        cfg!(all(unix, not(target_os = "macos"))),
+        pdfcraft_ui_egui::portable::data_dir(),
+        legacy.clone(),
+        std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from),
+        std::env::home_dir(),
+    ) {
+        Ok(dir) => dir,
+        Err(e) => {
+            log::warn!("could not migrate preferences to the XDG configuration folder; using the original location: {e}");
+            legacy
+        }
     }
-    eframe::storage_dir("Sintec.PDF")
 }
 
 /// Move the settings and crash-recovery folders of the app's former name, PrintCraft, to the new
@@ -78,7 +89,7 @@ fn migrate_legacy_folders() {
     if pdfcraft_ui_egui::portable::data_dir().is_some() {
         return;
     }
-    let mut moves = vec![(eframe::storage_dir("PrintCraft"), settings_dir())];
+    let mut moves = vec![(eframe::storage_dir("PrintCraft"), eframe::storage_dir("Sintec.PDF"))];
     // Recovery lives in the settings folder except on Windows, where it is under %LOCALAPPDATA%.
     if cfg!(windows) {
         let local = std::env::var_os("LOCALAPPDATA").filter(|v| !v.is_empty()).map(std::path::PathBuf::from);
@@ -226,19 +237,22 @@ fn main() -> eframe::Result {
     // GNOME on Wayland leaves the window frame to the app (src/decorations.rs).
     let window_controls = if cfg!(any(target_os = "macos", target_os = "windows")) { None } else { decorations::app_drawn() };
     migrate_legacy_folders();
-    // The log file lives in the settings folder; opened after the arguments (so `--version` leaves
+    // The log file stays in the data folder; opened after the arguments (so `--version` leaves
     // no file behind) and after the PrintCraft migration (which a fresh folder would block).
     // Records logged until now are written to it first.
-    if let (Some(logger), Some(dir)) = (logger, settings_dir()) {
+    if let (Some(logger), Some(dir)) =
+        (logger, pdfcraft_ui_egui::portable::data_dir().map(std::path::Path::to_path_buf).or_else(|| eframe::storage_dir("Sintec.PDF")))
+    {
         match logger.attach_dir(&dir.join("logs")) {
             Ok(path) => log::info!("Sintec.PDF {}, log file {}", pdfcraft_engine::build_info::version(), path.display()),
             // Standard error only by now (`attach_dir` gave up on the file); unlike `eprintln!`, never panics.
             Err(e) => log::warn!("no log file: {e}"),
         }
     }
-    // Windows: a launch that only names files (an Outlook attachment, an Explorer double-click)
-    // hands them to the PdfCraft already running and exits (#282, #317). Any option means the
-    // caller wants this launch's own window.
+    // Windows, Linux and the BSDs: a launch that only names files (an Outlook attachment, an
+    // Explorer double-click, a file manager or `xdg-open`) hands them to the PdfCraft already
+    // running and exits (#282, #317, #1726). Any option means the caller wants this launch's own
+    // window.
     let may_hand_off = !new_window
         && !torn_off
         && recover_key.is_none()
@@ -247,7 +261,10 @@ fn main() -> eframe::Result {
         && options.is_empty()
         && control_file.is_none()
         && !create_images;
-    let instance = match single_instance::claim(&single_instance::absolute(&files), may_hand_off) {
+    // Absolute for this instance too: links relative to a document resolve against its folder,
+    // never the working directory.
+    let files = single_instance::absolute(&files);
+    let instance = match single_instance::claim(&files, may_hand_off) {
         single_instance::Claim::HandedOff => return Ok(()),
         single_instance::Claim::Primary(server) => Some(server),
         single_instance::Claim::Alone => None,
@@ -383,6 +400,18 @@ struct Launch {
     window_controls: Option<pdfcraft_ui_egui::window_controls::Layout>,
 }
 
+/// Whether the window is a native Wayland one (not X11 or XWayland).
+#[cfg(all(unix, not(target_os = "macos")))]
+fn native_wayland(cc: &eframe::CreationContext<'_>) -> bool {
+    use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+    cc.display_handle().is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)))
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn native_wayland(_: &eframe::CreationContext<'_>) -> bool {
+    false
+}
+
 fn app_creator<'a>(
     launch: Launch,
     started: Rc<Cell<bool>>,
@@ -433,9 +462,14 @@ fn app_creator<'a>(
         #[cfg(target_os = "macos")]
         {
             app.os_events = Some(apple_events.connect(&cc.egui_ctx));
+            // winit's Quit (⌘Q) ends the process without asking about unsaved changes (#1136). This
+            // menu's Quit closes the window instead, so `guard_quit` asks, as for the close button.
+            if let Err(e) = craft_quit::install_app_menu(&cc.egui_ctx, "Sintec.PDF") {
+                log::warn!("couldn't install the app menu, so ⌘Q quits without asking to save: {e}");
+            }
         }
         if let Some(server) = instance {
-            app.os_events = Some(server.connect(&cc.egui_ctx));
+            app.os_events = Some(server.connect(&cc.egui_ctx, native_wayland(cc)));
         }
         if let Some(file) = &control_file {
             let client = app.attach_control(&cc.egui_ctx);

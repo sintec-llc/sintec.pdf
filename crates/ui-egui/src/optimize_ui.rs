@@ -78,6 +78,7 @@ pub struct OptimizeRun {
 fn stage_label(stage: OptimizeStage) -> String {
     match stage {
         OptimizeStage::Discarding => tl!("Optimizing… removing user data").to_string(),
+        OptimizeStage::Fragments => tl!("Optimizing… merging image fragments").to_string(),
         OptimizeStage::Images { done, total } => crate::i18n::fmt(
             tl!("Optimizing… image {d} of {t}"),
             &[("d", &(done + 1).min(total.max(1)).to_string()), ("t", &total.max(1).to_string())],

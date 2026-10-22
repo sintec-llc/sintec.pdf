@@ -21,7 +21,7 @@ Approved Trust List) are out of scope: 23 such features are tracked as `na` in
 | Feature breadth, unweighted | 56.9% (423 shipped + 74 partial of 808) | measured (`cargo xtask parity` arithmetic) |
 | Must-have (P0) features | 94.2% (226 + 23 partial of 252) | measured |
 | Feature breadth, mainstream practitioner | ≈ 70% tier-weighted (63.2% unweighted: 292 + 44 partial of 497; P0 95.3%) | measured ([split below](#mainstream-practitioner-vs-full-acrobat-pro)) |
-| **Ready for real work**, full Acrobat Pro | **≈ 49%** (range 45–53%) | estimated (weighted sum over dimensions, [below](#by-dimension)) |
+| **Ready for real work**, full Acrobat Pro | **≈ 50%** (range 45–53%) | estimated (weighted sum over dimensions, [below](#by-dimension)) |
 | **Ready for real work**, mainstream practitioner | **≈ 55%** (range 50–60%) | estimated ([split below](#mainstream-practitioner-vs-full-acrobat-pro)) |
 | **Ready for real work**, essentials user | **≈ 66%** (range 60–70%) | estimated ([below](#essentials-user)) |
 | **Stage** | **alpha** (passes the core-workflow gate) | see [Stage](#stage) |
@@ -32,7 +32,7 @@ Approved Trust List) are out of scope: 23 such features are tracked as `na` in
 
 | Audience | Ready | Opus 5.5 agent-hours to ≈ 95% | Work that dominates |
 |---|---|---|---|
-| Full Acrobat Pro (ready for real work) | ≈ 49% | ≈ 780–1,400 h (≈ 300–550 h wall clock with 3–5 agents; 60–70% parallelizes) | Own renderer and fidelity harness, editing existing content, OCR and Office conversion, Preflight and PDF/A/X/UA, accessibility tagging, signatures for institutions |
+| Full Acrobat Pro (ready for real work) | ≈ 50% | ≈ 780–1,400 h (≈ 300–550 h wall clock with 3–5 agents; 60–70% parallelizes) | Own renderer and fidelity harness, editing existing content, OCR and Office conversion, Preflight and PDF/A/X/UA, accessibility tagging, signatures for institutions |
 | Mainstream practitioner | ≈ 55% | ≈ 500–900 h (≈ 200–400 h wall clock; ≈ 60% parallelizes) | Rendering fidelity, editing existing text (CJK, RTL, subsets), conversion (Word layout, Excel, PowerPoint, Office→PDF), OCR languages, the bug backlog |
 | Essentials user | ≈ 66% | ≈ 180–330 h (≈ 90–180 h wall clock; ≈ 50% parallelizes) | Rendering fidelity on everyday files, launch and GPU stability, simple text fixes, Word export layout, Chinese UI glyphs |
 
@@ -86,8 +86,8 @@ The **full ready-for-real-work number is an additive weighted sum over the dimen
 method; weights by what decides whether a professional can switch): features 40%, file formats and
 conversion 12%, UI/UX 10%, PDF specification 8%, stability 8%, performance 6%, localization 5%,
 platforms 5%, hardware 4%, ecosystem 1%, AI 1%:
-0.40 × 49 + 0.12 × 40 + 0.10 × 55 + 0.08 × 60 + 0.08 × 50 + 0.06 × 40 + 0.05 × 59 + 0.05 × 70 +
-0.04 × 35 + 0.01 × 30 + 0.01 × 0 = 49.25 → **≈ 49%**.
+0.40 × 49 + 0.12 × 40 + 0.10 × 55 + 0.08 × 60 + 0.08 × 50 + 0.06 × 40 + 0.05 × 68 + 0.05 × 70 +
+0.04 × 35 + 0.01 × 30 + 0.01 × 0 = 49.7 → **≈ 50%**.
 
 History: the first version of this file subtracted 9 points from the area figure for cross-cutting
 shortfalls (40%); the second look found that a double count (Windows printing, encrypted-output
@@ -187,7 +187,7 @@ features total and are shown for orientation; the others add to it.
 | Platforms | ≈ 70% | 5% | 15–30 | additional | macOS (signed, notarized), Windows x64/x86/ARM64 (signed), Linux (AppImage, deb, rpm, Flatpak), FreeBSD, web (WASM). Acrobat has no Linux, FreeBSD or full web editor; we lack web OCR and web recovery | [hardware-parity.md](hardware-parity.md) |
 | Ecosystem and plug-ins | ≈ 30% | 1% | 10–20 | within features | No plug-in SDK or folder-level JavaScript; Action Wizard partial. Agent automation (CLI, MCP, UI control channel) has no Acrobat equivalent | [gaps.md](gaps.md) |
 | AI features | ≈ 0% (in scope) | 1% | 20–40 | within features | Acrobat's AI Assistant is cloud-only (out of scope). Local, opt-in provider interface (`misc.ai-provider`) not started | [gaps.md](gaps.md) |
-| **Total (weighted sum)** | **≈ 49%** | 100% | **≈ 780–1,400** | | | |
+| **Total (weighted sum)** | **≈ 50%** | 100% | **≈ 780–1,400** | | | |
 
 ## By feature area
 
@@ -222,7 +222,7 @@ with evidence when next touched.
 
 ## Stage
 
-**alpha.** Ready for real work, ≈ 49%, is inside the 40–75% band, and every one of Acrobat Pro's
+**alpha.** Ready for real work, ≈ 50%, is inside the 40–75% band, and every one of Acrobat Pro's
 six everyday workflows can be completed end to end on macOS. Under the gate rule shared by all the
 Crafting Apps, a workflow blocks only when a typical user can't complete it at all; lossy exchange
 or a missing sub-case is a beta item. **Converting and sharing** is therefore partial, not
@@ -241,7 +241,7 @@ stage set to pre-alpha; see the revision history.)
 | Edit text and images | partial, not blocking (Latin text with embedded or standard fonts) |
 | Convert and share (Office ↔ PDF, password protection) | partial, not blocking (Office→PDF and Word layout #773 are beta items; encryption interop #774 fixed) |
 
-**To reach beta** (≈ 75% ready, no blocking gap in PDF interchange), ≈ 26 points and
+**To reach beta** (≈ 75% ready, no blocking gap in PDF interchange), ≈ 25 points and
 **≈ 400–700 agent-hours**:
 
 | Beta requirement | Hours |

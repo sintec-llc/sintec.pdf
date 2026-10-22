@@ -192,7 +192,14 @@ impl PrintDraft {
             Handling::Booklet => Layout::Booklet { subset: self.booklet_subset, binding: self.binding },
             Handling::Poster => Layout::Poster { scale: self.poster_scale, overlap: self.overlap, cut_marks: self.cut_marks },
         };
-        Ok(print::Settings { pages, paper: PAPERS[self.paper.min(PAPERS.len() - 1)].1, orientation: self.orientation, layout, content: self.content })
+        Ok(print::Settings {
+            pages,
+            paper: PAPERS[self.paper.min(PAPERS.len() - 1)].1,
+            orientation: self.orientation,
+            layout,
+            content: self.content,
+            ..Default::default()
+        })
     }
 
     pub fn job(&self, title: &str) -> spool::Job {

@@ -89,6 +89,16 @@ pub fn submit(pdf: &[u8], job: &Job) -> Result<String, PrintError> {
     craft_print::submit(pdf, job).map_err(|e| PrintError::Spool(e.to_string()))
 }
 
+/// [`submit`], told `(sent, sheets)` as each sheet reaches the spooler. CUPS takes the whole PDF
+/// at once and reports nothing; on Windows the caller prints rendered sheets instead.
+pub fn submit_with_progress(pdf: &[u8], job: &Job, progress: &mut dyn FnMut(usize, usize)) -> Result<String, PrintError> {
+    if NEEDS_RASTER {
+        let _ = (pdf, job, progress);
+        return Err(PrintError::Spool("this platform prints rendered sheets: use submit_sheets".into()));
+    }
+    craft_print::submit_with_progress(pdf, job, progress).map_err(|e| PrintError::Spool(e.to_string()))
+}
+
 pub fn open_printer_preferences(printer: &str) -> Result<(), PrintError> {
     craft_print::open_printer_preferences(printer).map_err(|e| PrintError::Spool(e.to_string()))
 }

@@ -1143,15 +1143,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "craft-docpath"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=82a24b006eefa036b43c09a67fb9a3fbd17ffe63#82a24b006eefa036b43c09a67fb9a3fbd17ffe63"
+
+[[package]]
 name = "craft-print"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=f03ec27ab2c405969428512178f746183cd55ca0#f03ec27ab2c405969428512178f746183cd55ca0"
+source = "git+https://github.com/storytold/craft-libs?rev=666c358065261a2816b376fa3bb10538dbf53040#666c358065261a2816b376fa3bb10538dbf53040"
 dependencies = [
  "miniz_oxide 0.8.9",
  "roxmltree",
  "tempfile",
  "winprint",
  "winsafe",
+]
+
+[[package]]
+name = "craft-quit"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=f58bc1a3df490992d633393d0898af0588ce882c#f58bc1a3df490992d633393d0898af0588ce882c"
+dependencies = [
+ "dispatch2",
+ "egui",
+ "muda",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
 ]
 
 [[package]]
@@ -1182,6 +1199,15 @@ dependencies = [
  "der 0.7.10",
  "spki 0.7.3",
  "x509-cert",
+]
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.5.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98b0cc327b5bc766e7fda9c9260cc0fa81b43a8e240440422dff70788e3f9ef1"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -1861,7 +1887,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3006,6 +3032,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyboard-types"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fbe853b403ae61a04233030ae8a79d94975281ed9770a1f9e246732b534b28d"
+dependencies = [
+ "bitflags 2.13.2",
+ "serde",
+]
+
+[[package]]
 name = "khronos-egl"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3246,6 +3282,24 @@ checksum = "bb85c154ba489f01b25c0d36ae69a87e4a1c73a72631fc6c0eb6dde34a73e44b"
 dependencies = [
  "num-traits",
  "pxfm",
+]
+
+[[package]]
+name = "muda"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4340e89c178916e62879c5c36b7f699019369be413e496178a6983ce91b8bc03"
+dependencies = [
+ "crossbeam-channel",
+ "dpi",
+ "keyboard-types",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-foundation 0.3.2",
+ "png 0.18.1",
+ "thiserror 2.0.21",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3877,6 +3931,7 @@ dependencies = [
 name = "pdfcraft"
 version = "0.2.7"
 dependencies = [
+ "craft-quit",
  "eframe",
  "egui",
  "fmv-macos-events",
@@ -3885,6 +3940,7 @@ dependencies = [
  "pdfcraft-print",
  "pdfcraft-ui-egui",
  "pollster 1.0.1",
+ "raw-window-handle",
  "rustls-native-certs",
  "serde_json",
  "sha2 0.11.0",
@@ -3893,6 +3949,7 @@ dependencies = [
  "wayland-client",
  "wayland-protocols",
  "windows",
+ "winit",
  "winresource",
  "winsafe",
 ]
@@ -3961,6 +4018,7 @@ dependencies = [
  "pdfcraft-automation",
  "pdfcraft-cos",
  "pdfcraft-engine",
+ "pdfcraft-platform",
  "pdfcraft-render",
  "rustix 1.1.5",
  "serde_json",
@@ -3985,6 +4043,8 @@ dependencies = [
  "hayro-syntax",
  "pdfcraft-crypt",
  "pdfcraft-filters",
+ "pdfcraft-oracle",
+ "pdfcraft-testkit",
  "proptest",
  "serde_json",
  "thiserror 2.0.21",
@@ -4039,6 +4099,7 @@ name = "pdfcraft-engine"
 version = "0.2.7"
 dependencies = [
  "chrono",
+ "craft-docpath",
  "flate2",
  "icu_properties",
  "idna",
@@ -4069,6 +4130,7 @@ dependencies = [
  "pdfcraft-xfdf",
  "png 0.18.1",
  "thiserror 2.0.21",
+ "unicode-segmentation",
  "url",
 ]
 
@@ -4130,6 +4192,7 @@ dependencies = [
  "pdfcraft-content",
  "pdfcraft-cos",
  "pdfcraft-model",
+ "pdfcraft-testkit",
  "serde",
  "thiserror 2.0.21",
 ]
@@ -4167,12 +4230,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pdfcraft-oracle"
+version = "0.2.7"
+
+[[package]]
 name = "pdfcraft-organize"
 version = "0.2.7"
 dependencies = [
  "hayro-syntax",
  "pdfcraft-content",
  "pdfcraft-cos",
+ "pdfcraft-oracle",
  "thiserror 2.0.21",
 ]
 
@@ -4182,6 +4250,7 @@ version = "0.2.7"
 dependencies = [
  "async-channel",
  "futures-lite",
+ "rustix 1.1.5",
  "zbus",
 ]
 
@@ -4189,6 +4258,7 @@ dependencies = [
 name = "pdfcraft-preflight"
 version = "0.2.7"
 dependencies = [
+ "pdfcraft-content",
  "pdfcraft-cos",
  "pdfcraft-model",
 ]
@@ -4215,6 +4285,8 @@ dependencies = [
  "pdfcraft-fonts",
  "pdfcraft-forms",
  "pdfcraft-model",
+ "pdfcraft-testkit",
+ "pdfcraft-xfa",
  "thiserror 2.0.21",
 ]
 
@@ -4277,6 +4349,10 @@ dependencies = [
  "sha3",
  "thiserror 2.0.21",
 ]
+
+[[package]]
+name = "pdfcraft-testkit"
+version = "0.2.7"
 
 [[package]]
 name = "pdfcraft-ui-egui"
@@ -4856,7 +4932,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5413,7 +5489,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5483,7 +5559,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6360,7 +6436,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.5",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6888,8 +6964,6 @@ dependencies = [
 [[package]]
 name = "vello_common"
 version = "0.0.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3361bff7f7d82c0c496b92048db83846691f0e844cc28dee92b1c824291b55ee"
 dependencies = [
  "bytemuck",
  "fearless_simd",
@@ -7445,7 +7519,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7966,6 +8040,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "lopdf",
+ "pdfcraft-cos",
+ "pdfcraft-oracle",
  "png 0.18.1",
  "serde",
  "serde_json",

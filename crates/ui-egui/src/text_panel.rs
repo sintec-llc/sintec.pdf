@@ -38,7 +38,7 @@ fn target(app: &PdfCraftApp, index: usize) -> Option<Target> {
     }
     let doc = app.session.get(view.id);
     let selected = view.content.selected.and_then(|(page, i)| {
-        let item = doc?.added.iter().filter(|a| a.page == page).nth(i)?;
+        let item = doc?.added().iter().filter(|a| a.page == page).nth(i)?;
         Some((page, i, &item.content))
     });
     match selected {
