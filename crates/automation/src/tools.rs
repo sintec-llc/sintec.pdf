@@ -1335,7 +1335,7 @@ pub fn tools() -> Vec<ToolDef> {
         t(
             "xfa_to_static",
             "Convert an XFA form to a static form",
-            "Make an XFA form an ordinary PDF form: the XFA packets (template, data, scripts) and PdfCraft's private keys go; the pages as laid out and the fields with their values stay, so every viewer shows the same form and none lays it out again. Its scripts no longer run. Undoable until saved.",
+            "Make an XFA form an ordinary PDF form: the XFA packets (template, data, scripts) and Sintec.PDF's private keys go; the pages as laid out and the fields with their values stay, so every viewer shows the same form and none lays it out again. Its scripts no longer run. Undoable until saved.",
         )
         .destructive()
         .with(schema(json!({ "doc": doc() }), &["doc"])),

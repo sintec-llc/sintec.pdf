@@ -945,13 +945,29 @@ mod tests {
         }
     }
 
-    /// New tl!("literal") labels must not silently fall back to English.
+    /// New tl!("literal") labels must not silently fall back to English, including direct
+    /// `crate::i18n::t("…")` lookups and literals split over several lines.
     #[test]
     fn russian_covers_ui_literals() {
         let literals = ui_literals();
         assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
-        let missing: Vec<_> = literals.iter().filter(|label| !has(RU(), label)).collect();
+        let expanded = scan_ui_literals(true);
+        assert!(expanded.contains("Sort") && expanded.len() > literals.len(), "direct lookup literals are included");
+        let missing: Vec<_> = expanded.iter().filter(|label| !has(RU(), label)).collect();
         assert!(missing.is_empty(), "untranslated Russian UI literals: {missing:#?}");
+    }
+
+    /// The date picker's weekday row and "{month} {day}, {y}" use their own contexts: the month
+    /// inside a date is genitive, and the weekdays are two-letter abbreviations.
+    #[test]
+    fn russian_calendar_contexts_are_translated() {
+        let ru = RU();
+        assert_eq!(["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(|d| tr_ctx(ru, "calendar weekday", d)), ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]);
+        assert_eq!(
+            fmt(tr(ru, "{month} {day}, {y}"), &[("month", tr_ctx(ru, "calendar date", "March")), ("day", "9"), ("y", "2026")]),
+            "9 марта 2026"
+        );
+        assert_eq!(tr_ctx(ru, "certificate", "SHA-256 digest"), "Хеш SHA-256");
     }
 
     #[test]

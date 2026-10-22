@@ -133,7 +133,7 @@ fn installed(ctx: Option<&egui::Context>) -> Option<Vec<FontFile>> {
 
 impl PdfCraftApp {
     /// The installed faces, once the background scan has finished (see [`installed`]).
-    fn installed_faces(&self) -> Option<Vec<FontFile>> {
+    pub(crate) fn installed_faces(&self) -> Option<Vec<FontFile>> {
         self.fonts.installed_override.clone().or_else(|| installed(self.ctx.as_ref()))
     }
 

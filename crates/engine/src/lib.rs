@@ -1689,7 +1689,7 @@ pub enum Edit {
     /// Sanitize Document: every category, then a full rewrite on save.
     Sanitize,
     /// An XFA form made an ordinary (static) PDF form: the XFA packets, `/NeedsRendering` and
-    /// PdfCraft's private keys go, the pages as laid out and the fields with their values
+    /// Sintec.PDF's private keys go, the pages as laid out and the fields with their values
     /// stay, so every viewer shows the same form and none lays it out again. Its scripts no
     /// longer run.
     XfaToStatic,
@@ -3050,7 +3050,7 @@ fn decode_data_file(bytes: &[u8]) -> Option<Result<String, String>> {
 
 /// Take the XFA out of `doc` and note what went with it: the packets, data no field showed,
 /// buttons that did nothing but run scripts, and fields whose value differs from the form's
-/// data (data PdfCraft could not read into them, now lost).
+/// data (data Sintec.PDF could not read into them, now lost).
 fn strip_xfa(doc: &mut pdfcraft_cos::Document, cx: &mut EditCtx) -> Result<(), EditError> {
     let fields = pdfcraft_forms::fields(doc);
     let data = xfa_field_data(doc);
@@ -3070,7 +3070,7 @@ fn strip_xfa(doc: &mut pdfcraft_cos::Document, cx: &mut EditCtx) -> Result<(), E
     cx.xfa_removed.extend(r.notes());
     if differ > 0 {
         cx.xfa_removed.push(format!(
-            "{differ} field(s) held a value other than the form's XFA data (data PdfCraft could not read into them); the data's version is gone"
+            "{differ} field(s) held a value other than the form's XFA data (data Sintec.PDF could not read into them); the data's version is gone"
         ));
     }
     Ok(())

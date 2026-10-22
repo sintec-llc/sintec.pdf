@@ -164,6 +164,48 @@ fn a_dragged_tab_shows_its_ghost_under_the_pointer() {
     assert!(h.state().drag_ghost().is_none(), "gone after the drop");
 }
 
+/// Upstream's middle click closes a tab (#1853). In a torn-off tab's process that ends the window
+/// with its last document, as the close button does; the middle button never pulls a tab out.
+#[test]
+fn a_middle_click_on_a_torn_off_windows_last_tab_closes_it_and_the_window_quits() {
+    let launches = Launches::default();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.quit_when_empty = true;
+        let bytes = app.session.create_blank(612.0, 792.0, 1).unwrap();
+        app.open_bytes("only.pdf", None, bytes.as_ref().clone()).unwrap();
+        app
+    });
+    launches.install(h.state_mut(), false);
+    h.run_steps(4);
+    // A middle-button drag out of the strip neither tears the tab off nor closes it.
+    let tab = h.get_by_label("only.pdf").rect().center();
+    let out = tab + egui::vec2(60.0, 260.0);
+    h.event(egui::Event::PointerMoved(tab));
+    h.event(egui::Event::PointerButton { pos: tab, button: egui::PointerButton::Middle, pressed: true, modifiers: egui::Modifiers::NONE });
+    for k in 1..=6 {
+        h.event(egui::Event::PointerMoved(tab + (out - tab) * (k as f32 / 6.0)));
+        h.run_steps(1);
+    }
+    h.event(egui::Event::PointerButton { pos: out, button: egui::PointerButton::Middle, pressed: false, modifiers: egui::Modifiers::NONE });
+    h.run_steps(4);
+    assert!(launches.all().is_empty() && h.state().tab_drag.is_none(), "no tear-off by the middle button");
+    assert_eq!(names(h.state(), 0), ["only.pdf"]);
+
+    let closes = |h: &Harness<'static, PdfCraftApp>| h.output().viewport_output.values().any(|v| v.commands.contains(&egui::ViewportCommand::Close));
+    assert!(!closes(&h));
+    h.get_by_label("only.pdf").click_button(egui::PointerButton::Middle);
+    let mut closed = false;
+    for _ in 0..6 {
+        h.run_steps(1);
+        closed |= closes(&h);
+    }
+    assert!(h.state().views.is_empty(), "the middle click closed the tab");
+    assert!(closed, "and the torn-off window quit with its last document");
+    assert!(launches.all().is_empty());
+}
+
 /// Records each launch a torn-off tab asks for, or refuses it when `fail` is set.
 #[derive(Clone, Default)]
 struct Launches {

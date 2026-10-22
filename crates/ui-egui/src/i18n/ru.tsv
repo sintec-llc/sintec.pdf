@@ -2572,3 +2572,260 @@ animation effects	Off	Выкл
 	Make properties default	Сделать свойства стандартными
 	Pages selected	Выделенные страницы
 	Page properties	Свойства страницы
+
+# Upstream v0.8.0/v0.9.0 strings (sync task 018): credits, accessibility checker, signature
+# validation, certificates, optimizer, forms, calendar.
+	% of all commits	% от всех коммитов
+	+Bin	+Бин.
+	+LOC	+Строк
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}: PR: {prs}, коммитов: {commits}, строк +{added} / −{deleted} (Δ {delta}), двоичных файлов +{bin_added} / −{bin_deleted}, {first} – {last}
+	A button	Кнопка
+	A font isn't embedded	Шрифт не внедрён
+	A link	Ссылка
+	A script	Сценарий
+	A {} action isn't allowed	Действие {} не допускается
+	A {} annotation has additional actions	У комментария {} есть дополнительные действия
+	A {} annotation has no appearance stream	У комментария {} нет потока оформления
+	A {} annotation isn't set to print, or is hidden	Комментарий {} не выводится на печать или скрыт
+	About	О программе
+	Accessibility Report	Отчёт о специальных возможностях
+	Align fields	Выровнять поля
+	Another file dialog is still open. Finish with it first.	Другое окно выбора файла ещё открыто. Сначала завершите работу с ним.
+	Basic constraints	Основные ограничения
+	Binary assets added	Добавлено двоичных файлов
+	Binary assets removed	Удалено двоичных файлов
+	CRL Signing	Подписание списков отзыва
+	Certificate Signing	Подписание сертификатов
+	Certificate authority	Центр сертификации
+	Change document properties	Изменить свойства документа
+	Choose a digital ID.	Выберите цифровое удостоверение.
+	Color	Цвет
+	Comment	Комментарий
+	Commits	Коммиты
+	Company	Организация
+	Contributors	Участники
+	Couldn't optimize the file	Не удалось оптимизировать файл
+	Couldn't show the file picker. Please try again.	Не удалось показать окно выбора файла. Попробуйте ещё раз.
+	Create links	Создать ссылки
+	Creator	Приложение-создатель
+	Cut and stack needs Two-sided: Off. Print single-sided sheets.	Для режима «Разрезать и сложить стопкой» нужно выключить двустороннюю печать. Печатайте на одной стороне листа.
+	Data Encipherment	Шифрование данных
+	Decipher Only	Только расшифрование
+	Detailed Report	Подробный отчёт
+	DeviceCMYK is used, but the PDF/A output intent isn't a CMYK profile	Используется DeviceCMYK, но целевой профиль вывода PDF/A не является профилем CMYK
+	DeviceRGB is used, but the PDF/A output intent isn't an RGB profile	Используется DeviceRGB, но целевой профиль вывода PDF/A не является профилем RGB
+	Digital Signature	Цифровая подпись
+	Display name	Отображаемое имя
+	Distribute fields	Распределить поля
+	Encipher Only	Только шифрование
+	End entity	Конечный субъект
+	Enter a URL	Введите URL-адрес
+	Enter a name.	Введите имя.
+	Enter a page number	Введите номер страницы
+	Enter the field names	Введите имена полей
+	Error	Ошибка
+	Field "{}" on page {p} has no description (tooltip)	У поля «{}» на странице {p} нет описания (всплывающей подсказки)
+	Filename	Имя файла
+	First	Первый
+	First commit	Первый коммит
+	Flatten Fill & Sign	Сделать заполнение и подпись частью страницы
+	Font	Шрифт
+	Font (unnamed) on page {p} doesn't map its characters to Unicode	Шрифт (без имени) на странице {p} не сопоставляет символы с Юникодом
+	Font {} on page {p} doesn't map its characters to Unicode	Шрифт {} на странице {p} не сопоставляет символы с Юникодом
+	Form field on page {p} isn't tagged	Поле формы на странице {p} не размечено тегами
+	Grab bag	Разное
+	H / Space (hold)	H / Пробел (удерживать)
+	H{n} follows an H{d}; headings should not skip levels	H{n} следует за H{d}; уровни заголовков не должны пропускаться
+	Inserted text	Вставленный текст
+	Key Agreement	Согласование ключей
+	Key Encipherment	Шифрование ключей
+	Last	Последний
+	Last commit	Последний коммит
+	Line delta	Изменение строк
+	Lines +/−	Строки +/−
+	Lines added	Добавлено строк
+	Lines deleted	Удалено строк
+	Mark differences	Отметить различия
+	Mark for redaction	Отметить для скрытия
+	Mark pages for redaction	Отметить страницы для скрытия
+	Match field sizes	Выровнять размеры полей
+	Merged PRs	Принятые PR
+	Model	Модель
+	Models	Модели
+	Name (A–Z)	Имя (А–Я)
+	No contributor data was built into this copy.	В эту сборку не включены сведения об участниках.
+	No document language is set	Не задан язык документа
+	No model credits were built into this copy.	В эту сборку не включены сведения об авторах моделей.
+	No page has text: the document appears to be images of pages	Ни на одной странице нет текста: похоже, документ состоит из изображений страниц
+	Non-Repudiation	Неотрекаемость
+	None of those files can be made into a PDF; use PDFs, images or .txt files	Ни один из этих файлов нельзя превратить в PDF; используйте файлы PDF, изображения или файлы .txt
+	Optimization cancelled	Оптимизация отменена
+	Optimization is already running	Оптимизация уже выполняется
+	PRs	PR
+	Page {p} doesn't tab in structure order	На странице {p} порядок перехода по Tab не соответствует структуре
+	Page {p}: {n} untagged content item	Страница {p}: элементов содержимого без тегов: {n}
+	Page {p}: {n} untagged content items	Страница {p}: элементов содержимого без тегов: {n}
+	Page {} has additional actions	У страницы {} есть дополнительные действия
+	Panel layout could not be restored: {error}	Не удалось восстановить расположение панелей: {error}
+	Panel move was not applied: {error}	Панель не перемещена: {error}
+	Portable mode is off: {folder} can't be written ({error}). Settings are kept in your user folder instead.	Переносной режим выключен: в {folder} нельзя записывать ({error}). Настройки хранятся в папке пользователя.
+	Producer	Приложение-производитель
+	Real name	Настоящее имя
+	Rendering…	Отрисовка…
+	Report created	Отчёт создан
+	Rev. {rev}: Certified by an unknown signer	Ред. {rev}: заверено неизвестным подписантом
+	Rev. {rev}: Certified by {name}	Ред. {rev}: заверено: {name}
+	Rev. {rev}: Signed by an unknown signer	Ред. {rev}: подписано неизвестным подписантом
+	Rev. {rev}: Signed by {name}	Ред. {rev}: подписано: {name}
+	Reverse the order	Обратный порядок
+	Rule Name	Название правила
+	Run form script	Выполнить сценарий формы
+	SHA-1 digest	Хеш SHA-1
+	SHA-256 digest	Хеш SHA-256
+	Save as {level}	Сохранить как {level}
+	Save changes?	Сохранить изменения?
+	Scripted content must be usable with a keyboard and assistive technology. Check the document's scripts.	Содержимое, управляемое сценариями, должно быть доступно с клавиатуры и для специальных средств. Проверьте сценарии документа.
+	Show	Показать
+	Signature is invalid	Подпись недействительна
+	Signature is valid	Подпись действительна
+	Signature validity is unknown	Действительность подписи неизвестна
+	Signing time is from the clock on the signer's computer.	Время подписания взято из часов компьютера подписанта.
+	Sort	Сортировка
+	Squiggly	Волнистое подчёркивание
+	Still rendering — this page is unusually complex…	Отрисовка продолжается — страница необычно сложная…
+	Table	Таблица
+	Table rows belong directly in a table or its head, body or foot. Fix the table's tags.	Строки таблицы должны находиться непосредственно в таблице или в её заголовке, теле или итогах. Исправьте теги таблицы.
+	That didn't work: an internal error stopped it ({m}).	Не получилось: помешала внутренняя ошибка ({m}).
+	The ECDSA signature is not in canonical DER (trailing bytes, padding or a missing sign byte); it was read anyway.	Подпись ECDSA записана не в каноническом DER (лишние байты в конце, выравнивание или нет байта знака); она всё равно прочитана.
+	The ECDSA signature is the raw r and s values instead of a DER sequence; it was read anyway.	Подпись ECDSA записана как «сырые» значения r и s, а не как последовательность DER; она всё равно прочитана.
+	The RSA signature value does not have the length of the key's modulus (leading zero bytes dropped or added); it was read anyway.	Длина значения подписи RSA не совпадает с длиной модуля ключа (начальные нулевые байты убраны или добавлены); она всё равно прочитана.
+	The RSA signature's DigestInfo has no NULL parameter (older signers write it so); it was read anyway.	В DigestInfo подписи RSA нет параметра NULL (так пишут старые программы подписи); она всё равно прочитана.
+	The Windows store's digital IDs couldn't be listed: {e}	Не удалось получить список цифровых удостоверений из хранилища Windows: {e}
+	The certificate of {} does not allow this many CA certificates below it (path length), so it is not used to vouch for {}.	Сертификат {} не допускает столько сертификатов ЦС ниже себя (длина пути), поэтому он не используется для подтверждения {}.
+	The certificate of {} is not a CA certificate that may issue certificates, so it is not used to vouch for {}.	Сертификат {} не является сертификатом ЦС, которому разрешено выпускать сертификаты, поэтому он не используется для подтверждения {}.
+	The certificate of {} was not valid at the time of signing, so it is not used to vouch for {}.	Сертификат {} не был действителен на момент подписания, поэтому он не используется для подтверждения {}.
+	The checker found problems which may prevent the document from being fully accessible.	Проверка обнаружила проблемы, которые могут помешать полной доступности документа.
+	The document changed while you were choosing a file, so nothing was changed.	Документ изменился, пока вы выбирали файл, поэтому ничего не изменено.
+	The document has been altered or corrupted since the signature was applied.	После подписания документ был изменён или повреждён.
+	The document has been altered or corrupted since the timestamp was applied.	После установки метки времени документ был изменён или повреждён.
+	The document has been altered since this signature was applied in ways it does not permit ({}).	После подписания документ был изменён недопустимым для этой подписи образом ({}).
+	The document has been altered since this timestamp was applied in ways it does not permit ({}).	После установки метки времени документ был изменён недопустимым для неё образом ({}).
+	The document has been modified since this signature was applied, but the changes are permitted ({}).	После подписания документ был изменён, но эти изменения допускаются ({}).
+	The document has been modified since this timestamp was applied, but the changes are permitted ({}).	После установки метки времени документ был изменён, но эти изменения допускаются ({}).
+	The document has no tags (structure tree)	В документе нет тегов (дерева структуры)
+	The document has no title	У документа нет заголовка
+	The document isn't marked as tagged (MarkInfo Marked)	Документ не отмечен как размеченный тегами (MarkInfo Marked)
+	The document isn't tagged, so none of its content is	Документ не размечен тегами, поэтому ни одно его содержимое не размечено
+	The document was closed before it could be saved.	Документ был закрыт до того, как его удалось сохранить.
+	The document's embedded revocation information shows that the signer's certificate has not been revoked.	Встроенные в документ сведения об отзыве показывают, что сертификат подписанта не отозван.
+	The embedded timestamp token is valid and its authority is trusted; trusted time is {}.	Встроенный маркер метки времени действителен, и его службе доверяют; доверенное время: {}.
+	The font {} isn't embedded	Шрифт {} не внедрён
+	The metadata doesn't identify the file as {}	Метаданные не определяют файл как {}
+	The pages were extracted but not deleted, because the document changed while you were choosing a folder.	Страницы извлечены, но не удалены: документ изменился, пока вы выбирали папку.
+	The password is incorrect.	Неверный пароль.
+	The password must have at least 8 characters.	Пароль должен содержать не менее 8 символов.
+	The passwords do not match.	Пароли не совпадают.
+	The security settings don't allow screen readers to read the text	Параметры защиты не позволяют программам чтения с экрана читать текст
+	The signature algorithm and the SignerInfo's digest algorithm name different hashes; the signature was made with the SignerInfo's.	Алгоритм подписи и алгоритм хеширования в SignerInfo указывают разные хеш-функции; подпись создана с хеш-функцией из SignerInfo.
+	The signature carries an unverified timestamp ({}): the timestamp authority is not in your list of trusted certificates, so the signing time claimed by the signer is used instead.	Подпись содержит непроверенную метку времени ({}): службы меток времени нет в вашем списке доверенных сертификатов, поэтому используется время подписания, указанное подписантом.
+	The signature contents are not hexadecimal.	Содержимое подписи не является шестнадцатеричным.
+	The signature could not be checked ({}).	Не удалось проверить подпись ({}).
+	The signature could not be read ({}).	Не удалось прочитать подпись ({}).
+	The signature could not be verified ({}).	Не удалось подтвердить подпись ({}).
+	The signature has no valid byte range.	У подписи нет допустимого диапазона байтов.
+	The signature includes an embedded timestamp.	Подпись содержит встроенную метку времени.
+	The signature is BER-encoded (indefinite lengths) rather than DER; it was read leniently.	Подпись закодирована в BER (неопределённые длины), а не в DER; она прочитана в мягком режиме.
+	The signature uses the legacy adbe.x509.rsa_sha1 format.	Подпись использует устаревший формат adbe.x509.rsa_sha1.
+	The signature value does not match the signer's certificate: the signature is corrupt.	Значение подписи не соответствует сертификату подписанта: подпись повреждена.
+	The signature's byte range does not exclude exactly its contents.	Диапазон байтов подписи исключает не только её содержимое.
+	The signature's byte range does not match the file.	Диапазон байтов подписи не соответствует файлу.
+	The signature's timestamp token could not be verified ({}).	Не удалось подтвердить маркер метки времени подписи ({}).
+	The signature's timestamp token does not cover the signature value.	Маркер метки времени подписи не охватывает значение подписи.
+	The signed content is a constructed (segmented) OCTET STRING, as BER allows; it was read anyway.	Подписанное содержимое — составная (разбитая на части) OCTET STRING, как допускает BER; оно всё равно прочитано.
+	The signer's certificate does not allow digital signatures (its key usage has neither digital signature nor non-repudiation).	Сертификат подписанта не допускает цифровые подписи (в использовании ключа нет ни цифровой подписи, ни неотрекаемости).
+	The signer's certificate has been revoked ({}).	Сертификат подписанта отозван ({}).
+	The signer's certificate is not in the signature.	Сертификата подписанта нет в подписи.
+	The signer's certificate is not issued for signing documents (its extended key usage has no document-signing purpose).	Сертификат подписанта выпущен не для подписания документов (в расширенном использовании ключа нет подписания документов).
+	The signer's certificate was not valid at the time of signing.	Сертификат подписанта не был действителен на момент подписания.
+	The signer's identity is unknown because it has not been included in your list of trusted certificates and none of its parent certificates are trusted certificates.	Личность подписанта неизвестна: его нет в вашем списке доверенных сертификатов, и ни один из вышестоящих сертификатов не является доверенным.
+	The signer's identity is valid.	Личность подписанта подтверждена.
+	The timestamp authority's certificate was not valid at the time of timestamping.	Сертификат службы меток времени не был действителен на момент установки метки.
+	The timestamp contents are not hexadecimal.	Содержимое метки времени не является шестнадцатеричным.
+	The timestamp has no valid byte range.	У метки времени нет допустимого диапазона байтов.
+	The timestamp token could not be read ({}).	Не удалось прочитать маркер метки времени ({}).
+	The timestamp token is valid and its authority is trusted.	Маркер метки времени действителен, и его службе доверяют.
+	The timestamp token is valid, but the timestamp authority is not in your list of trusted certificates.	Маркер метки времени действителен, но службы меток времени нет в вашем списке доверенных сертификатов.
+	The timestamp's byte range does not exclude exactly its contents.	Диапазон байтов метки времени исключает не только её содержимое.
+	The timestamp's byte range does not match the file.	Диапазон байтов метки времени не соответствует файлу.
+	The window shows the file name, not the title (Initial View > Show)	В заголовке окна показано имя файла, а не заголовок документа (Начальный вид > Показать)
+	There is no folder to save the digital ID in.	Нет папки для сохранения цифрового удостоверения.
+	This document has not been modified since this signature was applied.	Документ не изменялся после подписания.
+	This document has not been modified since this timestamp was applied.	Документ не изменялся после установки метки времени.
+	This signature uses RIPEMD-160, a legacy 160-bit hash algorithm that is no longer recommended for signatures. It still validates, but it should not be relied on.	Подпись использует RIPEMD-160 — устаревшую 160-битную хеш-функцию, которую больше не рекомендуют для подписей. Подпись проходит проверку, но полагаться на неё не следует.
+	This signature uses SHA-1, a weak hash algorithm: collisions in it have been demonstrated. It still validates because many documents signed years ago use it, but it should not be relied on.	Подпись использует SHA-1 — слабую хеш-функцию, для которой уже показаны коллизии. Подпись проходит проверку, потому что SHA-1 используют многие давно подписанные документы, но полагаться на неё не следует.
+	Unsigned signature field	Пустое поле подписи
+	Unsigned signature field: {name}	Пустое поле подписи: {name}
+	Username	Имя пользователя
+	alternate text hides an annotation inside it	замещающий текст скрывает комментарий внутри элемента
+	alternate text on an element with no page content	замещающий текст у элемента без содержимого страницы
+	comments	комментарии
+	document security store	хранилище безопасности документа
+	document structure	структура документа
+	form fill	заполнение формы
+	its alternate text is inside another element's and will never be read	его замещающий текст находится внутри замещающего текста другого элемента и никогда не будет прочитан
+	links	ссылки
+	metadata	метаданные
+	no alternate text	нет замещающего текста
+	no header cells (TH)	нет ячеек заголовка (TH)
+	no summary	нет описания
+	not in a TR	не внутри TR
+	not in a Table, THead, TBody or TFoot	не внутри Table, THead, TBody или TFoot
+	not in an L (list)	не внутри L (списка)
+	not in an LI (list item)	не внутри LI (элемента списка)
+	other changes	другие изменения
+	page content	содержимое страницы
+	page {n} is out of range (1–{count})	страница {n} вне диапазона (1–{count})
+	pages added or removed	добавление или удаление страниц
+	rows have between {min} and {max} columns	в строках от {min} до {max} столбцов
+	the first heading is an H{n}; headings should not skip levels	первый заголовок — H{n}; уровни заголовков не должны пропускаться
+	the signed version could not be read	не удалось прочитать подписанную версию
+	{n} contributors · {c} commits	Участников: {n} · коммитов: {c}
+	{n} pages and no bookmarks	Страниц: {n}, закладок нет
+	{ty} element on page {p}: {what}	Элемент {ty} на странице {p}: {what}
+	{ty} element: {what}	Элемент {ty}: {what}
+	{who}, certificate issued by an unknown issuer.	{who}, сертификат выпущен неизвестным издателем.
+	{who}, certificate issued by {issuer}.	{who}, сертификат выпущен: {issuer}.
+	{} annotation on page {p} isn't tagged	Комментарий {} на странице {p} не размечен тегами
+	{} annotations aren't allowed	Комментарии {} не допускаются
+	ΔLOC	ΔСтрок
+	… and {n} more	… и ещё {n}
+	−Bin	−Бин.
+	−LOC	−Строк
+@plural	Delete {n} field|Delete {n} fields	Удалить {n} поле|Удалить {n} поля|Удалить {n} полей
+@plural	{n} byte|{n} bytes	{n} байт|{n} байта|{n} байт
+@plural	{n} image optimized|{n} images optimized	Оптимизировано {n} изображение|Оптимизировано {n} изображения|Оптимизировано {n} изображений
+@plural	{n} item discarded|{n} items discarded	Удалён {n} элемент|Удалено {n} элемента|Удалено {n} элементов
+@plural	{n} pixel|{n} pixels	{n} пиксель|{n} пикселя|{n} пикселей
+calendar weekday	Su	Вс
+calendar weekday	Mo	Пн
+calendar weekday	Tu	Вт
+calendar weekday	We	Ср
+calendar weekday	Th	Чт
+calendar weekday	Fr	Пт
+calendar weekday	Sa	Сб
+calendar date	January	января
+calendar date	February	февраля
+calendar date	March	марта
+calendar date	April	апреля
+calendar date	May	мая
+calendar date	June	июня
+calendar date	July	июля
+calendar date	August	августа
+calendar date	September	сентября
+calendar date	October	октября
+calendar date	November	ноября
+calendar date	December	декабря
+certificate	Basic constraints	Основные ограничения
+certificate	SHA-1 digest	Хеш SHA-1
+certificate	SHA-256 digest	Хеш SHA-256
+print handling	Label	Этикетка

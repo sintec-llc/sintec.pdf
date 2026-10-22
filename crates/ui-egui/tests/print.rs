@@ -245,7 +245,8 @@ fn print_dialog_shows_the_printer_driver_options() {
     h.get_by_label("Media");
     h.get_by_label("Paper tray");
     // The selected sheet's media is always sent, independently of changed driver properties.
-    let media = vec![("media".to_string(), "Letter".to_string())];
+    // Sintec.PDF: the dialog starts on A4 (upstream: US Letter).
+    let media = vec![("media".to_string(), "A4".to_string())];
     assert_eq!(h.state().print_draft.job("form.pdf").options, [("InputSlot".to_string(), "Tray2".to_string()), media[0].clone()]);
     h.get_by_label("Reset to printer defaults").click();
     h.run_steps(2);
@@ -450,6 +451,39 @@ fn dialog_checkbox_toggles_match_paper() {
     h.get_by_label("Match paper to PDF page size when printing").click();
     h.run_steps(3);
     assert!(!h.state().match_paper_to_page);
+}
+
+/// Upstream's label printing (4 x 6 in stock, the Label layout) and A6 sit beside Sintec's
+/// match-paper switch without either undoing the other: the dialog starts on A4 with the switch
+/// off, picking Label puts the label stock in without turning the switch on, opening Print again
+/// keeps that while the switch is off, and turning the switch on matches the page as it says.
+#[test]
+fn label_and_a6_papers_leave_the_match_paper_switch_alone() {
+    use pdfcraft_engine::print::{LABEL_PAPER, PAPERS};
+    use pdfcraft_ui_egui::PrintHandling;
+    assert!(PAPERS.iter().any(|p| p.0 == "A6"), "A6 is offered");
+    assert_eq!(PAPERS[LABEL_PAPER].1, (288.0, 432.0), "the 4 x 6 in label stock");
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1000.0)).build_eframe(|_cc| arch_app(false));
+    h.run_steps(4);
+    assert!(h.state_mut().execute("print.dialog"));
+    h.run_steps(3);
+    assert_eq!(PAPERS[h.state().print_draft.paper].0, "A4");
+    assert!(!h.state().match_paper_to_page && !h.state().print_draft.as_image);
+    h.get_by_label("Label").click();
+    h.run_steps(3);
+    assert_eq!((h.state().print_draft.paper, h.state().print_draft.handling), (LABEL_PAPER, PrintHandling::Label));
+    assert!(!h.state().match_paper_to_page, "label stock is a choice, not the automatic match");
+    h.get_by_label("Cancel").click();
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, None);
+    assert!(h.state_mut().execute("print.dialog"));
+    h.run_steps(3);
+    assert_eq!((h.state().print_draft.paper, h.state().print_draft.handling), (LABEL_PAPER, PrintHandling::Label), "kept with the switch off");
+    h.get_by_label("Match paper to PDF page size when printing").click();
+    h.run_steps(3);
+    assert!(h.state().match_paper_to_page);
+    assert_eq!(h.state().print_draft.settings(1, &[]).unwrap().paper, (1728.0, 2592.0), "the switch matches the page");
+    assert_eq!(h.state().print_draft.handling, PrintHandling::Size);
 }
 
 /// Print as image (Acrobat's Advanced Print Setup) is a choice in the Print dialog's Advanced

@@ -1673,7 +1673,7 @@ fn no_fallback_font(text: &str) -> EditError {
     EditError::Invalid(format!(
         "the paragraph's font has no glyph for {ch} (U+{:04X}) and this build has no fallback font for it; \
          choose a font that has it (Load font… or Installed fonts…), or use an official release, which includes \
-         PdfCraft's fallback fonts (to build them in, set CRAFT_FONTS_DIR to a craft-fonts checkout)",
+         Sintec.PDF's fallback fonts (to build them in, set CRAFT_FONTS_DIR to a craft-fonts checkout)",
         u32::from(ch)
     ))
 }

@@ -124,6 +124,46 @@ fn bold_uses_the_installed_bold_face_of_the_paragraphs_family() {
     assert!(doc.text_editor_fonts(0).iter().any(|f| f.resource.starts_with("PCFull")));
 }
 
+/// Open the paragraph of `paragraph_fixture` in Edit PDF (dismissing a font suggestion first).
+fn open_paragraph(h: &mut Harness<'static, PdfCraftApp>) {
+    h.run_steps(3);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(4);
+    if h.query_by_label("Font substitution").is_some() {
+        h.get_by_label("Cancel").click();
+        h.run_steps(4);
+    }
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let at = egui::pos2(r.left() + 40.0 / 300.0 * r.width(), r.top() + (300.0 - 158.0) / 300.0 * r.height());
+    h.hover_at(at);
+    h.run_steps(1);
+    h.drag_at(at);
+    h.run_steps(1);
+    h.drop_at(at);
+    h.run_steps(4);
+    assert!(h.state().views[0].line_editor.is_some(), "the paragraph opens");
+    assert!(h.state().views[0].text_panel_rect().is_some(), "with the floating panel");
+}
+
+/// The floating panel says whether this computer has the paragraph's font, from the same list
+/// of installed faces the Font substitution dialog uses, and lists those faces.
+#[test]
+fn the_format_panel_says_whether_the_font_is_installed_and_lists_installed_faces() {
+    let other = installed_face("Other.otf", "Other Sans", "OtherSans-Regular", 400, &font_fixture::cff_font());
+    let mut h = app_with(paragraph_fixture("Invoice", "RectFont"), vec![other.clone()]);
+    open_paragraph(&mut h);
+    h.get_by_label_contains("RectFont — not embedded, not installed");
+    let combo = h.query_by(|n| [n.label(), n.value()].iter().any(|t| t.as_deref() == Some("Installed fonts…")));
+    combo.expect("the Installed fonts list").click();
+    h.run_steps(3);
+    h.get_by_label_contains("Other Sans");
+
+    let rect = installed_face("RectFont.otf", "Rect Font", "RectFont-Regular", 400, &font_fixture::cff_font());
+    let mut h = app_with(paragraph_fixture("Invoice", "RectFont"), vec![other, rect]);
+    open_paragraph(&mut h);
+    h.get_by_label_contains("RectFont — not embedded, installed");
+}
+
 /// Editing text shows a font that has no similar installed face in the Font substitution
 /// dialog once; dismissing it doesn't bring it back.
 #[test]

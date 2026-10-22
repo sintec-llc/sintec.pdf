@@ -155,6 +155,10 @@ fn paragraph(app: &mut PdfCraftApp, i: usize, ui: &mut egui::Ui, t: &Tokens) {
         let line = b.lines.first().and_then(|li| d.text_lines(ed.page).into_iter().nth(*li))?;
         d.font_facts(ed.page, &line.font).map(|f| (f, b.bold, b.italic))
     });
+    // The same installed faces the Font substitution dialog uses (a known set when embedders or
+    // tests set one), so the panel and the dialog never disagree about what is installed.
+    #[cfg(not(target_arch = "wasm32"))]
+    let installed = app.installed_faces();
     let mut replace = false;
     if let Some((facts, bold, italic)) = &source {
         let carried = if facts.embedded && !facts.subset {
@@ -165,7 +169,7 @@ fn paragraph(app: &mut PdfCraftApp, i: usize, ui: &mut egui::Ui, t: &Tokens) {
             tl!("not embedded")
         };
         #[cfg(not(target_arch = "wasm32"))]
-        let on_system = crate::files::installed_font_files(ui.ctx()).map(|fonts| {
+        let on_system = installed.as_ref().map(|fonts| {
             let base_font = facts.base_font.clone();
             let want = pdfcraft_engine::text_fonts::Wanted { base_font, bold: *bold, italic: *italic, ..Default::default() };
             fonts.iter().any(|f| !f.bundled && pdfcraft_engine::text_fonts::family_match(&want, f) == pdfcraft_engine::text_fonts::Match::Exact)
@@ -201,7 +205,7 @@ fn paragraph(app: &mut PdfCraftApp, i: usize, ui: &mut egui::Ui, t: &Tokens) {
     }
     #[cfg(not(target_arch = "wasm32"))]
     egui::ComboBox::from_id_salt("installed-document-font").selected_text(tl!("Installed fonts…")).show_ui(ui, |ui| {
-        if let Some(fonts) = crate::files::installed_font_files(ui.ctx()) {
+        if let Some(fonts) = installed.as_ref() {
             if fonts.is_empty() {
                 ui.label(tl!("No embeddable installed fonts found. Load a font file."));
             }
@@ -216,7 +220,7 @@ fn paragraph(app: &mut PdfCraftApp, i: usize, ui: &mut egui::Ui, t: &Tokens) {
                 widths: f.widths.clone(),
             });
             let ordered: Vec<&pdfcraft_engine::text_fonts::FontFile> = match &want {
-                Some(w) => pdfcraft_engine::text_fonts::rank(w, &fonts),
+                Some(w) => pdfcraft_engine::text_fonts::rank(w, fonts),
                 None => fonts.iter().collect(),
             };
             for font in ordered {

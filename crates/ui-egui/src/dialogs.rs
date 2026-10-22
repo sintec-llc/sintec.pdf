@@ -1245,9 +1245,6 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
             app.discard_recovered(&keys);
         }
     }
-    if scan_next {
-        app.scan_next();
-    }
     // The pages to replace belong to the document the dialog was opened on (#167).
     if replace_now
         && let Some(d) = app.replace_draft.take()
@@ -1405,6 +1402,11 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
         app.bulk_field_props = None;
     } else {
         app.dialog = Some(next);
+    }
+    // After the dialog closed: a page that comes back at once offers «Scan another page» again
+    // instead of being closed with the old dialog.
+    if scan_next {
+        app.scan_next();
     }
     if let Some(cmd) = link_command {
         app.execute(cmd);

@@ -1085,7 +1085,8 @@ pub(crate) fn body(
                     (Handling::Poster, tl!("Poster")),
                     (Handling::Multiple, tl!("Multiple")),
                     (Handling::Booklet, tl!("Booklet")),
-                    (Handling::Label, tl!("Label")),
+                    // A shipping label, not the measuring tools' "Label" (a caption).
+                    (Handling::Label, tl_ctx!("print handling", "Label")),
                 ] {
                     if widgets::mode_tab(ui, label, d.handling == h).clicked() {
                         d.handling = h;

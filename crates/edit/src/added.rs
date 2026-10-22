@@ -476,7 +476,7 @@ fn arabic_error(e: GlyphError, text: &str) -> EditError {
 
 fn hebrew_error(e: GlyphError, text: &str) -> EditError {
     EditError::Invalid(match e {
-        GlyphError::NoFont => "Hebrew text needs PdfCraft's Hebrew font, which this build doesn't include \
+        GlyphError::NoFont => "Hebrew text needs Sintec.PDF's Hebrew font, which this build doesn't include \
                                (to build it in, set CRAFT_FONTS_DIR to a craft-fonts checkout that has a Hebr face)"
             .into(),
         GlyphError::Missing => format!("the Hebrew font can't show \"{text}\""),

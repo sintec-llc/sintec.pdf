@@ -61,6 +61,46 @@ fn a_scan_with_nothing_open_starts_a_new_document() {
     assert!(app.views[i].organize, "in the page grid, ready for more");
 }
 
+/// The «Scan another page» dialog itself: its button scans the next page in after the last one,
+/// and Done closes it. Every "scan" here comes from `scan_fakes`; the real scanner never starts.
+#[test]
+fn the_scan_another_page_dialog_scans_on_and_done_closes_it() {
+    use egui_kittest::kittest::Queryable;
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = app();
+        let bytes = app.session.create_blank(612.0, 792.0, 2).unwrap();
+        app.open_bytes("doc.pdf", None, bytes.as_ref().clone()).unwrap();
+        app
+    });
+    h.run_steps(4);
+    let (i, _) = h.state().active_ids().unwrap();
+    h.state_mut().views[i].select_pages(&[0]);
+    h.state_mut().scan_fakes = vec![Ok(Some(scanned_page())), Ok(Some(scanned_page()))];
+    assert!(h.state_mut().execute("page.scan"));
+    h.run_steps(3);
+    assert_eq!((pages(h.state()), h.state().dialog), (3, Some(Dialog::ScanMore)));
+    h.get_by_label("Scan another page").click();
+    h.run_steps(4);
+    assert_eq!(pages(h.state()), 4, "the next page went in");
+    assert!(h.state().scan_fakes.is_empty(), "both queued pages were used, nothing else was asked for");
+    assert_eq!(h.state().dialog, Some(Dialog::ScanMore), "and the next one is offered");
+    h.get_by_label("Done").click();
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, None);
+    assert!(h.state().scan_run.is_none(), "no scan left waiting");
+    assert_eq!(pages(h.state()), 4);
+}
+
+/// Scan into document must never start the real scanner from the command tests' sweep.
+#[test]
+fn page_scan_is_a_registered_pages_command() {
+    let command = pdfcraft_engine::commands::command("page.scan").expect("registered");
+    assert_eq!(command.label, "Scan into document…");
+    let pickers =
+        include_str!("commands.rs").split("const PICKERS: &[&str] = &[").nth(1).and_then(|s| s.split("];").next()).expect("the sweep's PICKERS");
+    assert!(pickers.contains("\"page.scan\""), "page.scan stays in the sweep's PICKERS");
+}
+
 #[test]
 fn a_cancelled_or_failed_scan_changes_nothing() {
     let mut app = app();
