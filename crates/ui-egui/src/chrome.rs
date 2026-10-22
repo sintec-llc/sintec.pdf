@@ -4,7 +4,7 @@ use egui::{Align, Align2, Color32, CornerRadius, Layout, Rect, Sense, Stroke, po
 
 use crate::canvas::{DocView, Fit, PageLayout};
 use crate::theme::{self, ThemePreference, Tokens};
-use crate::{Dialog, Mode, PdfCraftApp, PropsTab, RightPanel, icons, widgets};
+use crate::{Dialog, Mode, PdfCraftApp, PropsTab, RightPanel, icons, widgets, window_controls};
 
 /// Height of the tab strip when it doubles as the macOS title bar (#789). AppKit draws the traffic
 /// lights itself, centred in the standard 28 pt title-bar band at the top of the window, and moving
@@ -48,17 +48,37 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             }
             let window = app.current_window;
             let mut strip_tabs: Vec<(pdfcraft_engine::DocId, Rect)> = Vec::new();
+            // GNOME on Wayland: the strip is the header bar, with the window buttons at its ends.
+            let fullscreen = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
+            let controls = app
+                .window_controls
+                .clone()
+                .filter(|_| app.draws_window_frame() && !fullscreen)
+                .unwrap_or_else(|| window_controls::Layout { left: Vec::new(), right: Vec::new() });
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
+                if !controls.left.is_empty() {
+                    ui.scope(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        window_controls::buttons(ui, &controls.left);
+                    });
+                    ui.add_space(window_controls::SIDE_GAP - 4.0);
+                }
                 // Home and Combine files belong to the main window.
-                if window == 0 && icons::button(ui, "house", 28.0, app.active.is_none() && !app.combine_showing(), tl!("Home")).clicked() {
+                if window == 0 && icons::button(ui, "house", button, app.active.is_none() && !app.combine_showing(), tl!("Home")).clicked() {
                     app.active = None;
                     app.combine_tab.focused = false;
                 }
-                // Keep the right-hand controls outside the scrolling tabs: the two 28-point buttons,
-                // Check updates (its text and padding), the version, and the gaps between them.
+                // Keep the right-hand controls outside the scrolling tabs: the two icon buttons,
+                // Check updates (its text and padding), the version, the gaps between them and the
+                // window buttons the app draws.
                 let text_w = |s: &str, size: f32| ui.fonts_mut(|f| f.layout_no_wrap(s.into(), theme::medium(size), t.text).size().x);
-                let controls_width = text_w(tl!("Check updates"), 13.0) + 24.0 + text_w(concat!("v", env!("CARGO_PKG_VERSION")), 12.5) + 106.0;
+                let controls_width = text_w(tl!("Check updates"), 13.0)
+                    + 24.0
+                    + text_w(concat!("v", env!("CARGO_PKG_VERSION")), 12.5)
+                    + 2.0 * button
+                    + 50.0
+                    + window_controls::width(&controls.right);
                 // Open stays in sight after the tabs: its icon, text and padding, and the gaps around it.
                 let open_width = ui.fonts_mut(|f| f.layout_no_wrap(tl!("Open").into(), theme::medium(13.0), t.text).size().x) + 38.0 + 12.0;
                 let mut tabs_width = (ui.available_width() - controls_width - open_width).max(0.0);
@@ -86,10 +106,12 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 if overflow && arrow(ui, "chevron-left", offset > 0.5, tl!("Scroll tabs left")) {
                     scroll_to = Some((offset - (TAB_MIN_WIDTH + gap)).max(0.0));
                 }
-                let state = (app.active, app.views.len(), app.combine_showing());
+                // Keyed by document, not index: a tab dragged past the active one moves it without
+                // the strip jumping to it.
+                let state = (app.active_ids().map(|(_, id)| id), app.views.len(), app.combine_showing());
                 let changed = ui.data_mut(|data| {
                     let id = ui.id().with("active_tab");
-                    let changed = data.get_temp::<(Option<usize>, usize, bool)>(id) != Some(state);
+                    let changed = data.get_temp::<(Option<pdfcraft_engine::DocId>, usize, bool)>(id) != Some(state);
                     data.insert_temp(id, state);
                     changed
                 });
@@ -97,6 +119,8 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 let mut close = None;
                 let mut tab_drop: Option<usize> = None;
                 let mut over_tab = false;
+                // The pointer's x while a tab is dragged, for scrolling at the strip's edges.
+                let mut drag_x = None;
                 ui.scope(|ui| {
                     ui.style_mut().always_scroll_the_only_direction = true;
                     let mut area = egui::ScrollArea::horizontal().id_salt("document_tabs").max_width(tabs_width).auto_shrink([true, true]);
@@ -126,6 +150,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                     i,
                                     cap,
                                     tab_h,
+                                    true,
                                 );
                                 if changed && app.active == Some(i) && !app.combine_showing() {
                                     response.scroll_to_me(Some(Align::Center));
@@ -190,6 +215,13 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                     ui.ctx().request_repaint();
                                 }
                             }
+                            // A tab of this window being dragged (`tab_drag`): its pointer's x, so the
+                            // strip scrolls when it nears either edge (#1537).
+                            if app.tab_drag.is_some_and(|d| d.from_window == window)
+                                && let Some(x) = ui.ctx().pointer_latest_pos().map(|p| p.x)
+                            {
+                                drag_x = Some(x);
+                            }
                             if let Some(i) = close
                                 && let Some(view) = app.views.get(i)
                             {
@@ -214,6 +246,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                     usize::MAX,
                                     cap,
                                     tab_h,
+                                    false,
                                 );
                                 if changed && app.combine_showing() {
                                     response.scroll_to_me(Some(Align::Center));
@@ -229,6 +262,22 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     });
                     let max = (out.content_size.x - out.inner_rect.width()).max(0.0);
                     ui.data_mut(|d| d.insert_temp(scroll_id, (out.state.offset.x, max)));
+                    // A tab dragged to either edge of a strip that scrolls brings the hidden tabs in.
+                    if let Some(x) = drag_x
+                        && max > 0.0
+                    {
+                        let step = if x < out.inner_rect.left() + TAB_DRAG_EDGE {
+                            -TAB_DRAG_STEP
+                        } else if x > out.inner_rect.right() - TAB_DRAG_EDGE {
+                            TAB_DRAG_STEP
+                        } else {
+                            0.0
+                        };
+                        if step != 0.0 {
+                            ui.data_mut(|d| d.insert_temp(scroll_id.with("to"), (out.state.offset.x + step).clamp(0.0, max)));
+                            ui.ctx().request_repaint();
+                        }
+                    }
                 });
                 if !over_tab {
                     app.tab_hover = None;
@@ -265,6 +314,16 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     app.open_dialog();
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if !controls.right.is_empty() {
+                        // Laid out left to right inside the right-to-left run, so they read in
+                        // the desktop's order.
+                        let size = egui::vec2(window_controls::width(&controls.right) - window_controls::SIDE_GAP, window_controls::BUTTON);
+                        ui.allocate_ui_with_layout(size, Layout::left_to_right(Align::Center), |ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            window_controls::buttons(ui, &controls.right);
+                        });
+                        ui.add_space(window_controls::SIDE_GAP - 4.0);
+                    }
                     let (icon, label) = match app.theme_preference {
                         ThemePreference::System => ("monitor", tl!("Use system setting")),
                         ThemePreference::Light => ("sun", tl!("Light gray")),
@@ -422,6 +481,10 @@ fn tabs_overflow(natural: &[f32], budget: f32, gap: f32, min: f32) -> bool {
     narrowest + gap * natural.len().saturating_sub(1) as f32 > budget
 }
 
+/// How close to either end of a scrolling strip a dragged tab scrolls it, and how far per frame.
+const TAB_DRAG_EDGE: f32 = 24.0;
+const TAB_DRAG_STEP: f32 = 8.0;
+
 /// A scroll arrow beside the tabs; dimmed (and inert) at its end. True when clicked.
 fn arrow(ui: &mut egui::Ui, icon: &str, enabled: bool, tip: &str) -> bool {
     ui.add_enabled_ui(enabled, |ui| icons::button(ui, icon, TAB_ARROW, false, tip)).inner.clicked()
@@ -476,6 +539,7 @@ fn tab(
     index: usize,
     cap: Option<f32>,
     height: f32,
+    draggable: bool,
 ) -> egui::Response {
     let font = theme::regular(13.0);
     let mut label = tab_name(name);
@@ -499,7 +563,7 @@ fn tab(
     // Not over the close button: a press there would start a drag of the tab (a drag-only area
     // takes the press at once) and the tab would be shown as it closes.
     let drag_rect = Rect::from_min_max(rect.min, pos2((rect.right() - 28.0).max(rect.left()), rect.bottom()));
-    let drag = ui.interact(drag_rect, id.with("drag"), Sense::drag());
+    let drag = ui.interact(drag_rect, id.with("drag"), if draggable { Sense::drag() } else { Sense::hover() });
     let resp = craft_ui::tabs::Tab::new(id, &a11y, active).focus_stroke(Stroke::new(1.0, t.accent)).show_at(ui, rect, |ui, resp| {
         let press = theme::Press::track(ui, resp);
         let bg = if active {

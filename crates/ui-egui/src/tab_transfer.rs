@@ -715,6 +715,16 @@ impl crate::PdfCraftApp {
             return Err(reason::BUSY.to_owned());
         }
         let had: std::collections::HashSet<pdfcraft_engine::DocId> = self.views.iter().map(|v| v.id).collect();
+        // Opened here and now, not on the background open worker: the other process waits for
+        // this answer and removes its tab only once the document is really open in this one.
+        let inline = std::mem::replace(&mut self.run_inline, true);
+        let opened = self.open_hand_off(take);
+        self.run_inline = inline;
+        opened?;
+        self.place_taken_tab(take, &had)
+    }
+
+    fn open_hand_off(&mut self, take: &Take) -> Result<(), String> {
         match &take.what {
             HandOff::File(path) => {
                 if !valid_hand_off_path(path) {
@@ -732,6 +742,12 @@ impl crate::PdfCraftApp {
                 self.open_handed_off(key);
             }
         }
+        Ok(())
+    }
+
+    /// The document [`Self::take_tab`] just opened (the one view not in `had`) goes to its
+    /// window, gap and page.
+    fn place_taken_tab(&mut self, take: &Take, had: &std::collections::HashSet<pdfcraft_engine::DocId>) -> Result<(), String> {
         let Some(doc) = self.views.iter().find(|v| !had.contains(&v.id)).map(|v| v.id) else {
             // Encrypted: the password prompt holds it now and opens it.
             return if self.password_prompt.is_some() { Ok(()) } else { Err(reason::FAILED.to_owned()) };
