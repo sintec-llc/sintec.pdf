@@ -2323,6 +2323,9 @@ fn table_rows_written_as_one_tj_read_and_edit_cell_by_cell() {
     let lines = text::text_lines(&doc, 0).unwrap();
     let texts: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
     assert_eq!(texts, ["Name", "Domain", "Login", "Ivanov I.", "corp", "ivanov.i", "Word spacing stays"]);
+    // As drawn (what the redaction audit measures covers against), each row is still one line.
+    let drawn: Vec<String> = text::drawn_lines(&doc, 0).unwrap().into_iter().map(|l| l.text).collect();
+    assert_eq!(drawn, ["Name Domain Login", "Ivanov I. corp ivanov.i", "Word spacing stays"]);
     // The cells' boxes don't reach across the gaps.
     assert!(lines[0].rect[2] < lines[1].rect[0] - 100.0, "{:?} {:?}", lines[0].rect, lines[1].rect);
     let blocks = text::text_blocks(&doc, 0).unwrap();

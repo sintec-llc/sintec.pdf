@@ -1141,8 +1141,24 @@ fn interpret(
     out
 }
 
-/// The lines of text on a page (0-based), in content order.
+/// The lines of text on a page (0-based), in content order, as editing sees them: a TJ with
+/// wide gaps (a table row exported as one TJ, see [`WIDE_GAP`]) is one line per piece, the runs
+/// an edit splits it into first. Line indexes here are the ones [`replace_line`] and
+/// [`TextBlock::lines`] use.
 pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError> {
+    lines_of(doc, page, true)
+}
+
+/// Sintec.PDF: the lines of text on a page (0-based) as its content streams draw them, a TJ
+/// being one run however wide its gaps (PdfCraft's `text_lines`). For readers that measure what
+/// a line covers rather than edit it: the redaction audit measures a cover over a value after
+/// a long label against the whole line. Its indexes are not [`text_lines`]'s.
+pub fn drawn_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError> {
+    lines_of(doc, page, false)
+}
+
+/// [`text_lines`] (`split`: wide TJ runs split at their gaps) or [`drawn_lines`].
+fn lines_of(doc: &Document, page: usize, split: bool) -> Result<Vec<TextLine>, EditError> {
     let p = page_dict(doc, page)?;
     let res = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
     let fonts_res = res.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
@@ -1155,7 +1171,7 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
     // As editing will see them: wide TJ runs split at their gaps (see `split_wide_runs`). The
     // pieces keep the operator's span, so `pieces_of` still finds where they start.
     let raw = pieces.parse().ops;
-    let mut splits = wide_run_splits(doc, &raw, &fonts_res, &mut cache, &carry);
+    let mut splits = if split { wide_run_splits(doc, &raw, &fonts_res, &mut cache, &carry) } else { HashMap::new() };
     let ops: Vec<Op> = raw.into_iter().enumerate().flat_map(|(i, o)| splits.remove(&i).unwrap_or_else(|| vec![o])).collect();
     let shown = interpret(doc, &ops, &fonts_res, &mut cache, &mut carry, None, true);
     let mut last: Option<(usize, Pen)> = None; // the stream piece and where its last run ended

@@ -84,6 +84,16 @@ fn styled_name(family: &str, bold: bool, italic: bool) -> String {
     s
 }
 
+/// Is this font one of the app's own faces (`pdfcraft_fonts::CRAFT_FONTS`), by its program's
+/// family or its `/BaseFont`? Always false in a build without craft-fonts.
+fn own_face(facts: &pdfcraft_engine::FontFacts) -> bool {
+    // A name with no ASCII letters or digits has an empty key, which says nothing.
+    [facts.family(), facts.base_font.as_str()]
+        .into_iter()
+        .filter(|name| !pdfcraft_fonts::embedding::face_key(name).is_empty())
+        .any(|name| !pdfcraft_fonts::embedding::matching_faces(name).is_empty())
+}
+
 /// The memory's key for a font in a style.
 fn key_of(wanted: &Wanted) -> String {
     format!(
@@ -186,7 +196,13 @@ impl PdfCraftApp {
         for report in self.page_fonts(id, page) {
             let wanted = Wanted::from_facts(&report.facts, None, None, "");
             let key = key_of(&wanted);
-            if report.quality != Match::Other || self.fonts.choices.contains_key(&(id, key.clone())) || !self.fonts.suggested.insert((id, key)) {
+            // A face the app ships itself (the craft-fonts Arabic, Hebrew or Japanese faces it
+            // writes added and replacement text in) needs no installed stand-in.
+            if report.quality != Match::Other
+                || own_face(&report.facts)
+                || self.fonts.choices.contains_key(&(id, key.clone()))
+                || !self.fonts.suggested.insert((id, key))
+            {
                 continue;
             }
             let choice = report.best.as_ref().map(|f| f.path.clone());

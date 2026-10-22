@@ -989,9 +989,9 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::Preferences => {
-                // The settings outgrow a short window: scroll them rather than run off the screen.
-                let max = (ui.ctx().content_rect().height() - 120.0).max(200.0);
-                close = egui::ScrollArea::vertical().max_height(max).show(ui, |ui| crate::js_ui::preferences_body(ui, app, &t)).inner;
+                // Sintec.PDF: the settings scroll inside the body, between its title and OK, so
+                // both always show (one scroll area: nested ones fight over scroll requests).
+                close = crate::js_ui::preferences_body(ui, app, &t);
                 return;
             }
             Dialog::RecognizeText => {

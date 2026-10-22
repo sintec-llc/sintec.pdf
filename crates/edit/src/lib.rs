@@ -895,7 +895,7 @@ mod linebreak;
 pub mod text;
 pub use rules::{Segment, ruling_segments};
 pub use text::{
-    BlockStyle, LineEdit, RangeStyle, TextBlock, TextLine, clear_block, reading_blocks, reading_text_lines, replace_block, replace_line,
+    BlockStyle, LineEdit, RangeStyle, TextBlock, TextLine, clear_block, drawn_lines, reading_blocks, reading_text_lines, replace_block, replace_line,
     rewrite_block, text_blocks, text_lines,
 };
 pub mod added;
