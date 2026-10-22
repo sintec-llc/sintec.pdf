@@ -18,6 +18,31 @@
 
 User-facing names say **Sintec.PDF**; crates and build outputs keep upstream's `pdfcraft` stem.
 
+## Base and what we carry
+
+The code is synced with upstream PdfCraft **v0.9.0** (release 0.3.0). On top of it we carry: English
+and Russian only, the Russian catalog, 46-language OCR (`crates/ocr`), our Windows print path
+(`crates/print/src/spool.rs`), tab tear-off, text-box grips, the floating text panel and font
+substitution, bundled fonts, the scanner, table-aware export, update checks and the MSI installer.
+Release notes live in [CHANGELOG.md](../CHANGELOG.md); each entry names the upstream base.
+
+### Upstream sync procedure (short; full rules in [upstream-sync.md](upstream-sync.md))
+
+1. Fetch upstream's tags into their own namespace: `git fetch --no-tags upstream
+   "+refs/heads/main:refs/remotes/upstream/main" "+refs/tags/v*:refs/upstream-tags/v*"`.
+2. Branch `sync/upstream-vX.Y.Z` from `main` and `git merge --no-ff refs/upstream-tags/vX.Y.Z`
+   (merge a tag, never upstream's `main`).
+3. Files that conflict habitually: `Cargo.toml` (keep **our** version numbers, workspace and
+   internal crates), `Cargo.lock` (take theirs, `cargo update --workspace`), `README.md`, `NOTICE`,
+   `.github/`, `ATTRIBUTION.toml` (keep both, refresh hashes), `crates/ui-egui/src/i18n/*.tsv`,
+   `crates/print/src/spool.rs`, `crates/ocr/`, `crates/ui-egui` panels and canvas.
+4. Rules: keep our version; keep our branding (`cargo xtask rebrand`); English and Russian only
+   (`git rm` upstream's other catalogs and leave them out of `LANGUAGES`/`DATE_LANGUAGES`); add
+   Russian for every new string (`cargo test -p pdfcraft-ui-egui --test sintec_guard`); after
+   editing `ru.tsv` refresh its sha256 in `ATTRIBUTION.toml` (`python zz_rehash.py <path>`, then `cargo xtask assets`) and rerun the guard.
+5. Gates, then `cargo xtask version set <ours>` (also bump the internal `pdfcraft-* = { version = … }` requirements in the root `Cargo.toml` by hand when the minor changes: `xtask version` only edits `[workspace.package]`), build
+   the installer, and release from `release`.
+
 ## Cutting a release
 
 1. **Bump the version** on `main`. It lives only in `[workspace.package] version` in the root
@@ -28,7 +53,7 @@ User-facing names say **Sintec.PDF**; crates and build outputs keep upstream's `
    cargo xtask version set 0.3.0       # or 0.3.0-rc.1; updates Cargo.toml and Cargo.lock
    ```
 
-   Commit the change through the normal review flow (see the `Release: PdfCraft v0.2.1` PR).
+   Commit the change through the normal review flow (see the earlier release PRs).
 2. **Merge `main` into `release`** (or fast-forward it) and push. The workflow starts by itself.
 3. **Wait for the draft.** When every job has finished (notarization is the slow part), the
    Releases page has a draft `PdfCraft v0.3.0` targeting the pushed commit, with every artifact
