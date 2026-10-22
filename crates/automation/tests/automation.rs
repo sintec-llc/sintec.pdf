@@ -6496,3 +6496,41 @@ fn a_root_less_write_output_is_atomic_too() {
     assert!(matches!(&e, ToolError::Failed(m) if m.contains("is a folder")), "{e:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn reduce_levels_and_estimates_through_tools() {
+    let dir = workdir("reduce-levels");
+    // A 1800 × 1200 photo-like JPEG at 300 dpi.
+    let (w, h) = (1800u32, 1200u32);
+    let px: Vec<u8> = (0..w * h)
+        .flat_map(|i| {
+            let (x, y) = (i % w, i / w);
+            [(x * 255 / w) as u8 ^ ((x * y) & 15) as u8, (y * 255 / h) as u8, ((x + 2 * y) & 255) as u8]
+        })
+        .collect();
+    let mut jpeg = Vec::new();
+    let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 95);
+    enc.set_pixel_density(image::codecs::jpeg::PixelDensity::dpi(300));
+    enc.encode(&px, w, h, image::ExtendedColorType::Rgb8).unwrap();
+    std::fs::write(dir.join("photo.jpg"), &jpeg).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_create", json!({ "from": "images", "paths": ["photo.jpg"] }))["doc"].as_u64().unwrap();
+    let est = ok(&mut a, "doc_reduce_estimate", json!({ "doc": doc }));
+    let levels: Vec<&str> = est["levels"].as_array().unwrap().iter().map(|l| l["level"].as_str().unwrap()).collect();
+    assert_eq!(levels, ["light", "medium", "strong"], "{est}");
+    let mut real = Vec::new();
+    for level in ["light", "medium", "strong"] {
+        let r = ok(&mut a, "doc_reduce", json!({ "doc": doc, "path": format!("{level}.pdf"), "level": level }));
+        assert_eq!(r["level"], level);
+        let after = r["bytes_after"].as_u64().unwrap();
+        let estimate = est["levels"].as_array().unwrap().iter().find(|l| l["level"] == level).unwrap()["bytes"].as_u64().unwrap();
+        assert!((estimate as f64 - after as f64).abs() <= (after as f64 * 0.05).max(2048.0), "{level}: estimate {estimate}, real {after}");
+        real.push(after);
+    }
+    assert!(real[2] < real[1] && real[1] < real[0], "strong < medium < light: {real:?}");
+    // Without a level: Medium, as the dialog's default.
+    let r = ok(&mut a, "doc_reduce", json!({ "doc": doc, "path": "default.pdf" }));
+    assert_eq!((r["level"].as_str(), r["bytes_after"].as_u64()), (Some("medium"), Some(real[1])));
+    assert!(matches!(a.call("doc_reduce", &json!({ "doc": doc, "path": "x.pdf", "level": "maximum" })), Err(ToolError::InvalidArgs(_))));
+    assert!(!dir.join("x.pdf").exists());
+}

@@ -2283,7 +2283,7 @@ fn create_and_reduce() {
     )
     .unwrap();
     let full = s2.save_full_bytes(id2).unwrap();
-    let (reduced, _) = s2.reduced_bytes(id2).unwrap();
+    let (reduced, _) = s2.reduced_bytes(id2, crate::optimizer::Level::Light).unwrap();
     assert!(reduced.len() <= full.len(), "{} > {}", reduced.len(), full.len());
     let mut s3 = Session::new();
     let r = s3.open("r.pdf", None, reduced, None).unwrap();
@@ -2306,7 +2306,10 @@ fn an_optimize_job_reports_its_stages_and_can_be_cancelled() {
         .unwrap();
     assert!(bytes.starts_with(b"%PDF-"));
     assert_eq!(stages.first(), Some(&OptimizeStage::Discarding));
-    assert_eq!(&stages[stages.len() - 3..], [OptimizeStage::CleaningUp, OptimizeStage::Merging, OptimizeStage::Writing]);
+    assert_eq!(&stages[stages.len() - 2..], [OptimizeStage::Merging, OptimizeStage::Writing]);
+    let cleaning = stages.iter().position(|s| *s == OptimizeStage::CleaningUp).unwrap();
+    assert!(stages[cleaning + 1..stages.len() - 2].iter().all(|s| matches!(s, OptimizeStage::Streams { .. })), "{stages:?}");
+    assert!(stages.iter().any(|s| matches!(s, OptimizeStage::Streams { done: 0, .. })), "{stages:?}");
     let fractions: Vec<f32> = stages.iter().map(|st| st.fraction()).collect();
     assert!(fractions.windows(2).all(|w| w[0] <= w[1]), "the bar never goes back: {fractions:?}");
     assert!(fractions.iter().all(|f| (0.0..=1.0).contains(f)));

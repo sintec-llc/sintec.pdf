@@ -213,6 +213,18 @@ pub fn encode_flate(data: &[u8]) -> Vec<u8> {
     flate::encode(data)
 }
 
+/// zlib (RFC 1950) at the best compression level the backend has (9): slower than
+/// [`encode_flate`], for the optimizer and other places where size matters more than time.
+pub fn encode_flate_best(data: &[u8]) -> Vec<u8> {
+    flate::encode_level(data, 9)
+}
+
+/// Applies a predictor to `data` (the step [`encode`] takes before Flate or LZW): 1 is
+/// identity, 2 the TIFF predictor, 10–15 PNG (15 chooses the best filter for each row).
+pub fn apply_predictor(params: &Params, data: &[u8]) -> Result<Vec<u8>, FilterError> {
+    predictor::encode(params, data)
+}
+
 /// PDF white-space characters (ISO 32000-2 Table 1).
 pub(crate) fn is_pdf_whitespace(b: u8) -> bool {
     matches!(b, 0 | 9 | 10 | 12 | 13 | 32)

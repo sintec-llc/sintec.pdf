@@ -310,10 +310,11 @@ impl PdfCraftApp {
         }
     }
 
-    /// Reduce File Size: write a compacted copy with images downsampled (the open document is
-    /// unchanged). It runs in the background with a progress bar, like the PDF Optimizer.
+    /// Reduce File Size: choose a level (with estimated sizes), then write a compacted copy
+    /// (the open document is unchanged). It runs in the background with a progress bar, like
+    /// the PDF Optimizer.
     pub(crate) fn reduce_file_size(&mut self) {
-        self.start_optimize(crate::optimize_ui::OptimizeKind::Reduce, &pdfcraft_engine::optimize::Settings::default(), &[]);
+        self.open_reduce_dialog();
     }
 
     /// Save an optimized copy (Reduce File Size, Optimize PDF) next to the original, reporting

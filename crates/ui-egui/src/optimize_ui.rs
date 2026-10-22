@@ -1,15 +1,19 @@
 //! Optimize PDF ▸ Advanced optimization (Acrobat's PDF Optimizer): Images, Discard Objects,
 //! Discard User Data and Clean Up panels. The result is saved as a copy, like Reduce File Size.
 //!
-//! The optimization (this dialog's, or Reduce File Size's fixed choices) runs on a worker thread
-//! and shows its progress in a notice with a bar and a Cancel button; the copy is saved once it
-//! is done.
+//! The optimization (this dialog's, or a Reduce File Size level's) runs on a worker thread and
+//! shows its progress in a notice with a bar and a Cancel button; the copy is saved once it is
+//! done.
+//!
+//! Reduce File Size first opens a small dialog with its three levels (Strong, Medium, Light).
+//! Next to each it shows about how large the copy would be, estimated on another worker thread
+//! ("calculating…" meanwhile); Cancel leaves everything as it was.
 
 use std::sync::{Arc, Mutex};
 
 use egui::{Align, Layout};
 use pdfcraft_engine::optimize::{Compression, ImageSettings, Preset, QUALITIES, Settings};
-use pdfcraft_engine::optimizer::{OptimizeStage, Optimized};
+use pdfcraft_engine::optimizer::{Level, OptimizeStage, Optimized};
 use pdfcraft_engine::{DocId, EditError, Hidden, OptimizeReport};
 
 use crate::theme::{self, Tokens};
@@ -84,6 +88,7 @@ fn stage_label(stage: OptimizeStage) -> String {
             &[("d", &(done + 1).min(total.max(1)).to_string()), ("t", &total.max(1).to_string())],
         ),
         OptimizeStage::CleaningUp => tl!("Optimizing… cleaning up").to_string(),
+        OptimizeStage::Streams { .. } => tl!("Optimizing… compressing streams").to_string(),
         OptimizeStage::Merging => tl!("Optimizing… merging identical objects").to_string(),
         OptimizeStage::Writing => tl!("Optimizing… writing the copy").to_string(),
     }
@@ -219,6 +224,7 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut OptimizeDraft, t: &Tokens) -> (boo
         }
         OptimizeTab::CleanUp => {
             ui.add(widgets::checkbox(&mut s.flate_unencoded, tl!("Use Flate to encode streams that are not encoded")));
+            ui.add(widgets::checkbox(&mut s.recompress_streams, tl!("Recompress streams with the best Flate compression (lossless)")));
             ui.add(widgets::checkbox(&mut s.remove_invalid_links, tl!("Remove invalid links and bookmarks")));
             ui.add(widgets::checkbox(&mut s.remove_unreferenced_dests, tl!("Remove unreferenced named destinations")));
             ui.add_enabled(false, widgets::checkbox(&mut true, tl!("Compress document structure (object streams)")));
@@ -296,7 +302,180 @@ pub(crate) fn audit_body(ui: &mut egui::Ui, rows: &[pdfcraft_engine::optimize::S
     ok
 }
 
+/// Reduce File Size's estimates, filled in by a worker thread.
+#[derive(Default)]
+pub struct EstimateProgress {
+    /// Each level's estimated size, as it becomes known.
+    pub found: Vec<(Level, usize)>,
+    /// The worker has finished (or failed: `error`).
+    pub done: bool,
+    pub error: Option<String>,
+    /// The dialog went away: the worker should stop.
+    pub cancel: bool,
+}
+
+/// The Reduce File Size dialog's state.
+pub struct ReduceDraft {
+    pub doc: DocId,
+    pub level: Level,
+    /// The file's size now.
+    pub before: usize,
+    pub estimates: Arc<Mutex<EstimateProgress>>,
+    /// Why the document can't be reduced (signed, read-only), if it can't.
+    pub refused: Option<String>,
+}
+
+impl Drop for ReduceDraft {
+    /// Closing the dialog, whichever way, stops the estimate.
+    fn drop(&mut self) {
+        if let Ok(mut e) = self.estimates.lock() {
+            e.cancel = true;
+        }
+    }
+}
+
+/// The levels as the dialog lists them, most reduction first, with their descriptions.
+fn level_rows() -> [(Level, &'static str, &'static str); 3] {
+    [
+        (Level::Strong, tl!("Strong compression"), tl!("Smallest file: images to 100 ppi, JPEG quality 55; metadata and other extras removed")),
+        (Level::Medium, tl!("Medium compression"), tl!("Balanced: images to 150 ppi, JPEG quality 75")),
+        (Level::Light, tl!("Light compression"), tl!("Lossless: images unchanged, streams and structure recompressed")),
+    ]
+}
+
+/// "~1.2 MB (45% smaller)" for an estimate.
+pub(crate) fn estimate_label(before: usize, after: usize) -> String {
+    let size = crate::panels::human_size(after);
+    if after < before {
+        let pct = 100.0 * (1.0 - after as f64 / before.max(1) as f64);
+        crate::i18n::fmt(tl!("~{size} ({pct}% smaller)"), &[("size", &size), ("pct", &format!("{pct:.0}"))])
+    } else {
+        crate::i18n::fmt(tl!("~{size} (not smaller)"), &[("size", &size)])
+    }
+}
+
+/// Draw the Reduce File Size dialog; returns (reduce, cancel).
+pub(crate) fn reduce_body(ui: &mut egui::Ui, d: &mut ReduceDraft, t: &Tokens) -> (bool, bool) {
+    ui.label(egui::RichText::new(tl!("Reduce file size")).font(theme::semibold(18.0)));
+    ui.add_space(4.0);
+    ui.label(
+        egui::RichText::new(crate::i18n::fmt(tl!("Current size: {size}"), &[("size", &crate::panels::human_size(d.before))])).color(t.text_muted),
+    );
+    ui.add_space(10.0);
+    let (found, done, error) = match d.estimates.lock() {
+        Ok(e) => (e.found.clone(), e.done, e.error.clone()),
+        Err(_) => (Vec::new(), true, Some(tl!("Couldn't optimize the file").to_string())),
+    };
+    let refused = d.refused.clone().or(error);
+    for (level, name, about) in level_rows() {
+        ui.horizontal(|ui| {
+            widgets::radio_value(ui, &mut d.level, level, name);
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let text = match found.iter().find(|(l, _)| *l == level) {
+                    Some((_, bytes)) => egui::RichText::new(estimate_label(d.before, *bytes)).strong(),
+                    None if refused.is_some() || done => egui::RichText::new("—").color(t.text_faint),
+                    None => egui::RichText::new(tl!("calculating…")).color(t.text_muted),
+                };
+                ui.label(text);
+            });
+        });
+        ui.indent(("reduce-about", level.name()), |ui| ui.label(egui::RichText::new(about).small().color(t.text_muted)));
+        ui.add_space(6.0);
+    }
+    ui.add_space(4.0);
+    match &refused {
+        Some(why) => {
+            ui.label(egui::RichText::new(why).strong());
+        }
+        None => {
+            ui.label(egui::RichText::new(tl!("Sizes are approximate (~): the real result is shown after reducing.")).small().color(t.text_muted));
+        }
+    }
+    if !done && refused.is_none() {
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
+    }
+    ui.add_space(12.0);
+    let (mut ok, mut cancel) = (false, false);
+    ui.horizontal(|ui| {
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            if ui.add_enabled_ui(d.refused.is_none(), |ui| widgets::pill_button(ui, tl!("Reduce"), true)).inner.clicked() {
+                ok = true;
+            }
+            if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
+                cancel = true;
+            }
+        });
+    });
+    (ok, cancel)
+}
+
 impl PdfCraftApp {
+    /// Reduce File Size: open the level dialog and start estimating each level's result on a
+    /// worker thread (inline in tests and on the web).
+    pub(crate) fn open_reduce_dialog(&mut self) {
+        // What's typed in a form field is part of the document (#166).
+        if !self.commit_form_typing() {
+            return;
+        }
+        let Some((_, id)) = self.active_ids() else { return };
+        let before = self.session.get(id).map_or(0, |d| d.bytes.len());
+        let estimates = Arc::new(Mutex::new(EstimateProgress::default()));
+        let refused = match self.session.estimate_job(id) {
+            Ok(job) => {
+                let p = estimates.clone();
+                let work = move || {
+                    let cancelled = || p.lock().map_or(true, |e| e.cancel);
+                    let result = job.run(cancelled, |level, bytes| {
+                        if let Ok(mut e) = p.lock() {
+                            e.found.push((level, bytes));
+                        }
+                    });
+                    if let Ok(mut e) = p.lock() {
+                        e.done = true;
+                        if let Err(err) = result
+                            && !matches!(err, EditError::Cancelled)
+                        {
+                            e.error = Some(crate::i18n::fmt(tl!("Couldn't estimate: {e}"), &[("e", &err.to_string())]));
+                        }
+                    }
+                };
+                #[cfg(not(target_arch = "wasm32"))]
+                if self.run_inline {
+                    work();
+                } else if let Err(e) = std::thread::Builder::new().name("pdfcraft-estimate".into()).spawn(work)
+                    && let Ok(mut s) = estimates.lock()
+                {
+                    s.done = true;
+                    s.error = Some(crate::i18n::fmt(tl!("Couldn't estimate: {e}"), &[("e", &e.to_string())]));
+                }
+                #[cfg(target_arch = "wasm32")]
+                work();
+                None
+            }
+            Err(EditError::Signed) => {
+                Some(tl!("This document is signed. Reducing it rewrites the file, which would invalidate the signatures.").to_string())
+            }
+            Err(e) => Some(crate::i18n::fmt(tl!("Couldn't estimate: {e}"), &[("e", &e.to_string())])),
+        };
+        self.reduce = Some(ReduceDraft { doc: id, level: Level::default(), before, estimates, refused });
+        self.dialog = Some(crate::Dialog::Reduce);
+    }
+
+    /// Reduce File Size at the level chosen in its dialog: the copy is written on a worker
+    /// thread and saved when done, with the real sizes in a notice.
+    pub fn confirm_reduce(&mut self) {
+        let Some(draft) = self.reduce.take() else { return };
+        if self.dialog == Some(crate::Dialog::Reduce) {
+            self.dialog = None;
+        }
+        if draft.refused.is_some() || self.active_ids().map(|(_, id)| id) != Some(draft.doc) {
+            return;
+        }
+        let level = draft.level;
+        drop(draft);
+        self.start_optimize(OptimizeKind::Reduce, &level.settings(), level.discard());
+    }
+
     /// Optimize PDF with the dialog's choices on a worker thread; the copy is saved when done.
     pub fn optimize_with_draft(&mut self) {
         let (settings, discard) = (self.optimize_draft.settings.clone(), self.optimize_draft.discard.clone());
@@ -420,7 +599,7 @@ mod tests {
         }
         h.get_by_label("Optimizing… image 4 of 10");
         let shown = h.state().progress_notice.clone().unwrap();
-        assert!((shown.fraction - 0.275).abs() < 1e-4, "{shown:?}");
+        assert!((shown.fraction - 0.245).abs() < 1e-4, "{shown:?}");
         assert!(shown.cancellable);
 
         h.get_by_label("Cancel").click();

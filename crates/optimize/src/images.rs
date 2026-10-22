@@ -275,7 +275,7 @@ fn is_identity_decode(doc: &Document, decode: &Object, n: usize) -> bool {
 
 /// A new image stream from 8-bit samples: the original dictionary with the new size and filter.
 /// A decode array is dropped: only images without one, or with the default one, get here.
-fn image_stream(old: &Dict, px: &[u8], n: usize, w: u32, h: u32, compression: Compression, was_dct: bool) -> Option<Stream> {
+pub(crate) fn image_stream(old: &Dict, px: &[u8], n: usize, w: u32, h: u32, compression: Compression, was_dct: bool) -> Option<Stream> {
     let mut d = old.clone();
     for k in [&b"Filter"[..], b"DecodeParms", b"Decode", b"Length", b"DL"] {
         d.remove(k);
@@ -297,13 +297,31 @@ fn image_stream(old: &Dict, px: &[u8], n: usize, w: u32, h: u32, compression: Co
         d.set(b"Filter".to_vec(), Object::name("DCTDecode"));
         Some(Stream::from_raw(d, data))
     } else {
-        Some(Stream::flate(d, px))
+        Some(crate::recompress::flate_best(d, px, Some(&crate::recompress::rows8(n, w))))
     }
 }
 
-/// One image: resample and/or recompress per `settings`; `ppi` is its effective resolution.
-/// Returns the new image and its new soft mask, if the result is smaller.
-fn process(doc: &Document, s: &Stream, ppi: f64, settings: &ImageSettings, n: usize) -> Option<(Stream, Option<(ObjRef, Stream)>)> {
+/// What [`encode`] would do to an image, decided without touching its pixels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Plan {
+    /// Colour components (1 or 3).
+    pub n: usize,
+    pub w: u32,
+    pub h: u32,
+    /// The size after resampling (`w`, `h` when not resampled).
+    pub nw: u32,
+    pub nh: u32,
+    pub was_dct: bool,
+}
+
+impl Plan {
+    pub(crate) fn resized(&self) -> bool {
+        (self.nw, self.nh) != (self.w, self.h)
+    }
+}
+
+/// Whether and how `settings` change image `s` drawn at `ppi`: the checks that need no pixels.
+pub(crate) fn plan(doc: &Document, s: &Stream, ppi: f64, settings: &ImageSettings, n: usize) -> Option<Plan> {
     let d = &s.dict;
     if d.get(b"Decode").is_some_and(|a| !is_identity_decode(doc, a, n))
         || d.contains(b"Mask")
@@ -316,8 +334,8 @@ fn process(doc: &Document, s: &Stream, ppi: f64, settings: &ImageSettings, n: us
         return None;
     }
     let was_dct = is_dct(s)?;
-    let (w, h) = (d.int(b"Width")? as u32, d.int(b"Height")? as u32);
-    if w == 0 || h == 0 || (w as u64) * (h as u64) > MAX_PIXELS {
+    let (w, h) = (u32::try_from(d.int(b"Width")?).ok()?, u32::try_from(d.int(b"Height")?).ok()?);
+    if w == 0 || h == 0 || u64::from(w) * u64::from(h) > MAX_PIXELS {
         return None;
     }
     let resize = settings.downsample && ppi.is_finite() && ppi > settings.above_ppi && settings.target_ppi > 0.0;
@@ -326,28 +344,52 @@ fn process(doc: &Document, s: &Stream, ppi: f64, settings: &ImageSettings, n: us
         return None;
     }
     // Tiny images (icons, rules) don't benefit and JPEG would blur them.
-    if !resize && (w as u64) * (h as u64) < 64 * 64 {
+    if !resize && u64::from(w) * u64::from(h) < 64 * 64 {
         return None;
     }
     let (nw, nh) = if resize {
+        // `ppi > above_ppi >= 0` and `target_ppi > 0`, so `k` is finite and positive; the
+        // casts saturate.
         let k = settings.target_ppi / ppi;
-        (((w as f64 * k).round() as u32).max(1), ((h as f64 * k).round() as u32).max(1))
+        (((f64::from(w) * k).round() as u32).clamp(1, w), ((f64::from(h) * k).round() as u32).clamp(1, h))
     } else {
         (w, h)
     };
+    Some(Plan { n, w, h, nw, nh, was_dct })
+}
+
+/// A JPEG re-encoded without resampling must save at least this share of its bytes: a second
+/// generation of JPEG loss for a few percent isn't worth it.
+const REENCODE_MIN_SAVING: f64 = 0.1;
+
+/// Carry out `plan` on image `s`. Returns the new image and its new soft mask, if the result is
+/// smaller. For an image that wasn't JPEG, lossless Flate with a PNG predictor is used instead
+/// of JPEG when that is smaller still.
+pub(crate) fn encode(doc: &Document, s: &Stream, plan: &Plan, settings: &ImageSettings) -> Option<(Stream, Option<(ObjRef, Stream)>)> {
+    let Plan { n, w, h, nw, nh, was_dct } = *plan;
+    let d = &s.dict;
     let px = pixels(s, n)?;
-    let px = if (nw, nh) != (w, h) { resample(&px, n, w, h, nw, nh)? } else { px };
-    let new = image_stream(d, &px, n, nw, nh, settings.compression, was_dct)?;
+    let px = if plan.resized() { resample(&px, n, w, h, nw, nh)? } else { px };
+    let mut new = image_stream(d, &px, n, nw, nh, settings.compression, was_dct)?;
+    if !was_dct && new.dict.name(b"Filter") == Some(b"DCTDecode") {
+        let flate = image_stream(d, &px, n, nw, nh, Compression::Flate, false)?;
+        if flate.raw.len() <= new.raw.len() {
+            new = flate;
+        }
+    }
     // A soft mask must keep the image's dimensions: resample it with the image (lossless).
     let mut smask = None;
     if let Some(mr) = d.reference(b"SMask") {
         let mobj = doc.get(mr);
         let Object::Stream(m) = &*mobj else { return None };
-        if (nw, nh) != (w, h) {
+        if plan.resized() {
             if m.dict.int(b"BitsPerComponent") != Some(8) || m.dict.contains(b"Matte") || m.dict.contains(b"Decode") {
                 return None;
             }
-            let (mw, mh) = (m.dict.int(b"Width")? as u32, m.dict.int(b"Height")? as u32);
+            let (mw, mh) = (u32::try_from(m.dict.int(b"Width")?).ok()?, u32::try_from(m.dict.int(b"Height")?).ok()?);
+            if mw == 0 || mh == 0 || u64::from(mw) * u64::from(mh) > MAX_PIXELS {
+                return None;
+            }
             let mpx = pixels(m, 1)?;
             let mpx = resample(&mpx, 1, mw, mh, nw, nh)?;
             smask = Some((mr, image_stream(&m.dict, &mpx, 1, nw, nh, Compression::Flate, false)?));
@@ -359,18 +401,20 @@ fn process(doc: &Document, s: &Stream, ppi: f64, settings: &ImageSettings, n: us
             _ => 0,
         });
     let after = new.raw.len() + smask.as_ref().map_or(0, |(_, m)| m.raw.len());
-    (after < before).then_some((new, smask))
+    let worth = if !plan.resized() && was_dct { (after as f64) <= (before as f64) * (1.0 - REENCODE_MIN_SAVING) } else { after < before };
+    worth.then_some((new, smask))
 }
 
-pub(crate) fn run(
-    doc: &mut Document,
-    pages: &[ObjRef],
-    settings: &Settings,
-    report: &mut Report,
-    progress: &mut dyn FnMut(Stage) -> bool,
-) -> Result<(), OptimizeError> {
+/// One image: resample and/or recompress per `settings`; `ppi` is its effective resolution.
+/// Returns the new image and its new soft mask, if the result is smaller.
+fn process(doc: &Document, s: &Stream, ppi: f64, settings: &ImageSettings, n: usize) -> Option<(Stream, Option<(ObjRef, Stream)>)> {
+    encode(doc, s, &plan(doc, s, ppi, settings, n)?, settings)
+}
+
+/// The images `pages` draw that the image settings may change, in object order, with their
+/// effective resolution (soft masks are processed with their image, not on their own).
+pub(crate) fn drawn(doc: &Document, pages: &[ObjRef]) -> Vec<(ObjRef, f64)> {
     let ppi = effective_resolutions(doc, pages);
-    // Soft masks are processed with their image, not on their own.
     let masks: HashSet<ObjRef> = ppi
         .keys()
         .filter_map(|r| match &*doc.get(*r) {
@@ -380,6 +424,17 @@ pub(crate) fn run(
         .collect();
     let mut refs: Vec<(ObjRef, f64)> = ppi.into_iter().filter(|(r, _)| !masks.contains(r)).collect();
     refs.sort_by_key(|(r, _)| r.num);
+    refs
+}
+
+pub(crate) fn run(
+    doc: &mut Document,
+    pages: &[ObjRef],
+    settings: &Settings,
+    report: &mut Report,
+    progress: &mut dyn FnMut(Stage) -> bool,
+) -> Result<(), OptimizeError> {
+    let refs = drawn(doc, pages);
     let total = refs.len();
     for (done, (r, ppi)) in refs.into_iter().enumerate() {
         if !progress(Stage::Images { done, total }) {

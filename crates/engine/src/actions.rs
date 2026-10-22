@@ -156,7 +156,7 @@ fn apply_step(s: &mut Session, id: DocId, step: &Step, log: &mut Vec<String>) ->
             return Ok(None);
         }
         Step::ReduceFileSize => {
-            let (bytes, _) = s.optimized_bytes(id, &crate::optimize::Settings::default(), &[])?;
+            let (bytes, _) = s.reduced_bytes(id, crate::optimizer::Level::Medium)?;
             let before = s.get(id).map_or(0, |d| d.bytes.len());
             log.push(format!("Reduce file size: {} → {} bytes", before, bytes.len()));
             let name = s.get(id).map(|d| d.name.clone()).unwrap_or_default();

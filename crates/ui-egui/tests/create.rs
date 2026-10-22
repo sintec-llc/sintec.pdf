@@ -91,8 +91,8 @@ impl Drop for ReduceDir {
     }
 }
 
-/// Open `name` and run Reduce File Size on it, saving to `out` without a dialog.
-fn reduce(name: &'static str, bytes: Vec<u8>, out: &std::path::Path) -> egui_kittest::Harness<'static, PdfCraftApp> {
+/// Open `name`, open Reduce File Size and wait for its estimates (from a worker thread).
+fn reduce_dialog(name: &'static str, bytes: Vec<u8>, out: &std::path::Path) -> egui_kittest::Harness<'static, PdfCraftApp> {
     let out2 = out.to_path_buf();
     let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
@@ -105,6 +105,23 @@ fn reduce(name: &'static str, bytes: Vec<u8>, out: &std::path::Path) -> egui_kit
     });
     h.run_steps(2);
     assert!(h.state_mut().execute("optimize.reduce"));
+    assert_eq!(h.state().dialog, Some(pdfcraft_ui_egui::Dialog::Reduce), "Reduce asks for a level first");
+    let start = std::time::Instant::now();
+    while !h.state().reduce.as_ref().is_some_and(|d| d.estimates.lock().unwrap().done) && start.elapsed() < std::time::Duration::from_secs(60) {
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    h.run_steps(2);
+    h
+}
+
+/// Open `name` and run Reduce File Size on it at the dialog's default level (Medium), saving
+/// to `out` without a file dialog.
+fn reduce(name: &'static str, bytes: Vec<u8>, out: &std::path::Path) -> egui_kittest::Harness<'static, PdfCraftApp> {
+    use egui_kittest::kittest::Queryable;
+    let mut h = reduce_dialog(name, bytes, out);
+    h.get_by_label("Reduce").click();
+    h.run_steps(1);
     // It runs on a worker thread like the PDF Optimizer, with the progress card meanwhile.
     let start = std::time::Instant::now();
     while h.state().optimize_run.is_some() && start.elapsed() < std::time::Duration::from_secs(30) {
@@ -137,6 +154,46 @@ fn reduce_file_size_writes_a_compact_copy() {
     assert!(bytes.len() < h.state().session.docs()[0].bytes.len(), "the copy is smaller");
     assert!(h.state().session.docs()[0].dirty, "the open document is unchanged");
     h.get_by_label_contains("% smaller");
+}
+
+#[test]
+fn reduce_file_size_offers_three_levels_with_estimates_and_cancel_writes_nothing() {
+    use egui_kittest::kittest::Queryable;
+    use pdfcraft_engine::optimizer::Level;
+    let (w, h) = (900u32, 600u32);
+    let px: Vec<u8> = (0..w * h).flat_map(|i| [(i % w * 255 / w) as u8 ^ (i & 7) as u8, (i / w * 255 / h) as u8, (i % 13) as u8]).collect();
+    let mut photo = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut photo, w, h);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&px).unwrap();
+    }
+    let dir = ReduceDir::new();
+    let out = dir.0.join("reduced.pdf");
+    let mut h = reduce_dialog("photo.png", photo, &out);
+    for label in ["Strong compression", "Medium compression", "Light compression"] {
+        h.get_by_label(label);
+    }
+    let found = h.state().reduce.as_ref().unwrap().estimates.lock().unwrap().found.clone();
+    assert_eq!(found.iter().map(|(l, _)| *l).collect::<Vec<_>>(), Level::ALL, "every level is estimated");
+    let size = |l: Level| found.iter().find(|(x, _)| *x == l).unwrap().1;
+    assert!(size(Level::Strong) < size(Level::Medium) && size(Level::Medium) < size(Level::Light), "{found:?}");
+    // Each estimate is shown as approximate, with the share saved.
+    assert!(h.query_all_by_label_contains("~").count() >= 2, "estimates are marked as approximate");
+    h.get_by_label("Sizes are approximate (~): the real result is shown after reducing.");
+    assert!(h.query_all_by_label_contains("% smaller)").count() >= 2);
+    if let Ok(path) = std::env::var("PDFCRAFT_REDUCE_DIALOG_SHOT") {
+        h.render().unwrap().save(path).unwrap();
+    }
+    // Choose Strong, then think better of it: nothing is written and the dialog goes.
+    h.get_by_label("Strong compression").click();
+    h.run_steps(1);
+    assert_eq!(h.state().reduce.as_ref().map(|d| d.level), Some(Level::Strong));
+    h.get_by_label("Cancel").click();
+    h.run_steps(2);
+    assert!(h.state().dialog.is_none() && h.state().reduce.is_none() && h.state().optimize_run.is_none());
+    assert!(!out.exists(), "Cancel writes nothing");
 }
 
 #[test]

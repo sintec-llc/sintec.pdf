@@ -68,6 +68,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut overwrite_elsewhere = false;
     let mut summarize_now = false;
     let mut optimize_now = false;
+    let mut reduce_now = false;
     let mut duplicate_now: Option<Edit> = None;
     let mut replace_now = false;
     let mut scan_next = false;
@@ -744,6 +745,16 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 }
                 return;
             }
+            Dialog::Reduce => {
+                let Some(d) = app.reduce.as_mut() else {
+                    close = true;
+                    return;
+                };
+                let (ok, cancel) = crate::optimize_ui::reduce_body(ui, d, &t);
+                reduce_now = ok;
+                close = ok || cancel;
+                return;
+            }
             Dialog::CertificateViewer => {
                 ui.set_width(700.0);
                 let trusted = app.session.trusted_certificates().to_vec();
@@ -1287,6 +1298,12 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     }
     if optimize_now {
         app.optimize_with_draft();
+    }
+    if reduce_now {
+        app.confirm_reduce();
+    } else if dialog == Dialog::Reduce && (modal.should_close() || close) {
+        // Cancelled or dismissed: the estimate stops and nothing is written.
+        app.reduce = None;
     }
     if let Some(e) = duplicate_now {
         app.duplicate_draft = None;

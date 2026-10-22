@@ -338,6 +338,8 @@ pub enum Dialog {
     Sign,
     /// Optimize PDF ▸ Advanced optimization.
     Optimize,
+    /// Reduce File Size: Strong, Medium or Light, with estimated sizes.
+    Reduce,
     /// Prepare a form ▸ right-click a field ▸ Duplicate.
     DuplicateField,
     /// Check for accessibility ▸ Accessibility Checker Options.
@@ -802,6 +804,8 @@ pub struct PdfCraftApp {
     pub optimize_draft: OptimizeDraft,
     /// The running optimization (Optimize PDF ▸ Advanced optimization).
     pub optimize_run: Option<optimize_ui::OptimizeRun>,
+    /// The Reduce File Size dialog's level and estimates.
+    pub reduce: Option<optimize_ui::ReduceDraft>,
     /// A background job's progress card (see [`widgets::progress_notice`]).
     pub progress_notice: Option<widgets::ProgressNotice>,
     /// Pages copied or cut in Organize Pages, ready to paste (into any document).
@@ -1153,6 +1157,7 @@ impl PdfCraftApp {
             stamp_draft: Default::default(),
             optimize_draft: OptimizeDraft::default(),
             optimize_run: None,
+            reduce: None,
             progress_notice: None,
             page_clipboard: None,
             page_transfer: None,
@@ -2698,6 +2703,10 @@ impl PdfCraftApp {
                     "pdfa" => Some(Dialog::PdfA),
                     "signature" => Some(Dialog::Signature),
                     "optimize" => Some(Dialog::Optimize),
+                    "reduce" => {
+                        self.open_reduce_dialog();
+                        self.dialog
+                    }
                     "sign" | "certify" => {
                         // Sign with a Digital ID for an invisible signature on the current page.
                         let page = self.active.map_or(0, |i| self.views[i].current);

@@ -2829,3 +2829,21 @@ certificate	Basic constraints	Основные ограничения
 certificate	SHA-1 digest	Хеш SHA-1
 certificate	SHA-256 digest	Хеш SHA-256
 print handling	Label	Этикетка
+
+# Reduce File Size levels and estimates (task 024).
+	Optimizing… compressing streams	Оптимизация… сжатие потоков
+	Recompress streams with the best Flate compression (lossless)	Пересжать потоки с наилучшим сжатием Flate (без потерь)
+	Strong compression	Сильное сжатие
+	Medium compression	Среднее сжатие
+	Light compression	Лёгкое сжатие
+	Smallest file: images to 100 ppi, JPEG quality 55; metadata and other extras removed	Наименьший файл: изображения до 100 ppi, качество JPEG 55; метаданные и прочие лишние данные удаляются
+	Balanced: images to 150 ppi, JPEG quality 75	Сбалансированно: изображения до 150 ppi, качество JPEG 75
+	Lossless: images unchanged, streams and structure recompressed	Без потерь: изображения не меняются, потоки и структура сжимаются заново
+	~{size} ({pct}% smaller)	~{size} (меньше на {pct}%)
+	~{size} (not smaller)	~{size} (не меньше)
+	Current size: {size}	Текущий размер: {size}
+	calculating…	вычисляется…
+	Sizes are approximate (~): the real result is shown after reducing.	Размеры приблизительные (~): точный результат будет показан после уменьшения.
+	Reduce	Уменьшить
+	Couldn't estimate: {e}	Не удалось оценить размер: {e}
+	This document is signed. Reducing it rewrites the file, which would invalidate the signatures.	Документ подписан. Уменьшение перезаписывает файл, и подписи станут недействительными.

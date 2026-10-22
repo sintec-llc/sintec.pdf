@@ -147,16 +147,22 @@ pub struct SaveOptions {
     /// Full saves: pack non-stream objects into compressed object streams with a cross-reference
     /// stream (PDF 1.5+, §7.5.7–7.5.8). Off writes a classic table that any reader accepts.
     pub object_streams: bool,
+    /// Full saves with object streams: pack more objects into each object stream and compress
+    /// them at the best Flate level (the optimizer's choice: smaller, a little slower).
+    pub best_compression: bool,
 }
 
 impl Default for SaveOptions {
     fn default() -> Self {
-        Self { mod_date: None, id_seed: 0x5052_494E_5443_5241, object_streams: true }
+        Self { mod_date: None, id_seed: 0x5052_494E_5443_5241, object_streams: true, best_compression: false }
     }
 }
 
 /// Objects per object stream (Acrobat and qpdf use 100–200).
 const OBJSTM_SIZE: usize = 100;
+/// Objects per object stream with [`SaveOptions::best_compression`]: one dictionary of Flate
+/// history covers more similar objects.
+const OBJSTM_SIZE_BEST: usize = 400;
 /// Keep a batch's serialized body small as well as limiting its object count. One object
 /// may exceed this target; it is emitted in its own object stream without retaining a batch.
 const OBJSTM_BYTES: usize = 8 * 1024 * 1024;
@@ -315,7 +321,8 @@ pub fn write_full(doc: &Document, opts: &SaveOptions) -> Result<Vec<u8>, CosErro
     // Object streams take the numbers after the last object. Their contents are not encrypted
     // individually: the whole stream is (§7.5.7, §7.6.2).
     let mut next = output_number(order.len())?;
-    let mut batch = ObjectStreamBatch::default();
+    let mut batch = ObjectStreamBatch { best: opts.best_compression, ..ObjectStreamBatch::default() };
+    let batch_size = if opts.best_compression { OBJSTM_SIZE_BEST } else { OBJSTM_SIZE };
     for (num, reference) in packed {
         let mut encoded = Vec::new();
         serialize(&renumber(&*reread(&mut reader, reference, false)?, &map), &mut encoded);
@@ -328,7 +335,7 @@ pub fn write_full(doc: &Document, opts: &SaveOptions) -> Result<Vec<u8>, CosErro
         drop(encoded);
         rows.insert(num, Row::InStream(next, batch.count as u32));
         batch.count += 1;
-        if batch.count == OBJSTM_SIZE || batch.body.len() >= OBJSTM_BYTES {
+        if batch.count == batch_size || batch.body.len() >= OBJSTM_BYTES {
             batch.flush(&reader.document, &mut next, &mut rows, &mut out)?;
         }
     }
@@ -387,6 +394,8 @@ struct ObjectStreamBatch {
     header: Vec<u8>,
     body: Vec<u8>,
     count: usize,
+    /// Compress at the best Flate level ([`SaveOptions::best_compression`]).
+    best: bool,
 }
 
 impl ObjectStreamBatch {
@@ -397,7 +406,8 @@ impl ObjectStreamBatch {
         let following = next.checked_add(1).ok_or_else(|| CosError::Syntax { offset: 0, detail: "too many objects to save".into() })?;
         // Release capacity after each batch too: an unusually large object must not leave
         // a large scratch buffer alive for the rest of the save.
-        let Self { mut header, body, count } = std::mem::take(self);
+        let best = self.best;
+        let Self { mut header, body, count, .. } = std::mem::replace(self, Self { best, ..Self::default() });
         let first = header.len();
         header.extend_from_slice(&body);
         drop(body);
@@ -405,7 +415,7 @@ impl ObjectStreamBatch {
         d.set(b"Type".to_vec(), Object::name("ObjStm"));
         d.set(b"N".to_vec(), Object::Int(count as i64));
         d.set(b"First".to_vec(), Object::Int(first as i64));
-        let stm = Object::Stream(Stream::flate(d, &header));
+        let stm = Object::Stream(if best { Stream::flate_best(d, &header) } else { Stream::flate(d, &header) });
         rows.insert(*next, Row::InFile(out.len() as u64, 0));
         write_indirect(*next, 0, &prepared(doc, u32::MAX, *next, 0, &stm), out);
         *next = following;

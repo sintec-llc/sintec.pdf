@@ -72,10 +72,15 @@ fn inflate_raw(input: &[u8], max: usize) -> Step {
 }
 
 /// zlib at level 6.
+pub(crate) fn encode(data: &[u8]) -> Vec<u8> {
+    encode_level(data, 6)
+}
+
+/// zlib at `level` (0–9; 9 is the smallest output the backend makes).
 // The documented never-crash exception: writing into a `Vec` cannot fail.
 #[allow(clippy::expect_used)]
-pub(crate) fn encode(data: &[u8]) -> Vec<u8> {
-    let mut e = flate2::write::ZlibEncoder::new(Vec::with_capacity(data.len() / 2 + 64), Compression::new(6));
+pub(crate) fn encode_level(data: &[u8], level: u32) -> Vec<u8> {
+    let mut e = flate2::write::ZlibEncoder::new(Vec::with_capacity(data.len() / 2 + 64), Compression::new(level.min(9)));
     e.write_all(data).expect("in-memory write");
     e.finish().expect("in-memory write")
 }

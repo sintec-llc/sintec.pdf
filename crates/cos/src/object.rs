@@ -172,6 +172,13 @@ impl Stream {
         Self { dict, raw: pdfcraft_filters::encode_flate(data).into() }
     }
 
+    /// [`Stream::flate`] at the best compression level (slower; the optimizer uses it).
+    pub fn flate_best(mut dict: Dict, data: &[u8]) -> Self {
+        dict.set(b"Filter".to_vec(), Object::Name(b"FlateDecode".to_vec()));
+        dict.remove(b"DecodeParms");
+        Self { dict, raw: pdfcraft_filters::encode_flate_best(data).into() }
+    }
+
     /// The filter chain declared in the dictionary.
     pub fn filters(&self) -> Vec<(Filter, Params)> {
         let names: Vec<&[u8]> = match self.dict.get(b"Filter") {

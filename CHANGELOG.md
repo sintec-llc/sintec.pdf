@@ -3,6 +3,18 @@
 User-visible changes in Sintec.PDF, newest first. Our versions are independent of upstream
 PdfCraft's; each entry says which upstream version the code is based on.
 
+## Unreleased
+
+### Ours
+- **Reduce file size:** choose Strong, Medium or Light, with each level's estimated size shown
+  before you pick (`~2.1 MB (64% smaller)`); Cancel writes nothing and the notice gives the real
+  sizes. Light is lossless; Medium takes images to 150 ppi at JPEG quality 75; Strong to 100 ppi
+  at quality 55 and drops metadata and other extras (`docs/file-size-levels.md`).
+- Every optimization now recompresses streams losslessly at the best Flate level with PNG
+  predictors for images, packs objects tighter, and keeps a chart or screenshot lossless when
+  that is smaller than JPEG. Optimize PDF with a Discard User Data choice no longer fails on a
+  file that has none of that data.
+
 ## 0.3.0 — based on upstream PdfCraft v0.9.0
 
 This release was developed as 0.2.7; the user decided the post-sync release is 0.3.0, so the

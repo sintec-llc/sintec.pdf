@@ -108,7 +108,9 @@ fn images_are_measured_where_drawn_and_downsampled() {
     assert_eq!(report.images_resampled, 2, "{report:?}");
     assert!(report.thumbnails == 2);
     let b = stream(&doc, big);
-    assert_eq!((b.dict.int(b"Width"), b.dict.int(b"Height"), b.dict.name(b"Filter")), (Some(300), Some(300), Some(&b"DCTDecode"[..])));
+    assert_eq!((b.dict.int(b"Width"), b.dict.int(b"Height")), (Some(300), Some(300)));
+    // JPEG, or lossless Flate when that is smaller still (this texture packs well losslessly).
+    assert!(matches!(b.dict.name(b"Filter"), Some(b"DCTDecode" | b"FlateDecode")), "{:?}", b.dict);
     let m = stream(&doc, masked);
     let sm = stream(&doc, mask);
     assert_eq!((m.dict.int(b"Width"), sm.dict.int(b"Width")), (Some(150), Some(150)), "the soft mask follows its image");
@@ -185,7 +187,14 @@ fn settings_choose_what_happens() {
 #[test]
 fn discards_and_clean_up() {
     let mut doc = Document::new_empty();
-    let pages = page(&mut doc, &[], "BT /F1 12 Tf 72 720 Td (Hello world, hello world, hello world, hello world) Tj ET");
+    // Long enough that Flate pays for its own dictionary entry.
+    let pages = page(
+        &mut doc,
+        &[],
+        &"BT /F1 12 Tf 72 720 Td (Hello world, hello world, hello world, hello world) Tj ET
+"
+        .repeat(4),
+    );
     let root = doc.root().unwrap();
     let mut vp = Dict::new();
     vp.set(b"PrintScaling".to_vec(), Object::name("None"));
@@ -202,7 +211,7 @@ fn discards_and_clean_up() {
     let settings = Settings { discard_tags: true, discard_print_settings: true, ..Settings::default() };
     let r = optimize(&mut doc, &settings).unwrap();
     assert!(r.tags_removed);
-    assert_eq!((r.print_settings, r.thumbnails, r.streams_compressed), (2, 1, 1));
+    assert_eq!((r.print_settings, r.thumbnails, r.streams_compressed + r.streams_recompressed), (2, 1, 1));
     let c = doc.get(root).as_dict().cloned().unwrap();
     assert!(!c.contains(b"StructTreeRoot") && !c.contains(b"MarkInfo"));
     let vp = c.get(b"ViewerPreferences").and_then(|v| v.as_dict().cloned()).unwrap();
@@ -412,7 +421,7 @@ fn progress_is_reported_per_image_and_a_refusal_cancels() {
     .unwrap();
     assert_eq!(report.images, 3);
     assert_eq!(
-        seen,
+        seen[..5],
         [
             Stage::Images { done: 0, total: 3 },
             Stage::Images { done: 1, total: 3 },
@@ -421,6 +430,8 @@ fn progress_is_reported_per_image_and_a_refusal_cancels() {
             Stage::CleanUp
         ]
     );
+    assert!(seen[5..].iter().all(|s| matches!(s, Stage::Streams { .. })), "then the streams: {seen:?}");
+    assert!(matches!(seen.last(), Some(Stage::Streams { done, total }) if done == total));
 
     // Stopping after the first image.
     let mut calls = 0;
@@ -729,7 +740,7 @@ fn ascii_wrappers_come_off_filtered_streams_and_the_inner_data_is_unchanged() {
     for (outer, encoded) in [("ASCII85Decode", ascii85(&inner)), ("ASCIIHexDecode", ascii_hex(&inner))] {
         let source = filtered(&[outer, "FlateDecode"], encoded);
         let (mut doc, c) = with_content(source.clone());
-        let r = optimize(&mut doc, &Settings::default()).unwrap();
+        let r = optimize(&mut doc, &wrappers_only()).unwrap();
         assert_eq!(r.streams_compressed, 1, "{outer}");
         let after = stream(&doc, c);
         assert_eq!(after.dict.get(b"Filter"), Some(&Object::Array(vec![Object::name("FlateDecode")])), "{outer}");
@@ -765,10 +776,39 @@ fn streams_the_wrapper_stripping_does_not_touch_stay_unchanged() {
     ];
     for (label, s) in cases {
         let (mut doc, c) = with_content(s.clone());
-        let r = optimize(&mut doc, &Settings::default()).unwrap();
+        let r = optimize(&mut doc, &wrappers_only()).unwrap();
         assert_eq!(r.streams_compressed, 0, "{label}");
         assert_eq!(stream(&doc, c), s, "{label}");
+        // Recompression may store them again, but never changes what they decode to, and
+        // leaves what it can't read exactly (or mustn't touch) as it is.
+        let (mut doc, c) = with_content(s.clone());
+        optimize(&mut doc, &Settings::default()).unwrap();
+        let after = stream(&doc, c);
+        match s.decoded_strict() {
+            Ok(data) if !matches!(label, "object stream" | "metadata" | "tiny") => assert_eq!(after.decoded_strict().unwrap(), data, "{label}"),
+            _ => assert_eq!(after, s, "{label}"),
+        }
     }
+}
+
+/// The clean-up without lossless recompression: only the ASCII wrapper stripping and Flate
+/// for unencoded streams.
+fn wrappers_only() -> Settings {
+    Settings { recompress_streams: false, ..Settings::default() }
+}
+
+#[test]
+fn recompression_replaces_a_wrapped_stream_with_best_level_flate() {
+    let ops = vector_ops();
+    let inner = Stream::flate(Dict::new(), &ops).raw.to_vec();
+    let source = filtered(&["ASCII85Decode", "FlateDecode"], ascii85(&inner));
+    let (mut doc, c) = with_content(source.clone());
+    let r = optimize(&mut doc, &Settings::default()).unwrap();
+    assert_eq!(r.streams_recompressed, 1);
+    let after = stream(&doc, c);
+    assert_eq!(after.dict.name(b"Filter"), Some(&b"FlateDecode"[..]));
+    assert_eq!(after.decoded_strict().unwrap(), ops);
+    assert!(after.raw.len() <= inner.len(), "at least as small as the inner level-6 data");
 }
 
 #[test]
@@ -778,7 +818,7 @@ fn a_second_run_leaves_the_stripped_stream_alone() {
     optimize(&mut doc, &Settings::default()).unwrap();
     let once = stream(&doc, c);
     let r = optimize(&mut doc, &Settings::default()).unwrap();
-    assert_eq!(r.streams_compressed, 0);
+    assert_eq!(r.streams_compressed + r.streams_recompressed, 0);
     assert_eq!(stream(&doc, c), once);
 }
 
@@ -884,7 +924,7 @@ fn the_mobile_preset_makes_a_printed_page_small() {
     let img = &drawn_images(&mobile)[0];
     // 24 pt = 1/3 in at 96 ppi.
     assert_eq!((img.dict.int(b"Width"), img.dict.int(b"Height")), (Some(32), Some(32)));
-    assert_eq!(img.dict.name(b"Filter"), Some(&b"DCTDecode"[..]));
+    assert!(matches!(img.dict.name(b"Filter"), Some(b"DCTDecode" | b"FlateDecode")), "JPEG, or Flate when smaller: {:?}", img.dict);
     assert!(bytes(&mobile) * 10 < before, "{} → {}", before, bytes(&mobile));
     assert_eq!(Preset::of(&Preset::Mobile.settings()), Some(Preset::Mobile));
     assert_eq!(Preset::from_name("mobile"), Some(Preset::Mobile));

@@ -4279,12 +4279,13 @@ impl Session {
         if pdf { Ok(bytes.clone()) } else { self.convert_to_pdf(name, bytes).map(|(_, pdf)| pdf) }
     }
 
-    /// Reduce File Size: Acrobat's defaults (images above 225 ppi to 150 ppi, JPEG medium
-    /// quality; thumbnails dropped), identical resources merged, unused objects dropped, objects
-    /// packed into compressed object streams. Returns the bytes and how many objects were
-    /// merged. The open document is not changed (Acrobat saves the reduced copy as a new file).
-    pub fn reduced_bytes(&self, id: DocId) -> Result<(Arc<Vec<u8>>, usize), EditError> {
-        let (bytes, report) = self.optimized_bytes(id, &optimize::Settings::default(), &[])?;
+    /// Reduce File Size at `level` (see [`optimizer::Level`]): images resampled and
+    /// recompressed as the level says, streams recompressed losslessly, identical resources
+    /// merged, unused objects dropped, objects packed into compressed object streams. Returns
+    /// the bytes and how many objects were merged. The open document is not changed (Acrobat
+    /// saves the reduced copy as a new file).
+    pub fn reduced_bytes(&self, id: DocId, level: optimizer::Level) -> Result<(Arc<Vec<u8>>, usize), EditError> {
+        let (bytes, report) = self.reduce_job(id, level)?.run(|_| true)?;
         Ok((bytes, report.merged))
     }
 
