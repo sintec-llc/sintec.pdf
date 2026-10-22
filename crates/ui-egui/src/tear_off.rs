@@ -103,7 +103,9 @@ pub fn hand_off_args(what: &HandOff, drop: Option<Pos2>, page: usize) -> Vec<OsS
 pub fn write_hand_off(store: &RecoveryStore, doc: DocId, name: &str, path: Option<String>, encrypted: bool, bytes: &[u8]) -> std::io::Result<String> {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     let key = format!("{now}-{}-tear-{}", std::process::id(), doc.0);
-    let meta = RecoveryMeta { key: key.clone(), name: name.to_owned(), path, saved_at: now, encrypted };
+    // No instance: the new process finds the entry by listing the store, and a listing leaves
+    // out entries of a live instance, which this one still is.
+    let meta = RecoveryMeta { key: key.clone(), name: name.to_owned(), path, saved_at: now, encrypted, instance: None };
     store.write(&meta, bytes)?;
     Ok(key)
 }

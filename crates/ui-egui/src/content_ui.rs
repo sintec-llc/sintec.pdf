@@ -12,7 +12,7 @@ use crate::theme::Tokens;
 use crate::widgets;
 
 /// The colour of the warning under text the standard fonts can't draw.
-const UNDRAWABLE: Color32 = Color32::from_rgb(0xD7, 0x37, 0x3F);
+pub(crate) const UNDRAWABLE: Color32 = Color32::from_rgb(0xD7, 0x37, 0x3F);
 
 /// The first character of a draft that can't be drawn, as the engine decides it (it refuses
 /// such text, #125): outside the standard fonts and not shaped with the Arabic face.
@@ -289,6 +289,22 @@ fn dragged(r: Rect, grab: Grab, d: egui::Vec2, keep_aspect: bool) -> Rect {
             Rect::from_two_pos(out.min, out.max)
         }
     }
+}
+
+/// Added text and images keep pointer ownership over a form field while editing content.
+pub(crate) fn select_grabs(ui: &egui::Ui, xf: &PageXform, page: usize, info: &DocInfo, added: &[Added], view: &DocView) -> bool {
+    let cv = &view.content;
+    if cv.grab.is_some_and(|(grab_page, _, _)| grab_page == page) {
+        return true;
+    }
+    let Some(p) = ui.input(|i| i.pointer.hover_pos().or(i.pointer.interact_pos())).filter(|p| xf.rect.contains(*p)) else {
+        return false;
+    };
+    on_page(added, page).into_iter().any(|(index, item)| {
+        let rect = screen_rect(xf, info, page, item.content.rect());
+        rect.expand(2.0).contains(p)
+            || cv.selected == Some((page, index)) && handles(rect).into_iter().any(|(corner, _, _)| corner.distance(p) <= 6.0)
+    })
 }
 
 /// Pointer input on one page in Edit mode (`adding_text` with the Text tool). `true` when it
@@ -720,12 +736,12 @@ impl crate::PdfCraftApp {
     }
 
     /// Copy Image: image `index` on `page`, at its own resolution, to the clipboard.
-    pub(crate) fn copy_page_image(&mut self, page: usize, index: usize) {
-        let Some((_, id)) = self.active_ids() else { return };
+    pub(crate) fn copy_page_image(&mut self, page: usize, index: usize) -> bool {
+        let Some((_, id)) = self.active_ids() else { return false };
         if !self.may_copy(id) {
-            return;
+            return false;
         }
-        let Some(pixels) = self.session.get(id).map(|d| d.page_image_rgba(page, index)) else { return };
+        let Some(pixels) = self.session.get(id).map(|d| d.page_image_rgba(page, index)) else { return false };
         let copied = pixels.and_then(|(w, h, rgba)| {
             #[cfg(not(target_arch = "wasm32"))]
             if self.system_clipboard {
@@ -740,9 +756,55 @@ impl crate::PdfCraftApp {
             Ok((w, h))
         });
         match copied {
-            Ok((w, h)) => self.notify_fmt("The image has been copied ({w} × {h} pixels)", &[("w", &w.to_string()), ("h", &h.to_string())]),
-            Err(e) => self.notify_fmt("Couldn't copy the image: {e}", &[("e", &e)]),
+            Ok((w, h)) => {
+                self.notify_fmt("The image has been copied ({w} × {h} pixels)", &[("w", &w.to_string()), ("h", &h.to_string())]);
+                true
+            }
+            Err(e) => {
+                self.notify_fmt("Couldn't copy the image: {e}", &[("e", &e)]);
+                false
+            }
         }
+    }
+
+    /// The picture's visible box on its page, in user space.
+    fn page_image_box(&self, page: usize, index: usize) -> Option<[f64; 4]> {
+        let (_, id) = self.active_ids()?;
+        let image = self.session.get(id)?.page_images(page).into_iter().nth(index)?;
+        Some(image.visible_rect.unwrap_or(image.rect))
+    }
+
+    /// Cut: copy the picture, and only when that worked take it off the page (one undo step).
+    pub(crate) fn cut_page_image(&mut self, page: usize, index: usize) {
+        if self.copy_page_image(page, index) {
+            self.apply_edit(Edit::EditPageImage { page, index, change: pdfcraft_engine::ImageEdit::Delete });
+        }
+    }
+
+    /// Redact image: a redaction mark over the whole picture. It is applied, like any mark, from
+    /// Redact a PDF.
+    pub(crate) fn redact_page_image(&mut self, page: usize, index: usize) {
+        let Some(rect) = self.page_image_box(page, index) else { return };
+        let author = self.comment_prefs.author.clone();
+        let mark = self.redact_prefs.mark(page, vec![pdfcraft_engine::rect_quad(rect)], &author);
+        if self.apply_edit(mark) {
+            self.notify_tr("The image is marked for redaction. Apply it with Redact a PDF");
+        }
+    }
+
+    /// Create link: the link properties for a new link over the picture.
+    pub(crate) fn link_page_image(&mut self, page: usize, index: usize) {
+        if let Some(rect) = self.page_image_box(page, index) {
+            self.open_link_props(page, Some(rect), None);
+        }
+    }
+
+    /// Recognize text: the Recognize Text dialog, set to this page.
+    pub fn recognize_text_on_page(&mut self, page: usize) {
+        self.ocr_draft.pages = crate::ocr_ui::OcrPages::Range;
+        self.ocr_draft.from = page + 1;
+        self.ocr_draft.to = page + 1;
+        self.dialog = Some(crate::Dialog::RecognizeText);
     }
 
     /// Click an image field: pick a picture for it.
@@ -790,6 +852,11 @@ pub(crate) enum ImageAction {
     Replace,
 }
 
+// Lucide names a flip icon after the axis it draws, Acrobat names the flip after the direction the
+// picture moves: Flip horizontal (left and right swap) shows Lucide's vertical axis.
+const FLIP_HORIZONTAL_ICON: &str = "flip-vertical-2";
+const FLIP_VERTICAL_ICON: &str = "flip-horizontal-2";
+
 /// Edit image: rotate, flip, crop, replace (shown while an added image is selected).
 pub(crate) fn image_panel(ui: &mut egui::Ui, t: &Tokens, img: &pdfcraft_engine::AddedImage) -> Option<ImageAction> {
     let mut out = None;
@@ -811,11 +878,11 @@ pub(crate) fn image_panel(ui: &mut egui::Ui, t: &Tokens, img: &pdfcraft_engine::
             turn(&mut i, 3);
             out = Some(ImageAction::Update(AddedContent::Image(i.clone())));
         }
-        if crate::icons::button(ui, "flip-horizontal-2", 28.0, false, tl!("Flip horizontal")).clicked() {
+        if crate::icons::button(ui, FLIP_HORIZONTAL_ICON, 28.0, false, tl!("Flip horizontal")).clicked() {
             i.flip_h = !i.flip_h;
             out = Some(ImageAction::Update(AddedContent::Image(i.clone())));
         }
-        if crate::icons::button(ui, "flip-vertical-2", 28.0, false, tl!("Flip vertical")).clicked() {
+        if crate::icons::button(ui, FLIP_VERTICAL_ICON, 28.0, false, tl!("Flip vertical")).clicked() {
             i.flip_v = !i.flip_v;
             out = Some(ImageAction::Update(AddedContent::Image(i.clone())));
         }
@@ -842,4 +909,54 @@ pub(crate) fn image_panel(ui: &mut egui::Ui, t: &Tokens, img: &pdfcraft_engine::
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use egui_kittest::kittest::Queryable;
+
+    use super::*;
+
+    /// The image a flip button leaves behind, as the panel returns it.
+    fn flipped(tooltip: &str) -> pdfcraft_engine::AddedImage {
+        let img = pdfcraft_engine::AddedImage::new([0.0, 0.0, 100.0, 50.0], pdfcraft_cos::ObjRef::new(7, 0));
+        let mut fonts = false;
+        let mut h = egui_kittest::Harness::new_ui_state(
+            move |ui, out: &mut Option<pdfcraft_engine::AddedImage>| {
+                // The app's fonts (the semibold section title) take effect from the next frame.
+                if !fonts {
+                    ui.ctx().set_fonts(crate::theme::font_definitions());
+                    fonts = true;
+                    return;
+                }
+                let t = Tokens::get(ui.ctx());
+                if let Some(ImageAction::Update(AddedContent::Image(i))) = image_panel(ui, &t, &img) {
+                    *out = Some(i);
+                }
+            },
+            None,
+        );
+        h.run();
+        h.get_by_label(tooltip).click();
+        h.run();
+        h.state().clone().expect("the button updates the image")
+    }
+
+    #[test]
+    fn flip_buttons_show_the_mirror_axis_of_the_flip_they_make() {
+        // #1834: Acrobat's Flip horizontal swaps left and right across a vertical axis. Lucide names
+        // its flip icons after the axis drawn, so that is its flip-vertical-2.
+        let svg = |name: &str| {
+            let (_, bytes) = crate::icon_data::ICONS.iter().find(|(n, _)| *n == name).expect("bundled icon");
+            String::from_utf8_lossy(bytes).into_owned()
+        };
+        let (h, v) = (svg(FLIP_HORIZONTAL_ICON), svg(FLIP_VERTICAL_ICON));
+        assert!(h.contains("M12 2v2") && !h.contains("M4 12H2"), "Flip horizontal draws a vertical axis:\n{h}");
+        assert!(v.contains("M4 12H2") && !v.contains("M12 2v2"), "Flip vertical draws a horizontal axis:\n{v}");
+
+        let i = flipped("Flip horizontal");
+        assert!(i.flip_h && !i.flip_v, "Flip horizontal mirrors left and right");
+        let i = flipped("Flip vertical");
+        assert!(i.flip_v && !i.flip_h, "Flip vertical mirrors top and bottom");
+    }
 }

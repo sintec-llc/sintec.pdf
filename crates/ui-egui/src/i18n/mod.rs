@@ -783,6 +783,26 @@ mod tests {
         }
     }
 
+    /// Every catalog says the labels of a visible signature, which are looked up by the sign
+    /// crate's own English words (so the `tl!` scan can't see them), and the note shown when they
+    /// fall back to English. Each label that runs into its value keeps a separator at its end.
+    #[test]
+    fn signature_appearance_labels_are_in_every_catalog() {
+        let english = pdfcraft_engine::sign::AppearanceLabels::default();
+        let note = "The labels are in English: the signature's font can't draw them in this language.";
+        for language in LANGUAGES.iter().filter(|language| !language.source.is_empty()) {
+            let lang = Lang::from_code(language.code).expect("registered language");
+            assert!(has(lang, note), "{} lacks the labels note", language.code);
+            for (field, label) in english.fields() {
+                assert!(has(lang, label), "{} lacks the signature label {field}: {label:?}", language.code);
+                let said = tr(lang, label);
+                if field != "signed_by" {
+                    assert!(said.ends_with(' ') || said.ends_with('：'), "{}: the {field} label runs into its value: {said:?}", language.code);
+                }
+            }
+        }
+    }
+
     #[test]
     fn current_language_is_per_thread() {
         set_current(RU());

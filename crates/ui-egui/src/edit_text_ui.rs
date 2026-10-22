@@ -398,6 +398,175 @@ pub struct ImageSelection {
     pub index: usize,
     /// Dragging: the start point and, for a corner, the opposite corner (screen).
     drag: Option<(Pos2, Option<Pos2>)>,
+    /// Crop mode (Acrobat's crop handles): the box kept so far.
+    pub crop: Option<CropMode>,
+}
+
+/// Cropping a page image: the handles trim instead of resizing, the part that will go is
+/// dimmed, Enter or Done applies and Esc or Cancel leaves it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CropMode {
+    /// The box to keep (user space).
+    pub keep: [f64; 4],
+    /// A drag in progress: the grip (0–3 corners, 4–7 edges, 8 the inside), where it started
+    /// and the box then.
+    drag: Option<(usize, Pos2, [f64; 4])>,
+}
+
+impl CropMode {
+    pub fn new(keep: [f64; 4]) -> Self {
+        Self { keep, drag: None }
+    }
+}
+
+/// The screen boxes of the crop's eight handles: corners, then the top, right, bottom and left
+/// edge midpoints.
+fn crop_handles(k: Rect) -> [Pos2; 8] {
+    [k.left_top(), k.right_top(), k.left_bottom(), k.right_bottom(), k.center_top(), k.right_center(), k.center_bottom(), k.left_center()]
+}
+
+/// Crop mode for the selected image `i` whose visible frame is `b` (screen). Returns `true`
+/// (the pointer and keys are the crop's while it lasts).
+#[allow(clippy::too_many_arguments)]
+fn crop_input(
+    ui: &egui::Ui,
+    resp: &egui::Response,
+    xf: &PageXform,
+    page: usize,
+    info: &DocInfo,
+    view: &mut DocView,
+    i: usize,
+    b: Rect,
+    allow_interaction: bool,
+) -> bool {
+    let painter = ui.painter();
+    let Some(mode) = view.image_selection.as_mut().and_then(|s| s.crop.as_mut()) else { return false };
+    let hover_pos = ui.input(|inp| inp.pointer.hover_pos());
+    let keep_screen = |keep: [f64; 4]| xf.user_rect(info, page, keep.map(|v| v as f32)).intersect(b);
+    // A drag in progress moves a grip; the box stays inside the picture and at least 6 px.
+    if allow_interaction
+        && resp.drag_started()
+        && let Some(o) = ui.input(|inp| inp.pointer.press_origin())
+    {
+        let k = keep_screen(mode.keep);
+        let grip = crop_handles(k).iter().position(|h| h.distance(o) < 8.0).or_else(|| k.contains(o).then_some(8));
+        if let Some(g) = grip {
+            mode.drag = Some((g, o, mode.keep));
+        }
+    }
+    if let Some((grip, start, at_start)) = mode.drag
+        && let Some(p) = hover_pos
+    {
+        let d = p - start;
+        let k0 = keep_screen(at_start);
+        let (mut min, mut max) = (k0.min, k0.max);
+        match grip {
+            0 => {
+                min.x += d.x;
+                min.y += d.y;
+            }
+            1 => {
+                max.x += d.x;
+                min.y += d.y;
+            }
+            2 => {
+                min.x += d.x;
+                max.y += d.y;
+            }
+            3 => {
+                max.x += d.x;
+                max.y += d.y;
+            }
+            4 => min.y += d.y,
+            5 => max.x += d.x,
+            6 => max.y += d.y,
+            7 => min.x += d.x,
+            _ => {
+                let shift = egui::vec2(d.x.clamp(b.min.x - k0.min.x, b.max.x - k0.max.x), d.y.clamp(b.min.y - k0.min.y, b.max.y - k0.max.y));
+                min += shift;
+                max += shift;
+            }
+        }
+        let (min_w, min_h) = (6.0_f32.min(b.width()), 6.0_f32.min(b.height()));
+        min.x = min.x.clamp(b.min.x, b.max.x - min_w);
+        min.y = min.y.clamp(b.min.y, b.max.y - min_h);
+        max.x = max.x.clamp(min.x + min_w, b.max.x);
+        max.y = max.y.clamp(min.y + min_h, b.max.y);
+        mode.keep = user_box(xf, info, page, Rect::from_min_max(min, max));
+        if resp.drag_stopped() || !ui.input(|inp| inp.pointer.primary_down()) {
+            mode.drag = None;
+        }
+    }
+    let k = keep_screen(mode.keep);
+    // What goes is dimmed; what stays keeps its frame and handles.
+    let dim = Color32::from_black_alpha(96);
+    for r in [
+        Rect::from_min_max(b.min, Pos2::new(b.max.x, k.min.y)),
+        Rect::from_min_max(Pos2::new(b.min.x, k.max.y), b.max),
+        Rect::from_min_max(Pos2::new(b.min.x, k.min.y), Pos2::new(k.min.x, k.max.y)),
+        Rect::from_min_max(Pos2::new(k.max.x, k.min.y), Pos2::new(b.max.x, k.max.y)),
+    ] {
+        if r.is_positive() {
+            painter.rect_filled(r.intersect(xf.rect), CornerRadius::ZERO, dim);
+        }
+    }
+    painter.rect_stroke(k, CornerRadius::ZERO, Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
+    for h in crop_handles(k) {
+        painter.rect(
+            Rect::from_center_size(h, egui::vec2(8.0, 8.0)),
+            CornerRadius::ZERO,
+            Color32::WHITE,
+            Stroke::new(1.0, ACCENT),
+            egui::StrokeKind::Middle,
+        );
+    }
+    // Done and Cancel, painted under the box (above it near the bottom of the view).
+    let font = egui::FontId::proportional(12.5);
+    let pill = |label: &str, right: f32, y: f32| -> Rect {
+        let w = painter.layout_no_wrap(label.to_string(), font.clone(), Color32::WHITE).size().x + 20.0;
+        Rect::from_min_size(Pos2::new(right - w, y), egui::vec2(w, 22.0))
+    };
+    let y = if k.max.y + 30.0 < xf.rect.max.y { k.max.y + 6.0 } else { k.min.y - 28.0 };
+    let done = pill(tl!("Done"), k.max.x, y);
+    let cancel = pill(tl!("Cancel"), done.min.x - 6.0, y);
+    let t = crate::theme::Tokens::get(ui.ctx());
+    painter.rect_filled(done, CornerRadius::same(11), ACCENT);
+    painter.text(done.center(), egui::Align2::CENTER_CENTER, tl!("Done"), font.clone(), Color32::WHITE);
+    painter.rect(cancel, CornerRadius::same(11), t.panel, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    painter.text(cancel.center(), egui::Align2::CENTER_CENTER, tl!("Cancel"), font, t.text);
+    if let Some(p) = hover_pos {
+        let icon = if let Some(g) = crop_handles(k).iter().position(|h| h.distance(p) < 8.0) {
+            match g {
+                0 | 3 => egui::CursorIcon::ResizeNwSe,
+                1 | 2 => egui::CursorIcon::ResizeNeSw,
+                4 | 6 => egui::CursorIcon::ResizeVertical,
+                _ => egui::CursorIcon::ResizeHorizontal,
+            }
+        } else if done.contains(p) || cancel.contains(p) {
+            egui::CursorIcon::PointingHand
+        } else if k.contains(p) {
+            egui::CursorIcon::Move
+        } else {
+            egui::CursorIcon::Default
+        };
+        ui.ctx().set_cursor_icon(icon);
+    }
+    let clicked = |r: Rect| allow_interaction && resp.clicked() && hover_pos.is_some_and(|p| r.contains(p));
+    let keys = |key: egui::Key| allow_interaction && ui.input(|inp| inp.key_pressed(key)) && !ui.ctx().egui_wants_keyboard_input();
+    if clicked(done) || keys(egui::Key::Enter) {
+        let keep = mode.keep;
+        if let Some(s) = view.image_selection.as_mut() {
+            s.crop = None;
+        }
+        if keep_screen(keep) != b {
+            view.pending_edit = Some(Edit::EditPageImage { page, index: i, change: pdfcraft_engine::ImageEdit::Crop(keep) });
+        }
+    } else if (clicked(cancel) || keys(egui::Key::Escape))
+        && let Some(s) = view.image_selection.as_mut()
+    {
+        s.crop = None;
+    }
+    true
 }
 
 impl ImageSelection {
@@ -634,6 +803,14 @@ pub(crate) enum ImageAction {
     Save(usize, usize),
     Copy(usize, usize),
     CopyFile(usize, usize),
+    /// Copy the picture, then remove it from the page.
+    Cut(usize, usize),
+    /// Mark the picture for redaction (applied later from Redact a PDF).
+    Redact(usize, usize),
+    /// Create a link over the picture.
+    Link(usize, usize),
+    /// Open Recognize Text for the picture's page.
+    Recognize(usize),
 }
 
 fn user_box(xf: &PageXform, info: &DocInfo, page: usize, r: Rect) -> [f64; 4] {
@@ -698,6 +875,9 @@ pub(crate) fn image_input(
     // The selected image: frame, corner handles, dragging.
     if let Some(i) = selected.filter(|i| boxes.get(*i).is_some_and(|b| b.is_positive())) {
         let b = boxes[i];
+        if view.image_selection.as_ref().is_some_and(|s| s.crop.is_some()) {
+            return crop_input(ui, resp, xf, page, info, view, i, b, allow_interaction);
+        }
         let corners = [b.left_top(), b.right_top(), b.left_bottom(), b.right_bottom()];
         let handles = |rect: Rect| {
             for c in [rect.left_top(), rect.right_top(), rect.left_bottom(), rect.right_bottom()] {
@@ -815,6 +995,22 @@ pub(crate) fn image_input(
     if !allow_interaction {
         return false;
     }
+    // An open menu stays drawn wherever the pointer is: most of its items lie outside the picture
+    // (a logo is smaller than its menu), and a menu that is not drawn for a frame cannot be clicked.
+    // Only a menu opened by a right-click on the picture: one opened over text or empty page while
+    // a picture stays selected is the page's own menu.
+    let menu_key = resp.id.with("image-menu");
+    if resp.secondary_clicked() {
+        ui.ctx().data_mut(|d| d.insert_temp(menu_key, false));
+    }
+    let mut menu_drawn = false;
+    if let Some(sel) = selected
+        && resp.context_menu_opened()
+        && ui.ctx().data(|d| d.get_temp::<bool>(menu_key)).unwrap_or(false)
+    {
+        resp.context_menu(|ui| image_menu(ui, page, sel, images, view, action));
+        menu_drawn = true;
+    }
     let Some(p) = hover_pos.filter(|p| xf.rect.contains(*p)) else { return false };
     let Some(hit) = boxes.iter().enumerate().rposition(|(i, b)| b.contains(p) && image_contains(i, p)) else { return false };
     if selected != Some(hit) {
@@ -829,50 +1025,93 @@ pub(crate) fn image_input(
         _ => egui::CursorIcon::PointingHand,
     });
     if resp.clicked() || resp.secondary_clicked() {
-        view.image_selection = Some(ImageSelection { page, index: hit, drag: None });
+        view.image_selection = Some(ImageSelection { page, index: hit, drag: None, crop: None });
     }
-    if selected == Some(hit) {
-        resp.context_menu(|ui| {
-            use pdfcraft_engine::ImageEdit as E;
-            let items: [(&str, Option<E>); 4] = [
-                (tl!("Rotate Clockwise"), Some(E::Rotate(1))),
-                (tl!("Rotate Counterclockwise"), Some(E::Rotate(3))),
-                (tl!("Flip Horizontal"), Some(E::Flip { horizontal: true })),
-                (tl!("Flip Vertical"), Some(E::Flip { horizontal: false })),
-            ];
-            for (label, change) in items {
-                if ui.button(label).clicked() {
-                    view.pending_edit = change.map(|c| Edit::EditPageImage { page, index: hit, change: c });
-                    ui.close();
-                }
-            }
-            let raster = images.get(hit).is_some_and(|image| !image.is_form);
-            if ui.add_enabled(raster, egui::Button::new(tl!("Replace Image…"))).clicked() {
-                *action = Some(ImageAction::Replace(page, hit));
-                ui.close();
-            }
-            if ui.add_enabled(raster, egui::Button::new(tl!("Save Image As…"))).clicked() {
-                *action = Some(ImageAction::Save(page, hit));
-                ui.close();
-            }
-            // Copying also finds the picture inside grouped Form artwork.
-            if ui.button(tl!("Copy Image")).clicked() {
-                *action = Some(ImageAction::Copy(page, hit));
-                ui.close();
-            }
-            if ui.button(tl!("Copy Image in Original Format")).clicked() {
-                *action = Some(ImageAction::CopyFile(page, hit));
-                ui.close();
-            }
-            ui.separator();
-            if ui.button(tl!("Delete")).clicked() {
-                view.image_selection = None;
-                view.pending_edit = Some(Edit::EditPageImage { page, index: hit, change: E::Delete });
-                ui.close();
-            }
-        });
+    if resp.secondary_clicked() {
+        ui.ctx().data_mut(|d| d.insert_temp(menu_key, true));
+    }
+    if selected == Some(hit) && !menu_drawn {
+        resp.context_menu(|ui| image_menu(ui, page, hit, images, view, action));
     }
     true
+}
+
+fn image_menu(
+    ui: &mut egui::Ui,
+    page: usize,
+    hit: usize,
+    images: &[pdfcraft_engine::PageImage],
+    view: &mut DocView,
+    action: &mut Option<ImageAction>,
+) {
+    use pdfcraft_engine::ImageEdit as E;
+    let items: [(&str, Option<E>); 4] = [
+        (tl!("Rotate Clockwise"), Some(E::Rotate(1))),
+        (tl!("Rotate Counterclockwise"), Some(E::Rotate(3))),
+        (tl!("Flip Horizontal"), Some(E::Flip { horizontal: true })),
+        (tl!("Flip Vertical"), Some(E::Flip { horizontal: false })),
+    ];
+    for (label, change) in items {
+        if ui.button(label).clicked() {
+            view.pending_edit = change.map(|c| Edit::EditPageImage { page, index: hit, change: c });
+            ui.close();
+        }
+    }
+    // Crop: the handles trim instead of resizing until Done.
+    if ui.button(tl!("Crop Image")).clicked() {
+        if let (Some(s), Some(im)) = (view.image_selection.as_mut(), images.get(hit)) {
+            s.crop = Some(CropMode::new(im.visible_rect.unwrap_or(im.rect)));
+        }
+        ui.close();
+    }
+    let cropped = images.get(hit).is_some_and(|im| im.visible_rect.is_some_and(|v| v.iter().zip(im.rect.iter()).any(|(a, b)| (a - b).abs() > 0.01)));
+    if ui.add_enabled(cropped, egui::Button::new(tl!("Remove Crop"))).clicked() {
+        if let Some(im) = images.get(hit) {
+            view.pending_edit = Some(Edit::EditPageImage { page, index: hit, change: E::Crop(im.rect) });
+        }
+        ui.close();
+    }
+    let raster = images.get(hit).is_some_and(|image| !image.is_form);
+    if ui.add_enabled(raster, egui::Button::new(tl!("Replace Image…"))).clicked() {
+        *action = Some(ImageAction::Replace(page, hit));
+        ui.close();
+    }
+    if ui.add_enabled(raster, egui::Button::new(tl!("Save Image As…"))).clicked() {
+        *action = Some(ImageAction::Save(page, hit));
+        ui.close();
+    }
+    // Cutting and copying also find the picture inside grouped Form artwork.
+    if ui.button(tl!("Cut Image")).clicked() {
+        *action = Some(ImageAction::Cut(page, hit));
+        ui.close();
+    }
+    if ui.button(tl!("Copy Image")).clicked() {
+        *action = Some(ImageAction::Copy(page, hit));
+        ui.close();
+    }
+    if ui.button(tl!("Copy Image in Original Format")).clicked() {
+        *action = Some(ImageAction::CopyFile(page, hit));
+        ui.close();
+    }
+    ui.separator();
+    if ui.button(tl!("Redact Image")).clicked() {
+        *action = Some(ImageAction::Redact(page, hit));
+        ui.close();
+    }
+    if ui.button(tl!("Create Link…")).clicked() {
+        *action = Some(ImageAction::Link(page, hit));
+        ui.close();
+    }
+    if ui.button(tl!("Recognize Text…")).clicked() {
+        *action = Some(ImageAction::Recognize(page));
+        ui.close();
+    }
+    ui.separator();
+    if ui.button(tl!("Delete")).clicked() {
+        view.image_selection = None;
+        view.pending_edit = Some(Edit::EditPageImage { page, index: hit, change: E::Delete });
+        ui.close();
+    }
 }
 
 /// Open paragraph `block` on `page` in the inline editor. Its geometry and source are read from
@@ -1459,7 +1698,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
 }
 
 /// The edit a closed editor leaves: its text and style, when either changed.
-fn finished_edit(ed: LineEditor) -> Option<Edit> {
+pub(crate) fn finished_edit(ed: LineEditor) -> Option<Edit> {
     let style = ed.style();
     (ed.text != ed.original || style != pdfcraft_engine::BlockStyle::default()).then_some(Edit::EditTextBlock {
         page: ed.page,

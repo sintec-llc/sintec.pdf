@@ -58,6 +58,13 @@ fn organize(pages: usize) -> Harness<'static, PdfCraftApp> {
     harness(pages, |app| app.set_option("organize", "on").unwrap())
 }
 
+/// Organize pages ▸ Insert ▸ `item`.
+fn insert_menu(h: &mut Harness<'static, PdfCraftApp>, item: &str) {
+    h.get_by_label("Insert").click();
+    h.run_steps(2);
+    h.get_by_label(item).click();
+}
+
 fn type_selection(h: &mut Harness<'static, PdfCraftApp>, text: &str) {
     use egui::accesskit::Role;
     h.get_by_role_and_label(Role::TextInput, "Selected pages").click();
@@ -116,7 +123,7 @@ fn organize_page_range_rejects_invalid_input_and_escape_cancels_without_clearing
     assert_eq!(h.state().views[0].target_pages(), [1, 2]);
     assert_eq!(h.get_by_role_and_label(Role::TextInput, "Selected pages").value().as_deref(), Some("2-3"));
     type_selection(&mut h, "5, 4, 4");
-    h.get_by_label("Apply").click();
+    h.key_press(Key::Enter);
     h.run_steps(2);
     assert_eq!(h.state().views[0].target_pages(), [3, 4]);
     type_selection(&mut h, " ");
@@ -149,6 +156,53 @@ fn organize_tool_opens_the_overview_directly_and_can_be_reentered() {
     h.state_mut().set_option("tool", "edit").unwrap();
     h.run_steps(2);
     assert!(!h.state().views[0].organize, "another tool returns to the document");
+}
+
+/// Issue #1910: the page grid opens on the page the user was reading: it is selected and
+/// scrolled into view, whether the document was on a middle page, its last page or a page
+/// other than an earlier grid selection.
+#[test]
+fn organize_opens_on_the_current_page() {
+    let mut h = harness(60, |_| {});
+    let in_view = |h: &Harness<'static, PdfCraftApp>, page: usize| {
+        let viewport = h.state().views[0].viewport_rect();
+        let label = format!("Page {}", page + 1);
+        h.query_by_label(&label).is_some_and(|n| viewport.contains_rect(n.rect()))
+    };
+    // From a middle page.
+    h.state_mut().views[0].go_to_page(30);
+    h.run_steps(2);
+    assert!(h.state_mut().execute("page.organize"));
+    h.run_steps(4);
+    assert!(h.state().views[0].organize);
+    assert_eq!(h.state().views[0].target_pages(), [30]);
+    assert!(h.state().views[0].selected.is_empty(), "an empty selection is the current page, so checkboxes still toggle");
+    assert!(in_view(&h, 30), "the current page is scrolled into view");
+    assert!(!in_view(&h, 0), "the grid does not open on page 1");
+    // An earlier grid selection on another page does not win over the page the user went to.
+    h.get_by_label("Select page 32").click();
+    h.run_steps(2);
+    assert_eq!(h.state().views[0].target_pages(), [31]);
+    h.get_by_label("Close").click();
+    h.run_steps(2);
+    assert!(!h.state().views[0].organize);
+    h.state_mut().views[0].go_to_page(45);
+    h.run_steps(2);
+    h.state_mut().set_option("tool", "organize").unwrap();
+    h.run_steps(4);
+    assert_eq!(h.state().views[0].target_pages(), [45]);
+    assert!(in_view(&h, 45));
+    assert!(!in_view(&h, 1));
+    // From the last page.
+    h.get_by_label("Close").click();
+    h.run_steps(2);
+    h.state_mut().views[0].go_to_page(59);
+    h.run_steps(2);
+    h.state_mut().set_option("organize", "on").unwrap();
+    h.run_steps(4);
+    assert_eq!(h.state().views[0].target_pages(), [59]);
+    assert!(in_view(&h, 59));
+    assert!(!in_view(&h, 0));
 }
 
 #[test]
@@ -436,7 +490,7 @@ fn insert_blank_page_after_selection() {
     let mut h = organize(2);
     h.get_by_label("Page 1").click();
     h.run_steps(1);
-    h.get_by_label("Insert a blank page after the selection").click();
+    insert_menu(&mut h, "Insert a blank page after the selection");
     h.run_steps(3);
     assert_eq!(page_texts(h.state()), ["Page 1", "", "Page 2"]);
     let app = h.state();
@@ -1493,7 +1547,7 @@ fn replace_button_replaces_selected_pages_in_organize() {
     h.get_by_label("Page 3").click_modifiers(Modifiers::COMMAND);
     h.run_steps(2);
     h.state_mut().pick_override = Some(vec![other.to_string_lossy().into_owned()]);
-    h.get_by_label("Replace pages…").click();
+    h.get_by_label("Replace").click();
     h.run_steps(3);
     egui_kittest::kittest::Queryable::get_by_label(&h, "Replace Pages");
     assert_eq!(h.state().replace_draft.as_ref().unwrap().from, 2);
@@ -1603,7 +1657,7 @@ fn plus_between_pages_inserts_picked_files_there_in_order() {
     // The toolbar button still inserts after the selection, not at the last "+" used.
     h.get_by_label("Page 2").click();
     h.run_steps(2);
-    h.get_by_label("Insert pages from a file…").click();
+    insert_menu(&mut h, "Insert pages from a file…");
     h.run_steps(4);
     assert_eq!(texts_of(h.state(), 0), ["a note", "Page 1", "a note", "Page 2", "Page 3", "a note"]);
     // A file that can't be converted changes nothing.
@@ -1708,6 +1762,51 @@ fn files_dropped_outside_the_page_grid_still_open_as_documents() {
     assert_eq!(doc.name, "other.pdf");
     assert_eq!(doc.info.pages.len(), 1);
     assert_eq!(doc.bytes.as_slice(), fixture(1).as_slice());
+}
+
+/// The Pages panel's thumbnail of page `label` (the panel is right of the page view).
+fn panel_thumb_rect(h: &Harness<'static, PdfCraftApp>, label: &str) -> egui::Rect {
+    h.get_all_by_label(label).map(|n| n.rect()).max_by(|a, b| a.left().total_cmp(&b.left())).unwrap()
+}
+
+#[test]
+fn files_dropped_on_the_pages_panel_are_inserted_there() {
+    let mut h = harness(3, |app| app.right = Some(pdfcraft_ui_egui::RightPanel::Pages));
+    // The top half of page 2's thumbnail: between pages 1 and 2.
+    let thumb = panel_thumb_rect(&h, "Page 2");
+    h.hover_at(thumb.center() - egui::vec2(0.0, thumb.height() * 0.25));
+    h.run_steps(2);
+    assert_eq!(h.state().views[0].panel_gap, Some(1));
+    drop_files(&mut h, vec![Dropped("extra.pdf", fixture(2)), Dropped("note.txt", b"a note".to_vec())]);
+    h.run_steps(4);
+    assert_eq!(h.state().views.len(), 1, "dropped files are not opened as documents");
+    assert_eq!(texts_of(h.state(), 0), ["Page 1", "Page 1", "Page 2", "a note", "Page 2", "Page 3"]);
+    assert_eq!(picked(&h), [1, 2, 3], "the inserted pages are selected");
+    // The bottom half of the last thumbnail: the end.
+    let mut h = harness(2, |app| app.right = Some(pdfcraft_ui_egui::RightPanel::Pages));
+    let last = panel_thumb_rect(&h, "Page 2");
+    h.hover_at(last.center() + egui::vec2(0.0, last.height() * 0.25));
+    h.run_steps(2);
+    drop_files(&mut h, vec![Dropped("note.txt", b"a note".to_vec())]);
+    h.run_steps(4);
+    assert_eq!(h.state().views.len(), 1);
+    assert_eq!(texts_of(h.state(), 0), ["Page 1", "Page 2", "a note"]);
+}
+
+#[test]
+fn files_dropped_beside_the_pages_panel_still_open_as_documents() {
+    let mut h = harness(2, |app| app.right = Some(pdfcraft_ui_egui::RightPanel::Pages));
+    // Over the page view, not the panel.
+    let thumb = panel_thumb_rect(&h, "Page 1");
+    h.hover_at(egui::pos2(thumb.left() - 300.0, thumb.center().y));
+    h.run_steps(2);
+    drop_files(&mut h, vec![Dropped("other.pdf", fixture(1))]);
+    // Native opening prepares the document on a worker; three UI frames need not give it
+    // any CPU time. Wait for the result, as the other dropped-document regression does.
+    support::wait_until(&mut h, "document dropped beside the Pages panel", |app| app.views.len() == 2 && app.password_prompt.is_none());
+    assert_eq!(h.state().views.len(), 2);
+    assert_eq!(texts_of(h.state(), 0), ["Page 1", "Page 2"]);
+    assert_eq!(texts_of(h.state(), 1), ["Page 1"], "the dropped PDF opens as its own document");
 }
 
 fn grid_zoom(h: &Harness<'static, PdfCraftApp>) -> f32 {
@@ -1849,10 +1948,10 @@ fn split_dialog_writes_one_file_per_part() {
     let d = dir.to_string_lossy().into_owned();
     let mut h = organize(3);
     h.state_mut().export_dir_override = Some(d);
-    h.get_by_label("Split into files…").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     h.get_by_label_contains("Creates 3 files from 3 pages");
-    h.get_by_label("Split").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     names.sort();
@@ -1878,7 +1977,7 @@ fn split_at_bookmarks_with_equal_titles_keeps_every_part() {
     h.state_mut().run_command("page.split");
     h.run_steps(3);
     h.get_by_label_contains("Creates 3 files from 3 pages");
-    h.get_by_label("Split").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     names.sort();
@@ -1898,7 +1997,7 @@ fn split_before_selected_pages() {
     h.state_mut().run_command("page.split");
     h.run_steps(3);
     h.get_by_label_contains("Creates 2 files from 4 pages");
-    h.get_by_label("Split").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     names.sort();
@@ -2154,6 +2253,75 @@ fn replace_pages_dialog_swaps_page_content() {
     let doc = s.session.get(s.views[0].id).unwrap();
     assert_eq!(doc.info.pages.len(), 3);
     assert_eq!(doc.can_undo(), Some("Replace page"));
+}
+
+/// Pages 1 and 3 are selected. OK replaces those two and leaves the unchecked page between them.
+#[test]
+fn replace_split_selection_keeps_the_unchecked_page() {
+    fn sized(n: usize, width: u32, height: u32, label: &str) -> Vec<u8> {
+        let mut objs: Vec<String> = vec!["<< /Type /Catalog /Pages 2 0 R >>".into()];
+        let kids: Vec<String> = (0..n).map(|i| format!("{} 0 R", 4 + 2 * i)).collect();
+        objs.push(format!("<< /Type /Pages /Kids [{}] /Count {n} /MediaBox [0 0 {width} {height}] >>", kids.join(" ")));
+        objs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".into());
+        for i in 0..n {
+            objs.push(format!("<< /Type /Page /Parent 2 0 R /Contents {} 0 R /Resources << /Font << /F1 3 0 R >> >> >>", 5 + 2 * i));
+            let body = format!("BT /F1 24 Tf 20 150 Td ({label} {}) Tj ET", i + 1);
+            objs.push(format!("<< /Length {} >>\nstream\n{body}\nendstream", body.len()));
+        }
+        let mut out = b"%PDF-1.7\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, o) in objs.iter().enumerate() {
+            offsets.push(out.len());
+            out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+        }
+        let xref = out.len();
+        out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+        for o in offsets {
+            out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+        }
+        out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+        out
+    }
+    let open = |selected: &[usize], edited: bool| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("original.pdf", None, sized(3, 200, 300, "Original")).unwrap();
+        app.views[0].select_pages(selected);
+        app.start_replace("other.pdf".into(), sized(5, 400, 500, "Replacement"));
+        if edited {
+            app.replace_draft.as_mut().unwrap().range_edited = true;
+        }
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| app);
+        h.run_steps(2);
+        h
+    };
+    let sizes = |app: &PdfCraftApp| {
+        let doc = app.session.get(app.views[0].id).unwrap();
+        doc.info.pages.iter().map(|p| (p.width.round() as i32, p.height.round() as i32)).collect::<Vec<_>>()
+    };
+    let mut split = open(&[0, 2], false);
+    let draft = split.state().replace_draft.as_ref().unwrap();
+    assert_eq!((draft.from, draft.to, draft.pages.as_slice(), draft.range_edited), (1, 3, &[0usize, 2][..], false));
+    egui_kittest::kittest::Queryable::get_by_label(&split, "OK").click();
+    split.run_steps(3);
+    assert_eq!(texts_of(split.state(), 0), ["Replacement 1", "Original 2", "Replacement 2"]);
+    assert_eq!(sizes(split.state()), [(400, 500), (200, 300), (400, 500)]);
+    assert_eq!(split.state().session.get(split.state().views[0].id).unwrap().can_undo(), Some("Replace pages"));
+    split.state_mut().undo();
+    split.run_steps(2);
+    assert_eq!(texts_of(split.state(), 0), ["Original 1", "Original 2", "Original 3"]);
+    assert_eq!(sizes(split.state()), [(200, 300), (200, 300), (200, 300)]);
+
+    let mut span = open(&[0, 2], true);
+    egui_kittest::kittest::Queryable::get_by_label(&span, "OK").click();
+    span.run_steps(3);
+    assert_eq!(texts_of(span.state(), 0), ["Replacement 1", "Replacement 2", "Replacement 3"]);
+
+    let mut adjacent = open(&[1, 2], false);
+    egui_kittest::kittest::Queryable::get_by_label(&adjacent, "OK").click();
+    adjacent.run_steps(3);
+    assert_eq!(texts_of(adjacent.state(), 0), ["Original 1", "Replacement 1", "Replacement 2"]);
+    assert_eq!(sizes(adjacent.state()), [(200, 300), (400, 500), (400, 500)]);
 }
 
 #[test]
@@ -4722,4 +4890,109 @@ fn the_open_paragraphs_frame_moves_it_past_its_ink() {
     h.run_steps(4);
     let moved = cell(&h);
     assert!((moved[0] - ink[0] - 30.0).abs() < 1.5 && (moved[1] - ink[1] - 15.0).abs() < 1.5, "{ink:?} → {moved:?}");
+}
+
+/// Cropping a picture on the page (Acrobat's crop handles): in crop mode the
+/// handles trim, Enter applies what is kept, Esc leaves the picture as it was.
+#[test]
+fn cropping_a_picture_with_its_handles() {
+    let mut png = Vec::new();
+    image::RgbImage::from_pixel(80, 40, image::Rgb([200, 40, 40])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app
+    });
+    h.run_steps(4);
+    let id = h.state().views[0].id;
+    let before = h.state().session.get(id).unwrap().page_images(0)[0].visible_rect.unwrap();
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let c = r.center();
+    h.hover_at(c);
+    h.run_steps(1);
+    h.drag_at(c);
+    h.run_steps(1);
+    h.drop_at(c);
+    h.run_steps(2);
+    assert!(h.state().views[0].image_selection.is_some(), "selected");
+    // Crop mode (as the context menu's Crop Image starts it): drag the right-bottom handle a
+    // quarter of the picture inward, then Enter.
+    h.state_mut().views[0].image_selection.as_mut().unwrap().crop = Some(pdfcraft_ui_egui::CropMode::new(before));
+    h.run_steps(2);
+    let corner = r.right_bottom();
+    let to = corner - egui::vec2(r.width() / 4.0, r.height() / 4.0);
+    h.hover_at(corner);
+    h.run_steps(1);
+    h.drag_at(corner);
+    h.run_steps(1);
+    for k in 1..=4 {
+        h.hover_at(corner + (to - corner) * (k as f32 / 4.0));
+        h.run_steps(1);
+    }
+    h.drop_at(to);
+    h.run_steps(2);
+    let keep = h.state().views[0].image_selection.as_ref().unwrap().crop.as_ref().unwrap().keep;
+    assert!(keep[2] < before[2] - 1.0 && keep[1] > before[1] + 1.0, "trimmed on the right and the bottom: {keep:?} of {before:?}");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(4);
+    let doc = h.state().session.get(id).unwrap();
+    assert_eq!(doc.can_undo(), Some("Crop image"));
+    let im = &doc.page_images(0)[0];
+    assert_eq!(im.rect, [0.0, 0.0, 80.0, 40.0], "the placement is not scaled");
+    let v = im.visible_rect.unwrap();
+    assert!((v[2] - 60.0).abs() < 1.5 && (v[1] - 10.0).abs() < 1.5, "kept {v:?}");
+    assert!(h.state().views[0].image_selection.as_ref().is_some_and(|s| s.crop.is_none()), "crop mode ends");
+    // Esc leaves it.
+    h.state_mut().views[0].image_selection.as_mut().unwrap().crop = Some(pdfcraft_ui_egui::CropMode::new([10.0, 10.0, 20.0, 20.0]));
+    h.run_steps(2);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    let doc = h.state().session.get(id).unwrap();
+    assert_eq!(doc.page_images(0)[0].visible_rect.unwrap(), v);
+    assert!(h.state().views[0].image_selection.as_ref().is_none_or(|s| s.crop.is_none()));
+}
+
+/// Organize pages has Acrobat's panel whenever the grid shows, however it was opened, and the
+/// panel's Close ends Organize: the grid closes and All tools comes back.
+#[test]
+fn organize_panel_comes_with_the_grid_and_closes_it() {
+    let mut h = organize(3);
+    h.get_by_label("Insert");
+    h.get_by_label("Bates numbering");
+    h.get_by_label("Page properties");
+    h.get_by_label("Close panel").click();
+    h.run_steps(3);
+    assert!(!h.state().views[0].organize, "Close ends Organize");
+    assert_eq!(h.state().left, pdfcraft_ui_egui::LeftPanel::AllTools);
+    assert!(h.query_by_label("Page properties").is_none(), "the panel is gone");
+}
+
+/// Leaving Organize (a page opened from the grid, or the grid's Close) goes back to the
+/// workspace's panel: under the Edit tab, the Edit panel, not All tools.
+#[test]
+fn leaving_organize_goes_back_to_the_workspace_panel() {
+    use pdfcraft_ui_egui::{LeftPanel, Mode};
+    let mut h = harness(3, |_| {});
+    h.state_mut().mode = Mode::Edit;
+    h.state_mut().left = LeftPanel::Tool("edit");
+    h.run_steps(2);
+    h.state_mut().left = LeftPanel::Tool("organize");
+    h.state_mut().views[0].organize = true;
+    h.run_steps(3);
+    h.get_by_label("Pages selected".to_uppercase().as_str());
+    // What opening a page from the grid does.
+    h.state_mut().views[0].organize = false;
+    h.run_steps(3);
+    assert_eq!(h.state().left, LeftPanel::Tool("edit"), "back to the Edit panel");
+    // The same from All tools goes back to All tools.
+    h.state_mut().mode = Mode::AllTools;
+    h.state_mut().left = LeftPanel::Tool("organize");
+    h.state_mut().views[0].organize = true;
+    h.run_steps(3);
+    h.state_mut().views[0].organize = false;
+    h.run_steps(3);
+    assert_eq!(h.state().left, LeftPanel::AllTools);
 }
