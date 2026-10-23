@@ -428,7 +428,7 @@ pub fn text_edit_layout(doc: &Document, page: usize, block: usize, text: &str, s
     // This runs on every keystroke: read the page once for the paragraphs, the untouched runs
     // and the rewrite, which starts from the same unchanged page.
     let lines = text_lines(doc, page)?;
-    let original = group_blocks(&lines);
+    let original = page_blocks(doc, page, &lines);
     let source = original.get(block).ok_or(EditError::Invalid("text block does not exist".into()))?;
     if text == source.editor_text && style.is_plain() {
         return Ok(TextEditLayout { source_rect: source.rect, draft_rect: Some(source.rect), overflow: false });
@@ -1303,8 +1303,10 @@ fn interpret(
 
 /// The lines of text on a page (0-based), in content order, as editing sees them: a TJ with
 /// wide gaps (a table row exported as one TJ, see [`WIDE_GAP`]) is one line per piece, the runs
-/// an edit splits it into first. Line indexes here are the ones [`replace_line`] and
-/// [`TextBlock::lines`] use.
+/// an edit splits it into first. Runs more than 1.5 em apart (1 em when in separate text
+/// objects), or with a rule between them (a table's column border), are separate lines: a form's
+/// fields and a table's cells are edited one by one. Line indexes here are the ones
+/// [`replace_line`] and [`TextBlock::lines`] use.
 pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError> {
     lines_of(doc, page, true)
 }
@@ -1334,6 +1336,11 @@ fn lines_of(doc: &Document, page: usize, split: bool) -> Result<Vec<TextLine>, E
     let mut splits = if split { wide_run_splits(doc, &raw, &fonts_res, &mut cache, &carry) } else { HashMap::new() };
     let ops: Vec<Op> = raw.into_iter().enumerate().flat_map(|(i, o)| splits.remove(&i).unwrap_or_else(|| vec![o])).collect();
     let shown = interpret(doc, &ops, &fonts_res, &mut cache, &mut carry, None, true);
+    // Editing keeps a form's fields and a table's cells apart: runs farther apart than a word
+    // gap or two, or on either side of a rule (a cell border), are separate lines. As drawn, a
+    // line runs on across them, as it always did.
+    let rules = if split { crate::rules::ruling_segments(doc, page).unwrap_or_default() } else { Vec::new() };
+    let (reach_in_object, reach_across_objects) = if split { (1.5, 1.0) } else { (3.0, 1.5) };
     let mut last: Option<(usize, Pen)> = None; // the stream piece and where its last run ended
     for mut s in shown {
         // A single RTL glyph's ActualText (e.g. lam-alef) is an inline ligature, not a
@@ -1349,7 +1356,12 @@ fn lines_of(doc: &Document, page: usize, split: bool) -> Result<Vec<TextLine>, E
         let si = ops.get(s.op).map_or(0, |op| pieces.pieces_of(op).0);
         let joins = last.is_some_and(|(piece, pen)| {
             let bt = pen.bt;
-            let (near, gap) = pen.continues(&s, if bt == s.bt { 3.0 } else { 1.5 });
+            let (near, gap) = pen.continues(&s, if bt == s.bt { reach_in_object } else { reach_across_objects });
+            let ruled = || {
+                let (dir, start, _, across) = s.span();
+                let heights = [pen.across + pen.size * 0.3, across + s.size * 0.3];
+                regions::ruled_apart_along(&rules, dir, pen.end, start, 0.1 * pen.size.min(s.size), heights)
+            };
             piece == si
                 && lines.last().is_some_and(|l| l.scope == s.scope && l.logical_order == s.logical_order)
                 && (bt == s.bt || lines.last().is_some_and(|l| compatible_word(l, &s)))
@@ -1362,6 +1374,7 @@ fn lines_of(doc: &Document, page: usize, split: bool) -> Result<Vec<TextLine>, E
                 // An OCR layer is one text object over the whole scan: its words continue a line
                 // only across a word space, not across a table cell or a tab stop.
                 && (s.state.render_mode != 3 || gap < pen.size * 0.6)
+                && !ruled()
         });
         if joins && let Some(l) = lines.last_mut() {
             let gap = last.map_or(0.0, |(_, pen)| pen.continues(&s, 0.0).1);
@@ -1426,7 +1439,8 @@ fn lines_of(doc: &Document, page: usize, split: bool) -> Result<Vec<TextLine>, E
 
 /// A TJ adjustment this wide (in thousandths of an em, i.e. 3 em) separates two runs of text,
 /// not two words: table rows exported as one TJ per row put each cell after such a jump. It
-/// matches the gap at which [`text_lines`] stops joining runs into one line.
+/// matches the gap at which [`drawn_lines`] stops joining a text object's runs into one line
+/// ([`text_lines`] stops at half of it, and at a rule between them).
 const WIDE_GAP: f64 = 3000.0;
 
 /// The operators that replace each TJ with wide gaps (by index in `ops`, read with the state
@@ -2256,11 +2270,20 @@ fn on_same_baseline(line: &TextLine, target: &TextLine) -> bool {
     offset.is_finite() && offset < size * 0.3
 }
 
+/// Page `page`'s paragraphs from its [`text_lines`] `lines`, kept apart at the table borders
+/// and other rules it draws. Every reader and writer of paragraph indexes goes through here,
+/// so an index means the same paragraph to all of them.
+fn page_blocks(doc: &Document, page: usize, lines: &[TextLine]) -> Vec<TextBlock> {
+    // The only error is a missing page, which `lines` being read already ruled out.
+    let rules = crate::rules::ruling_segments(doc, page).unwrap_or_default();
+    group_blocks(lines, &rules)
+}
+
 /// The paragraphs on a page (0-based), each with the width a rewrite wraps it at
 /// ([`TextBlock::wrap`]).
 pub fn text_blocks(doc: &Document, page: usize) -> Result<Vec<TextBlock>, EditError> {
     let lines = text_lines(doc, page)?;
-    let mut blocks = group_blocks(&lines);
+    let mut blocks = page_blocks(doc, page, &lines);
     let crop = page_dict(doc, page)?.crop(doc);
     let wraps: Vec<[f64; 2]> = (0..blocks.len())
         .map(|i| blocks.get(i).map_or([0.0, 0.0], |b| regions::auto_wrap(&blocks, i, crop, [0.0, 0.0], b.size, anchored_rtl(&b.text))))
@@ -2283,7 +2306,7 @@ fn anchored_rtl(text: &str) -> bool {
 /// Call this on a clone: it is a preview operation, not a document edit.
 pub fn clear_block(doc: &mut Document, page: usize, block: usize) -> Result<(), EditError> {
     let lines = text_lines(doc, page)?;
-    let blocks = group_blocks(&lines);
+    let blocks = page_blocks(doc, page, &lines);
     let target = blocks.get(block).ok_or_else(|| EditError::Invalid("the paragraph no longer exists".into()))?;
     let targets: Vec<&TextLine> = target.lines.iter().filter_map(|i| lines.get(*i)).collect();
     let mut drops = coincident_ops(&lines, &targets);
@@ -2461,7 +2484,7 @@ fn rewrite_block_from(
     style: &BlockStyle,
     max_glyphs: usize,
 ) -> Result<LineEdit, EditError> {
-    let blocks = group_blocks(&lines);
+    let blocks = page_blocks(doc, page, &lines);
     let b = blocks.get(block).cloned().ok_or_else(|| EditError::Invalid(format!("page {} has no paragraph {}", page + 1, block + 1)))?;
     let members: Vec<&TextLine> = b.lines.iter().map(|i| &lines[*i]).collect();
     let first = members.first().copied().ok_or_else(|| EditError::Invalid("the paragraph has no source runs".into()))?;
@@ -2859,7 +2882,7 @@ pub(crate) fn selectable_blocks(
     let p = page_dict(doc, page)?;
     let streams = content_streams(doc, &p.dict);
     let lines = text_lines(doc, page)?;
-    Ok(group_blocks(&lines)
+    Ok(page_blocks(doc, page, &lines)
         .into_iter()
         .enumerate()
         .filter(|(_, b)| {
@@ -2930,7 +2953,7 @@ pub(crate) fn translate_blocks(doc: &mut Document, page: usize, indexes: &[usize
     let p = page_dict(doc, page)?;
     let streams = content_streams(doc, &p.dict);
     let lines = text_lines(doc, page)?;
-    let blocks = group_blocks(&lines);
+    let blocks = page_blocks(doc, page, &lines);
     let mut selected = std::collections::BTreeSet::new();
     for index in indexes {
         let b = blocks.get(*index).ok_or_else(|| EditError::Invalid("a selected paragraph no longer exists".into()))?;

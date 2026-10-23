@@ -1910,8 +1910,8 @@ milestone = "M7"
 status = "shipped"
 commands = ["edit.edit_text"]
 tools = ["text_paragraphs"]
-evidence = ["crates/edit/src/tests.rs::paragraphs_are_found_and_rewrapped", "crates/edit/src/tests.rs::text_lines_are_found_and_replaced_in_place", "crates/ui-egui/tests/editing.rs::editing_existing_text_in_place", "crates/automation/tests/automation.rs::editing_existing_text_through_tools"]
-notes = "lines grouped into paragraphs by stream, font, size, left alignment and regular baseline spacing; hyphenated line ends are joined"
+evidence = ["crates/edit/src/tests.rs::paragraphs_are_found_and_rewrapped", "crates/edit/src/tests.rs::text_lines_are_found_and_replaced_in_place", "crates/ui-egui/tests/editing.rs::editing_existing_text_in_place", "crates/automation/tests/automation.rs::editing_existing_text_through_tools", "crates/edit/src/grouping_tests.rs::form_labels_far_apart_on_one_baseline_are_separate_paragraphs", "crates/edit/src/grouping_tests.rs::table_cells_split_at_their_borders", "crates/edit/src/grouping_tests.rs::paragraphs_inside_a_ruled_cell_still_join"]
+notes = "lines grouped into paragraphs by stream, font, size, left alignment and regular baseline spacing; hyphenated line ends are joined. A form's fields and a table's cells stay apart: runs more than 1.5 em apart (1 em across text objects or styles) or with a ruling between them (stroked/filled table borders, also inside form XObjects) are separate. Missing: cells of a borderless table whose gaps are under 1 em, widget borders as separators, and cells inside one TJ less than 3 em apart"
 
 [[feature]]
 id = "edit.font-reuse-substitution"
