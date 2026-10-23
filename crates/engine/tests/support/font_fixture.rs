@@ -38,9 +38,20 @@ pub fn cff_font_with_weight(weight: u16) -> Vec<u8> {
     cff_font_weighted(Some(weight))
 }
 fn cff_font_weighted(weight: Option<u16>) -> Vec<u8> {
+    cff_font_styled_with(weight, "Regular", "RectFont-Regular", 700, &[' ', 'A', 'Ж'])
+}
+/// Sintec.PDF: a Rect Font face named `postscript` (style `subfamily`, OS/2 weight `weight`)
+/// whose rectangles are `height` units (per 1000) tall and which maps only `chars` (a space to
+/// the empty glyph, the others to the rectangle): a stand-in for a PDF's subset or an installed
+/// face.
+#[allow(dead_code)]
+pub fn cff_font_styled(postscript: &str, subfamily: &str, weight: u16, height: i16, chars: &[char]) -> Vec<u8> {
+    cff_font_styled_with(Some(weight), subfamily, postscript, height, chars)
+}
+fn cff_font_styled_with(weight: Option<u16>, subfamily: &str, postscript: &str, height: i16, chars: &[char]) -> Vec<u8> {
     let name = index(&[b"RectFont".to_vec()]);
     let mut dict = Vec::new();
-    for n in [0, 0, 500, 700] {
+    for n in [0, 0, 500, height] {
         dict.extend(number(n));
     }
     dict.push(5);
@@ -50,7 +61,7 @@ fn cff_font_weighted(weight: Option<u16>) -> Vec<u8> {
     dict.push(17);
     let mut rectangle = number(600);
     rectangle.extend([139, 139, 21]);
-    for n in [500, 0, 0, 700, -500, 0, 0, -700] {
+    for n in [500, 0, 0, height, -500, 0, 0, -height] {
         rectangle.extend(number(n));
     }
     rectangle.extend([5, 14]);
@@ -89,16 +100,19 @@ fn cff_font_weighted(weight: Option<u16>) -> Vec<u8> {
     be32(&mut cmap, 12);
     be16(&mut cmap, 12);
     be16(&mut cmap, 0);
-    be32(&mut cmap, 52);
+    be32(&mut cmap, (16 + 12 * chars.len()) as u32);
     be32(&mut cmap, 0);
-    be32(&mut cmap, 3);
-    // Sintec.PDF: Ж too, for substitution tests (a Cyrillic letter the source font lacks).
-    for (cp, gid) in [(32, 1), (65, 2), (0x416, 2)] {
+    be32(&mut cmap, chars.len() as u32);
+    // Sintec.PDF: Ж too by default, for substitution tests (a Cyrillic letter the source font
+    // lacks). Groups must be in code order.
+    let mut codes: Vec<u32> = chars.iter().map(|c| u32::from(*c)).collect();
+    codes.sort_unstable();
+    for cp in codes {
         be32(&mut cmap, cp);
         be32(&mut cmap, cp);
-        be32(&mut cmap, gid);
+        be32(&mut cmap, if cp == 32 { 1 } else { 2 });
     }
-    let names = [(1, "Rect Font"), (2, "Regular"), (6, "RectFont-Regular"), (13, "MIT License")];
+    let names = [(1, "Rect Font"), (2, subfamily), (6, postscript), (13, "MIT License")];
     let mut name = Vec::new();
     be16(&mut name, 0);
     be16(&mut name, names.len() as u16);

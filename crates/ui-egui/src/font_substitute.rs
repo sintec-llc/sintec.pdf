@@ -9,7 +9,11 @@
 //! - draws Bold, Italic and family changes in the matching installed face of the paragraph's
 //!   real family (Calibri Bold for a bold Calibri paragraph), not in the standard PDF fonts,
 //!   which have no Cyrillic;
-//! - draws characters the paragraph's fonts can't encode in the same family installed, silently.
+//! - draws characters the paragraph's fonts can't encode in the same family installed, or its
+//!   metric-compatible stand-in (Carlito for Calibri), in the font's detected weight and slant,
+//!   silently; the edit fits that face to the font's cap height and widths and strokes a regular
+//!   face standing in for a bold font (see `pdfcraft_edit`'s text rewrite);
+//! - shows those characters in the same face while they're typed ([`PdfCraftApp::preview_substitutes`]).
 //!
 //! When no similar face is installed, the Font substitution dialog suggests the closest ones
 //! and the edit waits for the choice, which is remembered per document and font. Edit PDF also
@@ -118,6 +122,20 @@ pub struct FontSubstitutes {
     /// The installed faces to use instead of scanning the system's font folders (embedders and
     /// tests that need a known set).
     pub installed_override: Option<Vec<FontFile>>,
+    /// Installed faces read for the inline editor's preview, by path.
+    preview_bytes: HashMap<PathBuf, Arc<Vec<u8>>>,
+}
+
+/// Sintec.PDF: the face that draws what a source font lacks, and why: what the user chose, or the
+/// installed face closest to the font's detected family, weight and slant.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Stand {
+    pub face: FontFile,
+    pub quality: Match,
+    /// Chosen by the user (Font substitution dialog), not found.
+    pub chosen: bool,
+    /// The font is bold and the face isn't: the edit strokes it (synthetic bold).
+    pub synthetic_bold: bool,
 }
 
 /// What to do with a text edit.
@@ -208,6 +226,82 @@ impl PdfCraftApp {
             let choice = report.best.as_ref().map(|f| f.path.clone());
             self.open_offer(id, page, &report.facts, wanted, choice, true, None, false);
             return;
+        }
+    }
+
+    /// Sintec.PDF: the face that draws the characters font `facts` lacks in text `text` of
+    /// document `id`: the face chosen for it, else the closest installed one. `None` while the
+    /// installed faces are being found, when the user chose to keep the document's font, or when
+    /// no face can show the text.
+    pub(crate) fn stand_in(&self, id: DocId, facts: &pdfcraft_engine::FontFacts, text: &str) -> Option<Stand> {
+        let wanted = Wanted::from_facts(facts, None, None, text);
+        let fonts = self.installed_faces()?;
+        let synthetic = |f: &FontFile| wanted.bold && f.style.weight < 600;
+        match self.fonts.choices.get(&(id, key_of(&wanted))) {
+            Some(FontChoice::Keep) => return None,
+            Some(FontChoice::Use { path, .. }) => {
+                if let Some(face) = fonts.iter().find(|f| &f.path == path) {
+                    let quality = family_match(&wanted, face);
+                    return Some(Stand { synthetic_bold: synthetic(face), face: face.clone(), quality, chosen: true });
+                }
+            }
+            None => {}
+        }
+        let face = rank(&wanted, &fonts).first().map(|f| (*f).clone())?;
+        let quality = family_match(&wanted, &face);
+        Some(Stand { synthetic_bold: synthetic(&face), face, quality, chosen: false })
+    }
+
+    /// Sintec.PDF: while a paragraph is open in the inline editor, put each source font's stand-in
+    /// ([`PdfCraftApp::stand_in`]) behind its embedded subset in the editor's fonts, so characters
+    /// the subset lacks show in that face as they're typed (not in the interface's own face). Once
+    /// per document version; waits for the installed faces.
+    pub(crate) fn preview_substitutes(&mut self, ctx: &egui::Context) {
+        for i in 0..self.views.len() {
+            let Some((id, page, text, resources)) = self.views.get(i).and_then(|v| {
+                let ed = v.line_editor.as_ref()?;
+                let generation = self.session.get(v.id)?.edit_generation();
+                (ed.substitutes_for != Some(generation)).then(|| (v.id, ed.page, ed.text.clone(), ed.fonts.keys().cloned().collect::<Vec<_>>()))
+            }) else {
+                continue;
+            };
+            if self.installed_faces().is_none() {
+                return;
+            }
+            let mut substitutes = std::collections::BTreeMap::new();
+            let mut budget: usize = 64 << 20;
+            for resource in resources.iter().take(16) {
+                let Some(facts) = self.session.get(id).and_then(|d| d.font_facts(page, resource)) else { continue };
+                let Some(stand) = self.stand_in(id, &facts, &text) else { continue };
+                let path = stand.face.path;
+                let bytes = match self.fonts.preview_bytes.get(&path) {
+                    Some(b) => b.clone(),
+                    None => {
+                        let Ok(meta) = std::fs::metadata(&path) else { continue };
+                        if meta.len() > 16 << 20 {
+                            continue;
+                        }
+                        let Ok(b) = std::fs::read(&path) else { continue };
+                        let b = Arc::new(b);
+                        if self.fonts.preview_bytes.len() < 32 {
+                            self.fonts.preview_bytes.insert(path.clone(), b.clone());
+                        }
+                        b
+                    }
+                };
+                if bytes.len() > budget {
+                    continue;
+                }
+                budget -= bytes.len();
+                substitutes.insert(resource.clone(), bytes);
+            }
+            let Some(doc) = self.session.get(id) else { continue };
+            let generation = doc.edit_generation();
+            let fonts = crate::edit_text_ui::install_source_fonts_with(ctx, doc, page, &substitutes);
+            if let Some(ed) = self.views.get_mut(i).and_then(|v| v.line_editor.as_mut()) {
+                ed.fonts = fonts;
+                ed.substitutes_for = Some(generation);
+            }
         }
     }
 
@@ -322,8 +416,10 @@ impl PdfCraftApp {
                 None => {}
             }
             let Some((best, quality)) = self.styled_face(&wanted) else { continue };
-            if matches!(quality, Match::Exact | Match::Fingerprint) {
-                // The same family is installed: it draws the missing characters, as it is.
+            if matches!(quality, Match::Exact | Match::Fingerprint | Match::Alias) {
+                // The same family is installed, or a metric-compatible stand-in for it (Carlito
+                // for Calibri, Tinos for Times New Roman), in the closest weight and slant: it
+                // draws the missing characters, fitted to the font (see the edit crate's `Fit`).
                 self.fonts.choices.insert((id, key), FontChoice::Use { path: best.path.clone(), whole: false });
                 let _ = self.load_substitute(id, page, &best.path);
                 continue;

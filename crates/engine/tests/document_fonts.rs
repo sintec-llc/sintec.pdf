@@ -122,3 +122,91 @@ fn a_loaded_substitute_draws_what_the_source_font_lacks() {
     assert!(lines.iter().any(|l| l.base_font == "Helvetica"), "{lines:?}");
     assert!(lines.iter().any(|l| l.base_font == "RectFont-Regular" && l.text.contains('Ж')), "{lines:?}");
 }
+
+/// Sintec.PDF: page 0's content, decoded, of the PDF `bytes`.
+fn page_content(bytes: &Arc<Vec<u8>>) -> String {
+    let doc = Document::open(bytes.clone()).unwrap();
+    let page = pdfcraft_model::pages(&doc).into_iter().next().unwrap();
+    let contents = page.dict.get(b"Contents").map(|c| doc.resolve(c)).unwrap();
+    let refs = match contents.as_array() {
+        Some(a) => a.to_vec(),
+        None => vec![page.dict.get(b"Contents").cloned().unwrap()],
+    };
+    refs.iter()
+        .filter_map(|r| match &*doc.resolve(r) {
+            Object::Stream(s) => s.decoded().ok(),
+            _ => None,
+        })
+        .map(|d| String::from_utf8_lossy(&d).into_owned())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The top row of dark ink in pixel columns `x0..x1` of `rgba` (`width` pixels per row).
+fn ink_top(rgba: &[u8], width: usize, x0: usize, x1: usize) -> Option<usize> {
+    rgba.as_chunks::<4>().0.chunks(width).position(|row| row.get(x0..x1).is_some_and(|r| r.iter().any(|p| p[0] < 128)))
+}
+
+/// A paragraph in an embedded bold font that maps only "A", "H" and space (a PDF's subset, which
+/// says it is bold only in its program's OS/2 table), with installed faces loaded as substitutes.
+/// Returns the session, the document and the bold source's resource name.
+fn bold_subset_paragraph(substitutes: &[Vec<u8>]) -> (Session, pdfcraft_engine::DocId) {
+    let mut s = Session::new();
+    let id = s.open("source.pdf", None, document(), None).unwrap();
+    let bold = support::font_fixture::cff_font_styled("RectFont-Bold", "Bold", 700, 700, &[' ', 'A', 'H']);
+    s.apply(id, Edit::RegisterTextFont { page: 0, bytes: Arc::new(bold.clone()) }).unwrap();
+    let resource = s.get(id).unwrap().text_editor_fonts(0).into_iter().find(|f| f.bytes == bold).unwrap().resource;
+    let style = BlockStyle { resource: Some(resource.clone()), ..Default::default() };
+    s.apply(id, Edit::EditTextBlock { page: 0, block: 0, text: "AHA".into(), style }).unwrap();
+    let facts = s.get(id).unwrap().font_facts(0, &resource).unwrap();
+    assert!(facts.is_bold() && facts.weight == 700 && facts.weight_from == pdfcraft_engine::StyleSource::Program, "{facts:?}");
+    assert_eq!(facts.cap_height, Some(0.7));
+    for face in substitutes {
+        s.apply(id, Edit::RegisterTextFont { page: 0, bytes: Arc::new(face.clone()) }).unwrap();
+    }
+    (s, id)
+}
+
+/// Sintec.PDF (task 027): a Cyrillic letter added to a bold heading whose embedded subset lacks it
+/// comes out bold and as tall as the heading's letters. Only a regular face of the family is
+/// loaded, with shorter capitals: it is scaled to the heading's cap height and widths, and drawn
+/// stroked (synthetic bold).
+#[test]
+fn an_added_letter_in_a_bold_subset_heading_is_bold_and_as_tall() {
+    let regular = support::font_fixture::cff_font_styled("RectFont-Regular", "Regular", 400, 625, &[' ', 'A', 'H', 'Ж']);
+    let (mut s, id) = bold_subset_paragraph(&[regular]);
+    s.apply(id, Edit::EditTextBlock { page: 0, block: 0, text: "AHA Ж".into(), style: BlockStyle::default() }).unwrap();
+    let doc = s.get(id).unwrap();
+    let lines = doc.text_lines(0);
+    let added = lines.iter().find(|l| l.text.contains('Ж')).unwrap_or_else(|| panic!("{lines:?}"));
+    assert_eq!(added.base_font, "RectFont-Regular", "{lines:?}");
+    // The capitals' height: 18 pt × 0.7 em in the heading; the substitute's 0.625 em capitals are
+    // set at 18 × 0.7 / 0.625 pt.
+    assert!((added.size * 0.625 - 18.0 * 0.7).abs() < 0.05, "{added:?}");
+    let content = page_content(&doc.display);
+    assert!(content.contains("2 Tr"), "drawn stroked: {content}");
+    // Rendered, its top is the heading letters' top.
+    let mut renderer = PageRenderer::new(doc.display.clone(), Default::default());
+    let p = renderer.render(RenderRequest { page: 0, scale: 2.0, ..Default::default() });
+    let width = p.width as usize;
+    let [a0, a1] = [lines[0].rect[0], lines[0].rect[0] + 9.0].map(|x| (x * 2.0) as usize + 2);
+    let [z0, z1] = [added.rect[0], added.rect[2]].map(|x| (x * 2.0) as usize + 2);
+    let (heading, letter) = (ink_top(&p.rgba, width, a0, a1).unwrap(), ink_top(&p.rgba, width, z0, z1.max(z0 + 1)).unwrap());
+    assert!(heading.abs_diff(letter) <= 1, "heading top {heading} px, added letter top {letter} px");
+}
+
+/// Sintec.PDF (task 027): with the family's bold face loaded too, the added letter is set in that
+/// face, not stroked, and not in the regular one.
+#[test]
+fn an_added_letter_in_a_bold_heading_uses_the_loaded_bold_face() {
+    let regular = support::font_fixture::cff_font_styled("RectFont-Regular", "Regular", 400, 700, &[' ', 'A', 'H', 'Ж']);
+    let bold = support::font_fixture::cff_font_styled("RectFont-BoldFull", "Bold", 700, 700, &[' ', 'A', 'H', 'Ж']);
+    let (mut s, id) = bold_subset_paragraph(&[regular, bold]);
+    s.apply(id, Edit::EditTextBlock { page: 0, block: 0, text: "AHA Ж".into(), style: BlockStyle::default() }).unwrap();
+    let doc = s.get(id).unwrap();
+    let lines = doc.text_lines(0);
+    let added = lines.iter().find(|l| l.text.contains('Ж')).unwrap_or_else(|| panic!("{lines:?}"));
+    assert_eq!(added.base_font, "RectFont-BoldFull", "{lines:?}");
+    assert!((added.size - 18.0).abs() < 0.01, "{added:?}");
+    assert!(!page_content(&doc.display).contains("2 Tr"));
+}

@@ -2847,3 +2847,33 @@ print handling	Label	Этикетка
 	Reduce	Уменьшить
 	Couldn't estimate: {e}	Не удалось оценить размер: {e}
 	This document is signed. Reducing it rewrites the file, which would invalidate the signatures.	Документ подписан. Уменьшение перезаписывает файл, и подписи станут недействительными.
+
+# Text editing: detected font style and the face for missing characters (task 027).
+	Missing characters: the document's font is kept	Недостающие символы: остаётся шрифт документа
+	from the embedded font program	по встроенной программе шрифта
+	from the PDF's font descriptor	по описанию шрифта в PDF
+	from the font's name	по имени шрифта
+	from the font's ForceBold flag	по флагу ForceBold шрифта
+	from the thickness of the letters' stems	по толщине основных штрихов букв
+	from the font descriptor's stem width	по толщине штриха из описания шрифта
+	nothing says otherwise	других сведений нет
+	italic, {how}	курсив, {how}
+	upright	прямое
+	Detected weight {weight}, {how}; slant: {slant}. The size is the font size times the text's scale on the page. New text in the paragraph is set in this style.	Определённая насыщенность {weight}, {how}; начертание: {slant}. Размер — кегль шрифта с учётом масштаба текста на странице. Новый текст абзаца набирается в этом стиле.
+	your choice	ваш выбор
+	same glyph widths	те же ширины символов
+	metric-compatible, included with Sintec.PDF	метрически совместимый, входит в Sintec.PDF
+	metric-compatible substitute	метрически совместимая замена
+	no similar font: you'll be asked	похожего шрифта нет: будет предложен выбор
+	{face} (synthetic bold)	{face} (искусственное полужирное)
+	Missing characters: {face} — {kind}	Недостающие символы: {face} — {kind}
+	Characters the document's copy of the font doesn't have are drawn in this face, sized to the font's capital height and widths; a regular face standing in for a bold font is drawn heavier. Replace font… chooses another; the Format text controls change family, weight and slant.	Символы, которых нет во встроенной в документ копии шрифта, рисуются этим шрифтом, подогнанным под высоту прописных и ширины символов исходного; обычное начертание вместо полужирного рисуется жирнее. «Заменить шрифт…» позволяет выбрать другой; гарнитуру, насыщенность и наклон меняют элементы «Формат текста».
+font weight	Thin	Тонкий
+font weight	Extra Light	Сверхсветлый
+font weight	Light	Светлый
+font weight	Medium	Средний
+font weight	Semibold	Полужирный
+font weight	Bold	Жирный
+font weight	Extra Bold	Сверхжирный
+font weight	Black	Чёрный
+font weight	Italic	Курсив

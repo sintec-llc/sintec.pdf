@@ -149,6 +149,39 @@ pub struct FontFacts {
     /// Advance widths per 1000 em of the probe characters the font has (via ToUnicode and its
     /// widths): a fingerprint for fonts whose names say nothing.
     pub widths: Vec<(char, f32)>,
+    /// The weight class (100–900) found for the font, and what said so (see [`StyleSource`]);
+    /// [`StyleSource::Unknown`] when nothing was looked at (then `bold` and the program decide).
+    pub weight: u16,
+    pub weight_from: StyleSource,
+    /// What says the font is italic or oblique; `None` when it is upright.
+    pub italic_from: Option<StyleSource>,
+    /// Letter heights and stem thickness per em: the descriptor's `/CapHeight` and `/XHeight`, else
+    /// measured on the embedded program's outlines. Used to size a substitute face to the font.
+    pub cap_height: Option<f64>,
+    pub x_height: Option<f64>,
+    pub stem: Option<f64>,
+}
+
+/// Sintec.PDF: where a detected weight or slant comes from, most reliable first.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StyleSource {
+    /// Not detected.
+    #[default]
+    Unknown,
+    /// The embedded program's OS/2 table (weight class, italic bit).
+    Program,
+    /// The font descriptor's `/FontWeight`, `/ItalicAngle` or Italic flag.
+    Descriptor,
+    /// The style suffix of `/BaseFont` or of the program's PostScript name (`-Bold`, `,Italic`).
+    Name,
+    /// The descriptor's ForceBold flag.
+    ForceBold,
+    /// The thickness of the embedded glyphs' stems.
+    Stems,
+    /// The descriptor's `/StemV`.
+    StemV,
+    /// Nothing said otherwise: regular.
+    Default,
 }
 
 impl FontFacts {
@@ -157,12 +190,19 @@ impl FontFacts {
         self.program_family.as_deref().unwrap_or(&self.base_font)
     }
 
-    /// Bold: from the program's weight when it has one, else the PDF's flags and name.
+    /// Bold (weight 600 or more): the detected weight, else the program's, else the PDF's flags
+    /// and name.
     pub fn is_bold(&self) -> bool {
+        if self.weight_from != StyleSource::Unknown {
+            return self.weight >= 600;
+        }
         self.program_weight.map_or(self.bold, |w| w >= 600)
     }
 
     pub fn is_italic(&self) -> bool {
+        if self.weight_from != StyleSource::Unknown {
+            return self.italic_from.is_some();
+        }
         self.program_italic.unwrap_or(self.italic)
     }
 
@@ -212,6 +252,30 @@ pub fn font_facts(doc: &Document, page: usize, resource: &str) -> Result<FontFac
         name.starts_with(b"PCFull")
             && doc.dict(f).is_some_and(|d| pdfcraft_fonts::embedding::family_key(&Metrics::from_dict(doc, &d).base_font) == key)
     });
+    let number = |key: &[u8]| descriptor.as_ref().and_then(|d| d.get(key)).map(|v| doc.resolve(v)).and_then(|v| v.as_f64()).filter(|v| v.is_finite());
+    let shape = program.as_deref().and_then(pdfcraft_fonts::weight::face_metrics);
+    // Per em: the descriptor's heights are in thousandths; nonsense values are ignored.
+    let per_em = |v: Option<f64>| v.map(|v| v / 1000.0).filter(|v| (0.2..1.5).contains(v));
+    let cap_height = per_em(number(b"CapHeight")).or(shape.and_then(|s| s.cap_height));
+    let x_height = per_em(number(b"XHeight")).or(shape.and_then(|s| s.x_height));
+    let (weight, weight_from) = detect_weight(
+        shape.and_then(|s| s.os2_weight),
+        number(b"FontWeight"),
+        [m.base_font.as_str(), names.as_ref().map_or("", |n| n.1.as_str())],
+        flags.is_some_and(|f| f & (1 << 18) != 0),
+        shape.and_then(|s| s.stem_weight()),
+        number(b"StemV").zip(x_height.or(cap_height.map(|c| c * 0.7))).and_then(|(v, x)| pdfcraft_fonts::weight::weight_from_stems(v / 1000.0, x)),
+    );
+    let italic_from = if let Some(s) = style.filter(|_| program.is_some() && shape.is_some_and(|s| s.os2_weight.is_some())) {
+        s.italic.then_some(StyleSource::Program)
+    } else if number(b"ItalicAngle").is_some_and(|a| a.abs() > 0.5) || flags.is_some_and(|f| f & (1 << 6) != 0) {
+        Some(StyleSource::Descriptor)
+    } else if pdfcraft_fonts::weight::italic_from_name(&m.base_font) || names.as_ref().is_some_and(|n| pdfcraft_fonts::weight::italic_from_name(&n.1))
+    {
+        Some(StyleSource::Name)
+    } else {
+        None
+    };
     Ok(FontFacts {
         base_font,
         bold: m.bold,
@@ -227,7 +291,46 @@ pub fn font_facts(doc: &Document, page: usize, resource: &str) -> Result<FontFac
         program_italic: style.map(|s| s.italic),
         program_serif: style.and_then(|s| s.serif),
         widths: probe_widths(&m),
+        weight,
+        weight_from,
+        italic_from,
+        cap_height,
+        x_height,
+        stem: shape.and_then(|s| s.stem),
     })
+}
+
+/// Sintec.PDF: a font's weight class from the most reliable thing that says it: the program's OS/2
+/// weight, the descriptor's `/FontWeight`, a style suffix in `names` (`/BaseFont`, the program's
+/// PostScript name), ForceBold, the embedded stems' thickness, `/StemV`; regular (400) otherwise.
+fn detect_weight(
+    os2: Option<u16>,
+    font_weight: Option<f64>,
+    names: [&str; 2],
+    force_bold: bool,
+    stems: Option<u16>,
+    stem_v: Option<u16>,
+) -> (u16, StyleSource) {
+    let class = |w: f64| (100.0..=1000.0).contains(&w).then(|| w.round() as u16);
+    if let Some(w) = os2.filter(|w| (1..=1000).contains(w)) {
+        return (w, StyleSource::Program);
+    }
+    if let Some(w) = font_weight.and_then(class) {
+        return (w, StyleSource::Descriptor);
+    }
+    if let Some(w) = names.iter().find_map(|n| pdfcraft_fonts::weight::weight_from_name(n)) {
+        return (w, StyleSource::Name);
+    }
+    if force_bold {
+        return (700, StyleSource::ForceBold);
+    }
+    if let Some(w) = stems {
+        return (w, StyleSource::Stems);
+    }
+    if let Some(w) = stem_v {
+        return (w, StyleSource::StemV);
+    }
+    (400, StyleSource::Default)
 }
 
 /// Sintec.PDF: the first character of `text` (spaces and line breaks aside) that page `page`'s
@@ -2853,6 +2956,33 @@ mod font_fixture;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Sintec.PDF (task 027): the weight comes from the most reliable thing that says it.
+    #[test]
+    fn weight_is_detected_from_the_most_reliable_source() {
+        use StyleSource as S;
+        assert_eq!(detect_weight(Some(700), Some(400.0), ["Arial", ""], false, None, None), (700, S::Program));
+        assert_eq!(detect_weight(None, Some(600.0), ["Arial-Bold", ""], false, None, None), (600, S::Descriptor));
+        assert_eq!(detect_weight(None, None, ["ABCDEF+Arial,Bold", ""], false, Some(400), None), (700, S::Name));
+        assert_eq!(detect_weight(None, None, ["CIDFont+F1", "Calibri-Bold"], false, None, None), (700, S::Name));
+        assert_eq!(detect_weight(None, None, ["CIDFont+F1", ""], true, Some(400), None), (700, S::ForceBold));
+        assert_eq!(detect_weight(None, None, ["CIDFont+F1", ""], false, Some(700), Some(400)), (700, S::Stems));
+        assert_eq!(detect_weight(None, None, ["F1", ""], false, None, Some(700)), (700, S::StemV));
+        assert_eq!(detect_weight(None, Some(f64::NAN), ["F1", ""], false, None, None), (400, S::Default));
+        assert_eq!(detect_weight(Some(0), Some(5000.0), ["F1", ""], false, None, None), (400, S::Default));
+    }
+
+    /// Detected facts decide bold and italic once detection ran; before, the program and the PDF's
+    /// flags do, as they did.
+    #[test]
+    fn bold_and_italic_follow_the_detected_style() {
+        let detected = FontFacts { weight: 600, weight_from: StyleSource::Stems, italic_from: Some(StyleSource::Descriptor), ..Default::default() };
+        assert!(detected.is_bold() && detected.is_italic());
+        let light = FontFacts { weight: 300, weight_from: StyleSource::Name, bold: true, ..Default::default() };
+        assert!(!light.is_bold() && !light.is_italic());
+        let legacy = FontFacts { bold: true, italic: true, ..Default::default() };
+        assert!(legacy.is_bold() && legacy.is_italic());
+    }
 
     /// A one-page document with composite font `F1` (`/BaseFont /CIDFont+F1`) embedding `program`.
     fn cid_document(program: Vec<u8>) -> Document {

@@ -267,14 +267,85 @@ fn registered_substitute(metrics: &std::collections::BTreeMap<String, Metrics>, 
         .iter()
         .filter(|(name, m)| name.starts_with("PCFull") && source_encodes(m, s))
         .max_by_key(|(_, m)| {
-            let base = m.base_font.to_ascii_lowercase();
             let same_family = pdfcraft_fonts::embedding::family_key(&m.base_font) == *family;
-            let bold = base.contains("bold") || base.contains("black") || base.contains("heavy");
-            let italic = base.contains("italic") || base.contains("oblique");
+            let bold = pdfcraft_fonts::weight::weight_from_name(&m.base_font).is_some_and(|w| w >= 600);
+            let italic = pdfcraft_fonts::weight::italic_from_name(&m.base_font);
             // The map is ordered by name, so ties resolve the same way every time.
             (same_family, bold == source.bold, italic == source.italic)
         })
         .map(|(name, _)| name.clone())
+}
+
+/// Sintec.PDF: how glyphs of a substitute face are fitted to the source font they stand in for:
+/// a size factor that gives them its cap height, a horizontal scale that gives them its advance
+/// widths, and a stroke (per em) that thickens a regular face standing in for a bold font when no
+/// bold face is loaded.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Fit {
+    size: f64,
+    scale: f64,
+    stroke: f64,
+}
+
+impl Fit {
+    const NONE: Fit = Fit { size: 1.0, scale: 1.0, stroke: 0.0 };
+}
+
+/// The [`Fit`] of the loaded substitute `name` to page `page`'s font `source` (a resource name).
+/// [`Fit::NONE`] when either can't be measured.
+fn substitute_fit(doc: &Document, page: usize, fonts: &Dict, metrics: &std::collections::BTreeMap<String, Metrics>, source: &str, name: &str) -> Fit {
+    let Ok(facts) = font_facts(doc, page, source) else { return Fit::NONE };
+    let shape = fonts
+        .get(name.as_bytes())
+        .and_then(|f| doc.dict(f))
+        .and_then(|f| pdfcraft_fonts::pdf::embedded_sfnt(doc, &f))
+        .and_then(|b| pdfcraft_fonts::weight::face_metrics(&b));
+    let Some(shape) = shape else { return Fit::NONE };
+    // Same letter height: capitals, else lowercase. Within 2 % is the same (no rescaling).
+    let size = match (facts.cap_height.zip(shape.cap_height), facts.x_height.zip(shape.x_height)) {
+        (Some((a, b)), _) | (None, Some((a, b))) if b > 0.0 => (a / b).clamp(0.85, 1.2),
+        _ => 1.0,
+    };
+    let size = if (size - 1.0).abs() < 0.02 { 1.0 } else { size };
+    // Same advance widths: the median ratio over the letters both have.
+    let scale = match (metrics.get(source), metrics.get(name)) {
+        (Some(src), Some(sub)) => {
+            let width = |m: &Metrics, c: char| m.encode(&c.to_string()).map(|b| m.codes(&b).iter().map(|(code, _)| m.width(*code)).sum::<f64>());
+            let mut ratios: Vec<f64> = pdfcraft_fonts::embedding::probe_chars()
+                .filter_map(|c| Some(width(src, c)? / (width(sub, c)? * size)))
+                .filter(|r| r.is_finite() && *r > 0.0)
+                .collect();
+            ratios.sort_by(f64::total_cmp);
+            if ratios.len() >= 4 { ratios.get(ratios.len() / 2).copied().unwrap_or(1.0).clamp(0.85, 1.15) } else { 1.0 }
+        }
+        _ => 1.0,
+    };
+    let scale = if (scale - 1.0).abs() < 0.02 { 1.0 } else { scale };
+    // A regular face for a bold font: stroke the difference in stem thickness.
+    let stroke = if facts.is_bold() && shape.os2_weight.is_some_and(|w| w < 600) {
+        facts.stem.zip(shape.stem).map_or(0.03, |(a, b)| (a - b * size).clamp(0.015, 0.05))
+    } else {
+        0.0
+    };
+    Fit { size, scale, stroke }
+}
+
+/// The stroke colour operator matching fill colour operators `fill` (`rg` → `RG`, `g` → `G`, …).
+fn stroke_like(fill: &[Op]) -> Vec<Op> {
+    fill.iter()
+        .filter_map(|op| {
+            let name = match op.op.as_slice() {
+                b"g" => "G",
+                b"rg" => "RG",
+                b"k" => "K",
+                b"cs" => "CS",
+                b"sc" => "SC",
+                b"scn" => "SCN",
+                _ => return None,
+            };
+            Some(Op::new(name, op.operands.clone()))
+        })
+        .collect()
 }
 
 /// Sintec.PDF: a source font as it really is: its program's family key, weight and slant
@@ -520,6 +591,8 @@ pub(super) fn rewrite_styled_block(
     let mut full_faces: HashMap<String, String> = HashMap::new();
     let mut faces: HashMap<String, SourceFace> = HashMap::new();
     let mut programs: HashMap<String, Option<std::sync::Arc<Vec<u8>>>> = HashMap::new();
+    // Sintec.PDF: per (source font, substitute resource), how the substitute is fitted to it.
+    let mut fits: HashMap<(String, String), Fit> = HashMap::new();
     for (range, index) in styled_spans {
         let source = lines.get(index).unwrap_or(first);
         for ch in draft.get(range).unwrap_or_default().chars() {
@@ -582,7 +655,12 @@ pub(super) fn rewrite_styled_block(
                 registered_substitute(&metrics, face, &s)
             } {
                 // Sintec.PDF: a face loaded for this page (an installed font chosen as the
-                // substitute) shows what the source font can't, before any generated fallback.
+                // substitute) shows what the source font can't, before any generated fallback,
+                // fitted to the source font's letter height, widths and weight.
+                if !fits.contains_key(&(source.font.clone(), name.clone())) && fits.len() < 64 {
+                    let fit = substitute_fit(doc, page, &fonts, &metrics, &source.font, &name);
+                    fits.insert((source.font.clone(), name.clone()), fit);
+                }
                 name
             } else {
                 let family = source_family(&source.base_font);
@@ -625,6 +703,10 @@ pub(super) fn rewrite_styled_block(
     let size_of = |source: &TextLine, index: usize| {
         overrides.get(&index).and_then(|r| r.size).or(style.size).unwrap_or(source.size).max(0.1) / source.origin.k.max(1e-6)
     };
+    let fit_of = |source: &TextLine, name: &str| fits.get(&(source.font.clone(), name.to_string())).copied().unwrap_or(Fit::NONE);
+    // A stroked (emboldened) substitute sets the text rendering mode, which outlives its text
+    // object: then every segment sets its own.
+    let any_stroke = fits.values().any(|f| f.stroke > 0.0);
     // A source run may carry TJ kerning/justification that is absent from its text state.
     // Keep its measured advance when rebuilding the run instead of making it wrap on entry.
     let mut calibration = HashMap::new();
@@ -647,18 +729,21 @@ pub(super) fn rewrite_styled_block(
     let advance = |item: &(char, usize, String)| -> f64 {
         let source = lines.get(item.1).unwrap_or(first);
         let Some(m) = metrics.get(&item.2) else { return 0.0 };
-        source_width(
-            m,
-            &item.0.to_string(),
-            size_of(source, item.1),
-            source_space(doc, &fonts, m),
-            overrides
-                .get(&item.1)
-                .and_then(|r| r.char_spacing)
-                .or(style.char_spacing)
-                .map_or(source.origin.state.char_spacing, |c| c / source.origin.k.max(1e-6)),
-            source.origin.state.word_spacing,
-        ) * overrides.get(&item.1).and_then(|r| r.scale).or(style.scale).map_or(source.origin.state.scale, |s| (s / 100.0).clamp(0.1, 10.0))
+        let fit = fit_of(source, &item.2);
+        fit.scale
+            * source_width(
+                m,
+                &item.0.to_string(),
+                size_of(source, item.1) * fit.size,
+                source_space(doc, &fonts, m),
+                overrides
+                    .get(&item.1)
+                    .and_then(|r| r.char_spacing)
+                    .or(style.char_spacing)
+                    .map_or(source.origin.state.char_spacing, |c| c / source.origin.k.max(1e-6)),
+                source.origin.state.word_spacing,
+            )
+            * overrides.get(&item.1).and_then(|r| r.scale).or(style.scale).map_or(source.origin.state.scale, |s| (s / 100.0).clamp(0.1, 10.0))
             * across(source)
             * calibration.get(&item.1).copied().unwrap_or(1.0)
     };
@@ -908,13 +993,27 @@ pub(super) fn rewrite_styled_block(
                 block_ops.push(Op::new("EMC", vec![]));
                 segment_width = (shaped.advance * size + extra) * state.scale * source.origin.k;
             } else {
+                let fit = fit_of(source, &item.2);
+                state.font = Some((item.2.clone(), size_of(source, item.1) * fit.size));
+                state.scale *= fit.scale;
                 block_ops.push(Op::new("BT", vec![]));
                 block_ops.extend(state.ops());
+                if fit.stroke > 0.0 && state.render_mode == 0 {
+                    // Fill and stroke in the fill colour: the regular face drawn heavier. The
+                    // line width is in user space: the stroke per em times the em there.
+                    let em = size_of(source, item.1) * fit.size * tm[2].hypot(tm[3]);
+                    block_ops.push(Op::new("Tr", vec![Object::Int(2)]));
+                    block_ops.push(Op::new("w", vec![n(fit.stroke * em)]));
+                    block_ops.push(Op::new("j", vec![Object::Int(1)]));
+                    block_ops.extend(stroke_like(&state.fill));
+                } else if any_stroke {
+                    block_ops.push(Op::new("Tr", vec![Object::Int(state.render_mode)]));
+                }
                 block_ops.push(Op::new("Tm", tm.iter().map(|v| n(*v)).collect()));
                 block_ops.extend(source_show(
                     m,
                     &string,
-                    size_of(source, item.1),
+                    size_of(source, item.1) * fit.size,
                     source_space(doc, &fonts, m),
                     state.char_spacing,
                     state.word_spacing,

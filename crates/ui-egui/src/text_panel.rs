@@ -153,14 +153,20 @@ fn paragraph(app: &mut PdfCraftApp, i: usize, ui: &mut egui::Ui, t: &Tokens) {
     let source = app.session.get(doc_id).and_then(|d| {
         let b = d.text_blocks(ed.page).into_iter().nth(ed.block)?;
         let line = b.lines.first().and_then(|li| d.text_lines(ed.page).into_iter().nth(*li))?;
-        d.font_facts(ed.page, &line.font).map(|f| (f, b.bold, b.italic))
+        let lacks = d.first_unencodable(ed.page, &line.font, &ed.text);
+        d.font_facts(ed.page, &line.font).map(|f| (f, b.size, b.color, lacks))
     });
     // The same installed faces the Font substitution dialog uses (a known set when embedders or
     // tests set one), so the panel and the dialog never disagree about what is installed.
     #[cfg(not(target_arch = "wasm32"))]
     let installed = app.installed_faces();
     let mut replace = false;
-    if let Some((facts, bold, italic)) = &source {
+    if let Some((facts, size, color, lacks)) = &source {
+        // Sintec.PDF: what the font really is (its program's family, the detected weight and
+        // slant), the effective size and colour: what new text in the paragraph is set in.
+        let [r, g, b] = color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
+        let look = format!("{} · {size:.1} pt · #{r:02X}{g:02X}{b:02X}", styled(facts));
+        ui.label(egui::RichText::new(look).small()).on_hover_text(detection(facts));
         let carried = if facts.embedded && !facts.subset {
             tl!("embedded")
         } else if facts.embedded {
@@ -170,15 +176,11 @@ fn paragraph(app: &mut PdfCraftApp, i: usize, ui: &mut egui::Ui, t: &Tokens) {
         };
         #[cfg(not(target_arch = "wasm32"))]
         let on_system = installed.as_ref().map(|fonts| {
-            let base_font = facts.base_font.clone();
-            let want = pdfcraft_engine::text_fonts::Wanted { base_font, bold: *bold, italic: *italic, ..Default::default() };
+            let want = pdfcraft_engine::text_fonts::Wanted::from_facts(facts, None, None, "");
             fonts.iter().any(|f| !f.bundled && pdfcraft_engine::text_fonts::family_match(&want, f) == pdfcraft_engine::text_fonts::Match::Exact)
         });
         #[cfg(target_arch = "wasm32")]
-        let on_system: Option<bool> = {
-            let _ = (bold, italic);
-            None
-        };
+        let on_system: Option<bool> = None;
         let system = match on_system {
             Some(true) => format!(", {}", tl!("installed")),
             Some(false) => format!(", {}", tl!("not installed")),
@@ -186,6 +188,17 @@ fn paragraph(app: &mut PdfCraftApp, i: usize, ui: &mut egui::Ui, t: &Tokens) {
         };
         let tip = tl!("The paragraph's font as the PDF names it, how much of it the document carries, and whether this computer has it.");
         ui.label(egui::RichText::new(format!("{} — {carried}{system}", facts.base_font)).small().color(t.text_muted)).on_hover_text(tip);
+        // Which face draws the characters the document's font lacks, and why.
+        #[cfg(not(target_arch = "wasm32"))]
+        if facts.subset || !facts.embedded || lacks.is_some() {
+            let (line, tip) = match app.stand_in(doc_id, facts, &ed.text) {
+                Some(stand) => stand_line(&stand),
+                None if installed.is_none() => (tl!("Finding installed fonts…").to_string(), String::new()),
+                None => (tl!("Missing characters: the document's font is kept").to_string(), String::new()),
+            };
+            let color = if lacks.is_some() { t.text } else { t.text_muted };
+            ui.label(egui::RichText::new(line).small().color(color)).on_hover_text(tip);
+        }
         replace = ui.button(tl!("Replace font…")).clicked();
     }
     if replace {
@@ -210,15 +223,7 @@ fn paragraph(app: &mut PdfCraftApp, i: usize, ui: &mut egui::Ui, t: &Tokens) {
                 ui.label(tl!("No embeddable installed fonts found. Load a font file."));
             }
             // The closest to the paragraph's font first.
-            let want = source.as_ref().map(|(f, bold, italic)| pdfcraft_engine::text_fonts::Wanted {
-                base_font: f.base_font.clone(),
-                bold: *bold,
-                italic: *italic,
-                serif: f.serif,
-                monospace: f.monospace,
-                sample: ed.text.clone(),
-                widths: f.widths.clone(),
-            });
+            let want = source.as_ref().map(|(f, ..)| pdfcraft_engine::text_fonts::Wanted::from_facts(f, None, None, &ed.text));
             let ordered: Vec<&pdfcraft_engine::text_fonts::FontFile> = match &want {
                 Some(w) => pdfcraft_engine::text_fonts::rank(w, fonts),
                 None => fonts.iter().collect(),
@@ -250,4 +255,82 @@ fn paragraph(app: &mut PdfCraftApp, i: usize, ui: &mut egui::Ui, t: &Tokens) {
             view.line_editor = Some(ed);
         }
     }
+}
+
+/// Sintec.PDF: "Calibri Bold Italic": the font's family with its detected weight and slant.
+fn styled(facts: &pdfcraft_engine::FontFacts) -> String {
+    let weight = match facts.weight {
+        0 => None,
+        1..=150 => Some(tl_ctx!("font weight", "Thin")),
+        151..=250 => Some(tl_ctx!("font weight", "Extra Light")),
+        251..=350 => Some(tl_ctx!("font weight", "Light")),
+        351..=450 => None,
+        451..=550 => Some(tl_ctx!("font weight", "Medium")),
+        551..=650 => Some(tl_ctx!("font weight", "Semibold")),
+        651..=750 => Some(tl_ctx!("font weight", "Bold")),
+        751..=850 => Some(tl_ctx!("font weight", "Extra Bold")),
+        _ => Some(tl_ctx!("font weight", "Black")),
+    };
+    let weight = if facts.weight == 0 && facts.is_bold() { Some(tl_ctx!("font weight", "Bold")) } else { weight };
+    // A name without a program says its style itself (`Arial-BoldMT`): show its family part.
+    let mut s = match &facts.program_family {
+        Some(family) => family.clone(),
+        None => facts.base_font.split(['-', ',']).next().unwrap_or(&facts.base_font).to_string(),
+    };
+    for part in [weight, facts.is_italic().then(|| tl_ctx!("font weight", "Italic"))].into_iter().flatten() {
+        s.push(' ');
+        s.push_str(part);
+    }
+    s
+}
+
+/// Sintec.PDF: how the weight and slant were found, for the look's tooltip.
+fn detection(facts: &pdfcraft_engine::FontFacts) -> String {
+    use pdfcraft_engine::StyleSource as S;
+    let how = |source: S| match source {
+        S::Program => tl!("from the embedded font program"),
+        S::Descriptor => tl!("from the PDF's font descriptor"),
+        S::Name => tl!("from the font's name"),
+        S::ForceBold => tl!("from the font's ForceBold flag"),
+        S::Stems => tl!("from the thickness of the letters' stems"),
+        S::StemV => tl!("from the font descriptor's stem width"),
+        S::Default | S::Unknown => tl!("nothing says otherwise"),
+    };
+    let slant = match facts.italic_from {
+        Some(source) => crate::i18n::fmt(tl!("italic, {how}"), &[("how", how(source))]),
+        None => tl!("upright").to_string(),
+    };
+    crate::i18n::fmt(
+        tl!(
+            "Detected weight {weight}, {how}; slant: {slant}. The size is the font size times the text's scale on the page. New text in the paragraph is set in this style."
+        ),
+        &[("weight", &facts.weight.to_string()), ("how", how(facts.weight_from)), ("slant", &slant)],
+    )
+}
+
+/// Sintec.PDF: the status line about the face that draws what the document's font lacks, and its
+/// tooltip.
+#[cfg(not(target_arch = "wasm32"))]
+fn stand_line(stand: &crate::font_substitute::Stand) -> (String, String) {
+    use pdfcraft_engine::text_fonts::Match;
+    let kind = if stand.chosen {
+        tl!("your choice")
+    } else {
+        match stand.quality {
+            Match::Exact => tl!("installed"),
+            Match::Fingerprint => tl!("same glyph widths"),
+            Match::Alias if stand.face.bundled => tl!("metric-compatible, included with Sintec.PDF"),
+            Match::Alias => tl!("metric-compatible substitute"),
+            Match::Other => tl!("no similar font: you'll be asked"),
+        }
+    };
+    let mut face = stand.face.display();
+    if stand.synthetic_bold {
+        face = crate::i18n::fmt(tl!("{face} (synthetic bold)"), &[("face", &face)]);
+    }
+    let line = crate::i18n::fmt(tl!("Missing characters: {face} — {kind}"), &[("face", &face), ("kind", kind)]);
+    let tip = tl!(
+        "Characters the document's copy of the font doesn't have are drawn in this face, sized to the font's capital height and widths; a regular face standing in for a bold font is drawn heavier. Replace font… chooses another; the Format text controls change family, weight and slant."
+    );
+    (line, tip.to_string())
 }

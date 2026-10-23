@@ -157,6 +157,10 @@ pub struct LineEditor {
     multiline: bool,
     source: Option<(pdfcraft_engine::TextBlock, Vec<pdfcraft_engine::TextLine>)>,
     pub(crate) fonts: BTreeMap<String, String>,
+    /// Sintec.PDF: the document version whose installed stand-ins are in [`LineEditor::fonts`]'
+    /// stacks (see `PdfCraftApp::preview_substitutes`), so typed characters a source subset lacks
+    /// show in the face the edit will use.
+    pub(crate) substitutes_for: Option<u64>,
     /// The draft extends outside the source container; its frame follows the live draft bounds.
     pub overflow: bool,
     /// The initial source container width in screen pixels.
@@ -1155,6 +1159,7 @@ fn open_editor(
         multiline: l.rows.len() > 1,
         source: Some((l.clone(), source_lines)),
         fonts: install_source_fonts(ui.ctx(), doc, page),
+        substitutes_for: None,
         overflow: false,
         max_width,
         size: (l.size as f32 * scale).clamp(8.0, 72.0),
@@ -1378,12 +1383,30 @@ pub(crate) fn page_input(
 
 /// One TextEdit lays out all source runs; its caret and selection span the whole region.
 pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::Document, page: usize) -> BTreeMap<String, String> {
+    install_source_fonts_with(ctx, doc, page, &BTreeMap::new())
+}
+
+/// Sintec.PDF: [`install_source_fonts`], with `substitutes` (source resource → an installed face's
+/// program) drawing what each source font lacks, before the interface's own faces.
+pub(crate) fn install_source_fonts_with(
+    ctx: &egui::Context,
+    doc: &pdfcraft_engine::Document,
+    page: usize,
+    substitutes: &BTreeMap<String, Arc<Vec<u8>>>,
+) -> BTreeMap<String, String> {
     let programs = doc.text_editor_fonts(page);
     let mut definitions = ctx.fonts(|f| f.definitions().clone());
     // Only the current editor's document fonts live in the atlas. Never accumulate the
     // programs of previously opened files or add them to the interface's default families.
     definitions.font_data.retain(|name, _| !name.starts_with("pdf-source-"));
     definitions.families.retain(|family, _| !matches!(family, FontFamily::Name(name) if name.starts_with("pdf-source-")));
+    definitions.font_data.retain(|name, _| !name.starts_with("pdf-substitute-"));
+    let mut substitute_names = BTreeMap::new();
+    for (index, (resource, bytes)) in substitutes.iter().enumerate() {
+        let name = format!("pdf-substitute-{index}");
+        definitions.font_data.insert(name.clone(), Arc::new(egui::FontData::from_owned(bytes.to_vec())));
+        substitute_names.insert(resource.clone(), name);
+    }
     let mut families = BTreeMap::new();
     for (index, program) in programs.iter().enumerate() {
         let name = format!("pdf-source-{index}");
@@ -1404,6 +1427,7 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
                 })
                 .filter_map(|p| families.get(&p.resource).cloned()),
         );
+        stack.extend(substitute_names.get(&program.resource).cloned());
         if let Some(fallback) = definitions.families.get(&FontFamily::Proportional) {
             stack.extend(fallback.iter().cloned());
         }
@@ -1739,6 +1763,7 @@ mod tests {
             multiline: block.rows.len() > 1,
             source: None,
             fonts: BTreeMap::new(),
+            substitutes_for: None,
             overflow: false,
             max_width: 400.0,
             size: block.size as f32,

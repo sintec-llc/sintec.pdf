@@ -3360,6 +3360,8 @@ impl eframe::App for PdfCraftApp {
             self.escape_to_main_view();
         }
         self.process_pending_edits();
+        // Sintec.PDF: the open paragraph previews typed characters its fonts lack in their stand-ins.
+        self.preview_substitutes(&ctx);
         // Edit PDF's text editing shows a page: suggest a font of it with no similar installed
         // face, once per font (`FontSubstitutes::suggested`; the analysis is cached per version).
         if self.quick_tool == QuickTool::EditText
