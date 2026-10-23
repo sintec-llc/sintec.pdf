@@ -824,6 +824,8 @@ pub struct PdfCraftApp {
     pub tab_drag: Option<TabDrag>,
     /// What a tab or page drag shows under the pointer, in any window (`drag_ghost`).
     pub(crate) drag_ghost: Option<drag_ghost::Ghost>,
+    /// A torn-off window drew the ghost this frame (so the overlay window is not needed).
+    pub(crate) ghost_painted: bool,
     /// Last frame's and this frame's window layouts (see [`WindowGeometry`]).
     pub(crate) window_geometry: Vec<WindowGeometry>,
     pub(crate) window_geometry_next: Vec<WindowGeometry>,
@@ -1168,6 +1170,7 @@ impl PdfCraftApp {
             saved_main_active: None,
             tab_drag: None,
             drag_ghost: None,
+            ghost_painted: false,
             window_geometry: Vec::new(),
             window_geometry_next: Vec::new(),
             tab_strips_next: Vec::new(),
@@ -3389,7 +3392,8 @@ impl eframe::App for PdfCraftApp {
         }
         self.show_progress(&ctx);
         widgets::toast(self, &ctx);
-        drag_ghost::paint(self, &ctx);
+        let painted = drag_ghost::paint(self, &ctx) | std::mem::take(&mut self.ghost_painted);
+        drag_ghost::show_overlay(self, &ctx, painted);
         if self.tab_drag.is_none() && self.page_transfer.is_none() {
             self.drag_ghost = None;
         }

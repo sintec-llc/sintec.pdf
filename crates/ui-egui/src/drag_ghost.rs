@@ -35,25 +35,85 @@ pub struct Ghost {
     pub preview: bool,
 }
 
-/// Draw the ghost in this window if the pointer is over it. Nothing while no drag is under way.
-pub(crate) fn paint(app: &PdfCraftApp, ctx: &egui::Context) {
-    if app.tab_drag.is_none() && app.page_transfer.is_none() {
-        return;
+/// Whether the overlay window is wanted: a drag is under way, no window drew the ghost this frame,
+/// the platform supports it and the ghost has a usable position.
+pub(crate) fn overlay_wanted(supported: bool, dragging: bool, painted_in_a_window: bool, screen: Pos2) -> bool {
+    supported && dragging && !painted_in_a_window && screen.x.is_finite() && screen.y.is_finite()
+}
+
+/// Where the overlay window goes (its top-left, in screen points) and how big it is: the card, and
+/// the page preview under it with the thumbnail's `aspect` (height / width).
+pub(crate) fn overlay_geometry(g: &Ghost, aspect: f32) -> (Pos2, Vec2) {
+    let aspect = if aspect.is_finite() { aspect.clamp(0.3, 3.0) } else { 1.414 };
+    let height = 30.0 + if g.preview { 4.0 + PREVIEW_WIDTH * aspect + 4.0 } else { 0.0 } + 2.0;
+    (g.screen + OFFSET, vec2(CARD_MAX_WIDTH + 4.0, height))
+}
+
+/// The thumbnail of the ghost's page, if the Pages panel has rendered one.
+fn thumb_of(app: &PdfCraftApp, g: &Ghost) -> Option<(egui::TextureId, Vec2)> {
+    app.views.iter().find(|v| v.id == g.doc).and_then(|v| v.thumb(g.page)).map(|tex| (tex.id(), tex.size_vec2()))
+}
+
+fn contents(ui: &mut egui::Ui, t: &Tokens, g: &Ghost, thumb: Option<(egui::TextureId, Vec2)>) {
+    ui.set_opacity(0.88);
+    card(ui, t, g);
+    if g.preview {
+        ui.add_space(4.0);
+        preview(ui, t, g, thumb);
     }
-    let Some(g) = &app.drag_ghost else { return };
+}
+
+/// Draw the ghost in this window if the pointer is over it. Nothing while no drag is under way.
+/// Returns whether it was drawn.
+pub(crate) fn paint(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
+    if app.tab_drag.is_none() && app.page_transfer.is_none() {
+        return false;
+    }
+    let Some(g) = &app.drag_ghost else { return false };
     let at = g.screen - crate::doc_windows::screen_offset(ctx);
     if !ctx.content_rect().contains(at) {
-        return;
+        return false;
     }
     let t = Tokens::get(ctx);
-    let thumb = app.views.iter().find(|v| v.id == g.doc).and_then(|v| v.thumb(g.page)).map(|tex| (tex.id(), tex.size_vec2()));
-    egui::Area::new(egui::Id::new("drag-ghost")).order(egui::Order::Tooltip).interactable(false).fixed_pos(at + OFFSET).show(ctx, |ui| {
-        ui.set_opacity(0.88);
-        card(ui, &t, g);
-        if g.preview {
-            ui.add_space(4.0);
-            preview(ui, &t, g, thumb);
-        }
+    let thumb = thumb_of(app, g);
+    egui::Area::new(egui::Id::new("drag-ghost"))
+        .order(egui::Order::Tooltip)
+        .interactable(false)
+        .fixed_pos(at + OFFSET)
+        .show(ctx, |ui| contents(ui, &t, g, thumb));
+    ctx.request_repaint();
+    true
+}
+
+/// The ghost outside every window: a click-through, always-on-top window that follows the pointer.
+/// Call once per frame from the root window after every window has had its [`paint`];
+/// `painted_in_a_window` is whether any of them drew the ghost. A frame without this call closes it.
+pub(crate) fn show_overlay(app: &PdfCraftApp, ctx: &egui::Context, painted_in_a_window: bool) {
+    let dragging = app.tab_drag.is_some() || app.page_transfer.is_some();
+    let Some(g) = app.drag_ghost.as_ref() else { return };
+    if ctx.embed_viewports() || !overlay_wanted(cfg!(windows), dragging, painted_in_a_window, g.screen) {
+        return;
+    }
+    let thumb = thumb_of(app, g);
+    let aspect = thumb.map_or(1.414, |(_, s)| if s.x > 0.0 { s.y / s.x } else { 1.414 });
+    let (pos, size) = overlay_geometry(g, aspect);
+    let builder = egui::ViewportBuilder::default()
+        .with_title("Sintec.PDF")
+        .with_decorations(false)
+        .with_transparent(true)
+        .with_always_on_top()
+        .with_taskbar(false)
+        .with_mouse_passthrough(true)
+        .with_active(false)
+        .with_resizable(false)
+        .with_inner_size(size)
+        .with_position(pos);
+    let t = Tokens::get(ctx);
+    ctx.show_viewport_immediate(egui::ViewportId::from_hash_of("sintec-drag-ghost"), builder, |ui, _class| {
+        let ctx = ui.ctx().clone();
+        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
+        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
+        egui::CentralPanel::default().frame(egui::Frame::NONE).show(ui, |ui| contents(ui, &t, g, thumb));
     });
     ctx.request_repaint();
 }
@@ -113,9 +173,40 @@ mod tests {
             ..Default::default()
         };
         let ctx = egui::Context::default();
-        let out = ctx.run_ui(Default::default(), |ui| paint(&app, ui.ctx()));
+        let out = ctx.run_ui(Default::default(), |ui| {
+            assert!(!paint(&app, ui.ctx()));
+        });
         let drawn = !out.shapes.is_empty();
         out.drop_without_applying_deltas();
         assert!(!drawn, "a stale ghost after the drag ended is not drawn");
+    }
+
+    fn ghost(preview: bool) -> Ghost {
+        Ghost { screen: pos2(100.0, 200.0), title: "a.pdf".into(), doc: DocId(1), page: 0, pages: 0, preview }
+    }
+
+    #[test]
+    fn the_overlay_lives_only_while_dragging_outside_every_window() {
+        let p = pos2(5.0, 5.0);
+        assert!(overlay_wanted(true, true, false, p));
+        assert!(!overlay_wanted(true, true, true, p), "a window drew it: not twice");
+        assert!(!overlay_wanted(true, false, false, p), "the drag ended or was lost: closed");
+        assert!(!overlay_wanted(false, true, false, p), "unsupported platform: the ghost stays in windows");
+        assert!(!overlay_wanted(true, true, false, pos2(f32::NAN, 0.0)));
+        assert!(!overlay_wanted(true, true, false, pos2(0.0, f32::INFINITY)));
+    }
+
+    #[test]
+    fn the_overlay_hangs_from_the_pointer_and_sizes_to_its_contents() {
+        let (pos, small) = overlay_geometry(&ghost(false), 1.414);
+        assert_eq!(pos, pos2(100.0, 200.0) + OFFSET);
+        let (_, big) = overlay_geometry(&ghost(true), 1.414);
+        assert!(big.y > small.y);
+        let mut far = ghost(true);
+        far.screen = pos2(-30000.0, 90000.0);
+        let (_, s) = overlay_geometry(&far, f32::NAN);
+        assert!(s.x.is_finite() && s.y.is_finite());
+        let (_, tall) = overlay_geometry(&far, 1e9);
+        assert!(tall.y <= 30.0 + 8.0 + PREVIEW_WIDTH * 3.0 + 2.0 + 0.01);
     }
 }

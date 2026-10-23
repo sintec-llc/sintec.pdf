@@ -256,7 +256,9 @@ impl PdfCraftApp {
                 dialogs::show(self, &ctx);
             }
             self.finish_page_transfer_drop(&ctx);
-            crate::drag_ghost::paint(self, &ctx);
+            if crate::drag_ghost::paint(self, &ctx) {
+                self.ghost_painted = true;
+            }
             crate::widgets::hand_over_clickables(&ctx);
         }
         let shown = self.active.and_then(|i| self.views.get(i)).filter(|v| v.window == id).map(|v| v.id);
