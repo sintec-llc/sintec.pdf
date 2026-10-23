@@ -1,6 +1,8 @@
 //! Compare files in the real shell (egui_kittest): the dialog, the Compare panel, marks and
 //! the report.
 
+#[path = "support/render.rs"]
+mod render_lock;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use pdfcraft_engine::Session;
@@ -80,7 +82,7 @@ fn compare_panel_screenshot() {
         h.run_steps(2);
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
-    h.render().unwrap().save(out).unwrap();
+    render_lock::locked(|| h.render()).unwrap().save(out).unwrap();
 }
 
 #[test]

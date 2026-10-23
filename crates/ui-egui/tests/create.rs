@@ -1,5 +1,7 @@
 //! Create a PDF and Reduce File Size in the real shell.
 
+#[path = "support/render.rs"]
+mod render_lock;
 use pdfcraft_ui_egui::PdfCraftApp;
 
 fn png() -> Vec<u8> {
@@ -25,7 +27,7 @@ fn image_import_dialog_chooses_dpi_and_cancels() {
     });
     h.run_steps(3);
     if let Ok(path) = std::env::var("PDFCRAFT_IMAGE_IMPORT_SHOT") {
-        h.render().unwrap().save(path).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(path).unwrap();
     }
     h.get_by_label("Use 72 DPI (one point per pixel)").click();
     h.run_steps(1);
@@ -184,7 +186,7 @@ fn reduce_file_size_offers_three_levels_with_estimates_and_cancel_writes_nothing
     h.get_by_label("Sizes are approximate (~): the real result is shown after reducing.");
     assert!(h.query_all_by_label_contains("% smaller)").count() >= 2);
     if let Ok(path) = std::env::var("PDFCRAFT_REDUCE_DIALOG_SHOT") {
-        h.render().unwrap().save(path).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(path).unwrap();
     }
     // Choose Strong, then think better of it: nothing is written and the dialog goes.
     h.get_by_label("Strong compression").click();
@@ -380,7 +382,7 @@ fn multiple_files_open_as_one_document_in_the_page_grid() {
     h.get_by_label("Insert a file before page 2");
     if let Ok(path) = std::env::var("PDFCRAFT_CREATE_MULTIPLE_SHOT") {
         h.run_steps(20);
-        h.render().unwrap().save(path).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(path).unwrap();
     }
     // Remove the middle page and save what is left.
     h.get_by_label("Page 2").click();

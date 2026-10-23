@@ -1,6 +1,8 @@
 //! The UI control channel (M3.9): an agent can see the widget tree, click, type, press keys,
 //! run commands, change view options and take screenshots of the running app.
 
+#[path = "support/render.rs"]
+mod render_lock;
 #[path = "support/mod.rs"]
 mod support;
 use std::sync::{Arc, Mutex};
@@ -245,13 +247,13 @@ fn bookmark_titles_can_be_searched_over_control() {
     ok(&mut h, &c, "ui.click", json!({ "label": "Target chapter" }));
     assert_eq!(h.state().views[0].current, 3);
     if let Ok(dir) = std::env::var("PDFCRAFT_BOOKMARK_SHOTS") {
-        h.render().unwrap().save(format!("{dir}/control-filtered-bookmarks.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/control-filtered-bookmarks.png")).unwrap();
     }
     ok(&mut h, &c, "ui.click", json!({ "label": "Clear" }));
     h.get_by_label("Background");
     h.get_by_label("Target chapter");
     if let Ok(dir) = std::env::var("PDFCRAFT_BOOKMARK_SHOTS") {
-        h.render().unwrap().save(format!("{dir}/control-cleared-bookmarks.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/control-cleared-bookmarks.png")).unwrap();
     }
 }
 
@@ -1156,7 +1158,7 @@ fn docking_renders_real_pdf_default_floating_and_redocked() {
                 h.state().docking.validate().unwrap();
                 if let Ok(directory) = std::env::var("CRAFT_UI_DOCKING_DIR") {
                     std::fs::create_dir_all(&directory).unwrap();
-                    h.render().unwrap().save(format!("{directory}/pdf-{width}-{scale}-{state}.png")).unwrap();
+                    render_lock::locked(|| h.render()).unwrap().save(format!("{directory}/pdf-{width}-{scale}-{state}.png")).unwrap();
                 }
             }
         }
@@ -1203,7 +1205,7 @@ fn home_and_combine_suppress_inspector_without_forgetting_layout_or_choice() {
         if let Ok(directory) = std::env::var("CRAFT_UI_DOCKING_DIR") {
             std::fs::create_dir_all(&directory).unwrap();
             let state = if combine { "combine" } else { "home" };
-            h.render().unwrap().save(format!("{directory}/availability-{state}.png")).unwrap();
+            render_lock::locked(|| h.render()).unwrap().save(format!("{directory}/availability-{state}.png")).unwrap();
         }
         assert!(h.state().docking.layout.contains(&Panel::Inspector));
         assert_eq!(h.state().right, Some(pdfcraft_ui_egui::RightPanel::Bookmarks));
@@ -1213,7 +1215,7 @@ fn home_and_combine_suppress_inspector_without_forgetting_layout_or_choice() {
         h.run_steps(4);
         h.get_by_label("This document has no bookmarks.");
         if let Ok(directory) = std::env::var("CRAFT_UI_DOCKING_DIR") {
-            h.render().unwrap().save(format!("{directory}/availability-return.png")).unwrap();
+            render_lock::locked(|| h.render()).unwrap().save(format!("{directory}/availability-return.png")).unwrap();
         }
         assert_eq!(serde_json::to_value(&h.state().docking).unwrap(), before);
     }
@@ -1429,7 +1431,7 @@ fn page_size_shows_while_the_pointer_is_in_the_bottom_left_quadrant() {
     h.run_steps(3);
     assert!(shown(&h), "bottom-left: shown");
     if let Ok(dir) = std::env::var("PDFCRAFT_SHOT_DIR") {
-        h.render().unwrap().save(format!("{dir}/page-size-hint.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/page-size-hint.png")).unwrap();
     }
     h.event(egui::Event::PointerMoved(away));
     h.run_steps(3);

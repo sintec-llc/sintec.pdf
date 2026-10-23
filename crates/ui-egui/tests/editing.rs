@@ -3,6 +3,8 @@
 
 mod support;
 
+#[path = "support/render.rs"]
+mod render_lock;
 use egui::accesskit::Role;
 use egui::{Key, Modifiers};
 use egui_kittest::Harness;
@@ -92,7 +94,7 @@ fn organize_page_range_tracks_thumbnails_and_applies_typed_selection() {
     assert_eq!(h.state().views[0].target_pages(), [0, 11, 15, 16, 17, 88, 91, 92, 96, 98]);
     assert_eq!(h.get_by_role_and_label(Role::TextInput, "Selected pages").value().as_deref(), Some("1, 12, 16-18, 89, 92-93, 97, 99"));
     if let Some(path) = std::env::var_os("PDFCRAFT_ORGANIZE_SNAPSHOT") {
-        h.render().unwrap().save(std::path::Path::new(&path)).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(std::path::Path::new(&path)).unwrap();
     }
     h.get_by_label("Rotate clockwise").click();
     h.run_steps(3);
@@ -2498,7 +2500,7 @@ fn deleting_a_draft_does_not_show_the_original_text_underneath() {
         }
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    let shot = h.render().unwrap();
+    let shot = render_lock::locked(|| h.render()).unwrap();
     if let Ok(path) = std::env::var("PDFCRAFT_TEXT_PREVIEW_SHOT") {
         shot.save(path).unwrap();
     }
@@ -2576,7 +2578,7 @@ fn switching_from_a_narrow_editor_keeps_one_frame_and_a_wide_heading_on_one_line
         .count();
     assert_eq!(frames, 1, "the active block has only the editor frame");
     if let Ok(path) = std::env::var("PDFCRAFT_TEXT_FRAME_SHOT") {
-        h.render().unwrap().save(path).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(path).unwrap();
     }
     assert!(!dirty(&h));
 }
@@ -2724,7 +2726,7 @@ fn text_tool_mixed_style_row_grows_in_the_editor_and_saved_pdf() {
         .expect("the draft is painted");
     assert_eq!(galley.rows.len(), 1, "mixed source runs grow as one visual row");
     if let Ok(path) = std::env::var("PDFCRAFT_MIXED_ROW_SHOT") {
-        h.render().unwrap().save(path).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(path).unwrap();
     }
     h.key_press_modifiers(Modifiers::COMMAND, Key::Enter);
     h.run_steps(3);
@@ -2934,7 +2936,7 @@ fn the_format_panel_floats_left_of_the_rail_while_a_paragraph_is_open() {
     assert!(panel.right() > viewport.right() - 40.0, "the panel is against the right edge: {panel:?} in {viewport:?}");
     // A visual check: PDFCRAFT_ORGANIZE_SNAPSHOT=1 (wgpu) PDFCRAFT_TEXT_PANEL_SNAPSHOT=out.png.
     if let Some(path) = std::env::var_os("PDFCRAFT_TEXT_PANEL_SNAPSHOT") {
-        h.render().unwrap().save(std::path::Path::new(&path)).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(std::path::Path::new(&path)).unwrap();
     }
     // The panel takes no keyboard focus: typing still edits the paragraph.
     h.event(egui::Event::Text("!".into()));
@@ -3307,7 +3309,7 @@ fn paragraph_drag_shot(h: &mut Harness<'static, PdfCraftApp>, name: &str) {
         assert!(!h.state().render_pending(), "the screenshot must show the current document generation");
         let directory = std::path::Path::new(&directory);
         std::fs::create_dir_all(directory).unwrap();
-        h.render().unwrap().save(directory.join(name)).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(directory.join(name)).unwrap();
     }
 }
 
@@ -3912,7 +3914,7 @@ fn one_editor_contains_mixed_styles_and_visual_rows() {
     h.state_mut().views[0].line_editor.as_mut().unwrap().text = original_text;
     h.run_steps(3);
     if let Ok(path) = std::env::var("PDFCRAFT_RICH_FRAME_SHOT") {
-        h.render().unwrap().save(path).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(path).unwrap();
     }
     h.state_mut().views[0].line_editor.as_mut().unwrap().text.clear();
     h.run_steps(3);
@@ -4137,7 +4139,7 @@ fn inline_editor_preserves_source_font_and_previews_live_bounds() {
     h.state_mut().views[0].line_editor.as_mut().unwrap().text.push_str("\nExtra row that does not fit\nAnother row");
     h.run_steps(3);
     if let Ok(path) = std::env::var("PDFCRAFT_OVERFLOW_FRAME_SHOT") {
-        h.render().unwrap().save(path).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(path).unwrap();
     }
     let id = h.state().views[0].id;
     let editor = h.state().views[0].line_editor.as_ref().unwrap();

@@ -1,5 +1,7 @@
 //! Fill & Sign in the real shell (egui_kittest): text, marks, date and a drawn signature.
 
+#[path = "support/render.rs"]
+mod render_lock;
 use egui::{Pos2, pos2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -13,7 +15,7 @@ const FIXTURE: &[u8] = b"%PDF-1.7
 trailer << /Root 1 0 R >>
 %%EOF";
 
-/// Tests that render pixels (`h.render()`) take this first, so only one wgpu device compiles
+/// Tests that render pixels (`render_lock::locked(|| h.render())`) take this first, so only one wgpu device compiles
 /// shaders at a time: WARP's ARM64 pixel-shader JIT crashes when two do (see `tests/view.rs`).
 /// Declared before the harness, so it is released after the device is dropped.
 static GPU: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -92,7 +94,7 @@ fn rendered_ink(h: &mut Harness<'static, PdfCraftApp>, x: f32, y: f32) -> image:
     for _ in 0..50 {
         h.run_steps(2);
         let p = at(h, x, y);
-        let pixels = h.render().unwrap();
+        let pixels = render_lock::locked(|| h.render()).unwrap();
         if pixels.get_pixel(p.x as u32, p.y as u32).0[..3].iter().all(|v| *v < 60) {
             return pixels;
         }
@@ -464,7 +466,7 @@ fn image_signatures_and_initials_can_be_imported_placed_and_remembered() {
         browse_image(&mut h, &path);
         assert!(h.state().signature_draft.image.is_some());
         if !initials && let Ok(dir) = std::env::var("PDFCRAFT_SHOTS") {
-            h.render().unwrap().save(format!("{dir}/image-signature-dialog.png")).unwrap();
+            render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/image-signature-dialog.png")).unwrap();
         }
         assert_eq!(items(&h).len(), usize::from(initials), "importing doesn't edit the PDF");
         h.get_by_label("Apply").click();
@@ -512,7 +514,7 @@ fn image_signatures_and_initials_can_be_imported_placed_and_remembered() {
     h.get_by_label("Use signature");
     h.get_by_label("Use initials");
     if let Ok(dir) = std::env::var("PDFCRAFT_SHOTS") {
-        h.render().unwrap().save(format!("{dir}/image-signatures.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/image-signatures.png")).unwrap();
     }
     std::fs::remove_file(path).unwrap();
 }
@@ -558,7 +560,7 @@ fn image_signature_preview_follows_pointer_at_page_size_with_zoom_and_rotation()
             let margin = shown(&h, 40.0, y, 92.0, 0.0);
             let upper_stroke = shown(&h, 40.0, y, 84.0, 8.0);
             let lower_margin = shown(&h, 40.0, y, 84.0, -8.0);
-            let pixels = h.render().unwrap();
+            let pixels = render_lock::locked(|| h.render()).unwrap();
             assert!(pixels.get_pixel(ink.x as u32, ink.y as u32).0[..3].iter().all(|v| *v < 60), "ink follows the pointer at the placed size");
             assert!(pixels.get_pixel(margin.x as u32, margin.y as u32).0[..3].iter().all(|v| *v > 240), "alpha exposes the page");
             assert!(
@@ -684,7 +686,7 @@ fn image_signature_live_resize_and_move_preserve_background_and_hide_moving_hand
     let end = at(&h, 220.0, 236.0);
     h.hover_at(end);
     h.run_steps(2);
-    let resized = h.render().unwrap();
+    let resized = render_lock::locked(|| h.render()).unwrap();
     assert!(pixel_at(&h, &resized, 200.0, 236.0)[..3].iter().all(|v| *v < 60), "ink resizes before release");
     let assert_green = |v: [u8; 4]| {
         assert!(v[1] > 230 && i32::from(v[1]) > i32::from(v[0]) + 10 && i32::from(v[1]) > i32::from(v[2]) + 10, "page content is preserved: {v:?}")
@@ -708,7 +710,7 @@ fn image_signature_live_resize_and_move_preserve_background_and_hide_moving_hand
     for (x, y) in [(140.0, 180.0), (150.0, 140.0)] {
         h.hover_at(at(&h, x, y));
         h.run_steps(2);
-        let moving = h.render().unwrap();
+        let moving = render_lock::locked(|| h.render()).unwrap();
         assert!(pixel_at(&h, &moving, x, y)[..3].iter().all(|v| *v < 60), "ink follows each pointer position");
         assert_green(pixel_at(&h, &moving, 130.0, 236.0));
         assert_green(pixel_at(&h, &moving, x - 85.0, y));
@@ -734,7 +736,7 @@ fn image_signature_live_resize_and_move_preserve_background_and_hide_moving_hand
     let end = at(&h, 150.0, 140.0);
     h.drop_at(end);
     h.run_steps(2);
-    let released = h.render().unwrap();
+    let released = render_lock::locked(|| h.render()).unwrap();
     assert!(has_blue_near(&released, at(&h, 240.0, 170.0)), "the frame returns immediately on release");
     let doc = h.state().session.get(h.state().views[0].id).unwrap();
     assert_eq!(doc.can_undo(), Some("Move comment"));
@@ -769,7 +771,7 @@ fn image_signature_live_resize_and_move_preserve_background_and_hide_moving_hand
     let doc = h.state().session.get(h.state().views[0].id).unwrap();
     assert_eq!(doc.can_undo(), Some("Add signature"), "Escape cancels without an undo step");
     assert_rect(doc.info.annotations[0].rect, [40.0, 234.0, 136.0, 266.0]);
-    let cancelled = h.render().unwrap();
+    let cancelled = render_lock::locked(|| h.render()).unwrap();
     assert_green(pixel_at(&h, &cancelled, 150.0, 180.0));
     std::fs::remove_file(path).unwrap();
 }
@@ -807,7 +809,7 @@ fn embedded_image_signature_live_gestures_follow_document_and_view_rotation() {
         h.hover_at(end);
         let [x, y] = u(160.0, 242.0);
         rendered_ink(&mut h, x, y);
-        let pixels = h.render().unwrap();
+        let pixels = render_lock::locked(|| h.render()).unwrap();
         let [x, y] = u(58.0, 254.0);
         assert!(pixel_at(&h, &pixels, x, y)[..3].iter().all(|v| *v < 60), "asymmetric ink stays upright during resize");
         let [x, y] = u(58.0, 230.0);
@@ -826,7 +828,7 @@ fn embedded_image_signature_live_gestures_follow_document_and_view_rotation() {
         let target = at(&h, x, y);
         h.hover_at(target);
         h.run_steps(2);
-        let pixels = h.render().unwrap();
+        let pixels = render_lock::locked(|| h.render()).unwrap();
         assert!(pixel_at(&h, &pixels, x, y)[..3].iter().all(|v| *v < 60), "image moves before release");
         let [x, y] = u(160.0, 242.0);
         assert!(pixel_at(&h, &pixels, x, y)[..3].iter().all(|v| *v > 240), "old ink is removed during movement");
@@ -835,7 +837,7 @@ fn embedded_image_signature_live_gestures_follow_document_and_view_rotation() {
         assert!(!has_blue_near(&pixels, corner));
         h.drop_at(target);
         h.run_steps(2);
-        assert!(has_blue_near(&h.render().unwrap(), corner));
+        assert!(has_blue_near(&render_lock::locked(|| h.render()).unwrap(), corner));
     }
     std::fs::remove_file(path).unwrap();
 }
@@ -1356,7 +1358,7 @@ fn scanned_signatures_are_framed_cleaned_adjusted_placed_and_remembered() {
     assert!(frame.x > 60 && frame.x < 190 && frame.x + frame.width > 630, "the frame holds both words, not the table: {frame:?}");
     assert_clean_signature(h.state().signature_draft.image.as_ref().expect("a cleaned signature"));
     if let Ok(dir) = std::env::var("PDFCRAFT_SHOTS") {
-        h.render().unwrap().save(format!("{dir}/scan-signature-dialog.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/scan-signature-dialog.png")).unwrap();
     }
 
     // Drawing a frame around the first word only leaves the second out.

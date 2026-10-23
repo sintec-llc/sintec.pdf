@@ -1,6 +1,8 @@
 //! Edit a PDF ▸ Add content in the real shell (egui_kittest): type text onto a page, move it,
 //! restyle it from the panel, add an image, delete with the keyboard.
 
+#[path = "support/render.rs"]
+mod render_lock;
 #[path = "support/mod.rs"]
 mod support;
 use egui::{Pos2, pos2};
@@ -96,7 +98,7 @@ fn text_tool_drafts_grow_for_latin_and_arabic() {
         assert!(draft.rect[2] <= 300.0 && draft.rect[1] < before[1], "the frame stays on the page and grows vertically");
         if let Ok(dir) = std::env::var("PDFCRAFT_SHOTS") {
             let language = if text.starts_with("Wide") { "latin" } else { "arabic" };
-            h.render().unwrap().save(format!("{dir}/growing-{language}-text.png")).unwrap();
+            render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/growing-{language}-text.png")).unwrap();
         }
         h.get_by_label("Done adding text").click();
         h.run_steps(3);
@@ -169,7 +171,7 @@ fn text_tool_deleting_a_draft_hides_the_old_added_glyphs_and_cancel_restores_the
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     assert!(h.state().views[0].content.draft.as_ref().unwrap().text.is_empty());
-    let shot = h.render().unwrap();
+    let shot = render_lock::locked(|| h.render()).unwrap();
     for x in 105..140 {
         for y in 185..197 {
             let pixel = at(&h, x as f32, y as f32);
@@ -292,7 +294,7 @@ fn text_the_standard_fonts_cant_draw_stays_in_the_editor() {
     h.run_steps(2);
     h.get_by_label_contains("can't draw “世” (U+4E16)");
     if let Ok(dir) = std::env::var("PDFCRAFT_SHOTS") {
-        h.render().unwrap().save(format!("{dir}/undrawable-text.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/undrawable-text.png")).unwrap();
     }
     h.get_by_label("Done adding text").click();
     h.run_steps(3);
@@ -491,7 +493,7 @@ fn probe(r: egui::Rect) -> egui::Rect {
 
 /// Ink in the probes of the text's first and dragged places.
 fn ink_at(h: &mut Harness<'static, PdfCraftApp>, from: egui::Rect, to: egui::Rect) -> (usize, usize) {
-    let pixels = h.render().unwrap();
+    let pixels = render_lock::locked(|| h.render()).unwrap();
     (ink(&pixels, probe(from)), ink(&pixels, probe(to)))
 }
 
@@ -511,7 +513,7 @@ fn drag_added_text(h: &mut Harness<'static, PdfCraftApp>) -> ([f64; 4], egui::Re
     let mut shown = 0;
     for _ in 0..100 {
         h.run_steps(2);
-        shown = ink(&h.render().unwrap(), probe(from));
+        shown = ink(&render_lock::locked(|| h.render()).unwrap(), probe(from));
         if shown > 20 {
             break;
         }
@@ -544,7 +546,7 @@ fn dragged_text_follows_the_pointer_before_release() {
     let mut h = harness();
     let (rect, from, to, end) = drag_added_text(&mut h);
     if let Ok(dir) = std::env::var("PDFCRAFT_SHOTS") {
-        h.render().unwrap().save(format!("{dir}/added-text-drag.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/added-text-drag.png")).unwrap();
     }
     let (old, new) = ink_at(&mut h, from, to);
     assert!(new > 20, "the text is drawn where the box was dragged ({new} dark pixels)");
