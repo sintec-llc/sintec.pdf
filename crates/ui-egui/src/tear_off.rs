@@ -19,7 +19,9 @@
 //! in a window of this process instead ([`PdfCraftApp::tear_off_tab`]).
 //!
 //! A tab dropped on the strip of a window of another process goes the same way, file or recovery
-//! entry, through [`crate::tab_transfer`] ([`PdfCraftApp::send_tab`]).
+//! entry, through [`crate::tab_transfer`] ([`PdfCraftApp::send_tab`]). When it was the last tab
+//! of its window, that window closes (the process quits); when the other process doesn't take
+//! it, the tab stays and so does the window.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -242,14 +244,24 @@ impl PdfCraftApp {
     }
 
     /// Tab `index` now lives in another process: close it here without asking (its unsaved work
-    /// went along) and without offering to reopen it, which would open it twice.
+    /// went along) and without offering to reopen it, which would open it twice. When it was its
+    /// window's last tab, that window closes too ([`Self::close_emptied_window`]).
     fn close_handed_off(&mut self, index: usize) {
+        let window = self.views.get(index).map(|v| v.window);
         #[cfg(not(target_arch = "wasm32"))]
         let closed_before = self.closed_tabs.len();
         self.close_tab(index);
         #[cfg(not(target_arch = "wasm32"))]
         if self.closed_tabs.len() > closed_before {
             self.closed_tabs.pop();
+        }
+        if let Some(window) = window {
+            self.close_emptied_window(window, None);
+        }
+        // The pointer is over the other window now, so no input wakes this one: ask for the
+        // frame that closes it (#031: it sat on the start page until the pointer came back).
+        if let Some(ctx) = &self.ctx {
+            ctx.request_repaint();
         }
     }
 
@@ -274,15 +286,26 @@ impl PdfCraftApp {
         self.recovery = Some(store);
     }
 
-    /// A torn-off window ends with its last document: closing it, or sending it to another
-    /// window, quits this process rather than leaving an empty start page behind.
+    /// A window ends with its last document rather than leaving an empty start page behind: a
+    /// torn-off tab's window when it is closed or moved to another window, and any window when
+    /// it was moved to another window ([`Self::close_emptied_window`]). Called at the start of
+    /// each frame and again at its end, so a tab moved away this frame closes the window in the
+    /// same frame: the pointer is over the other window, and no input may come to ask for another.
+    /// Nothing quits while a prompt, a dialog, the Combine files tab or a file being opened is
+    /// still there.
     pub(crate) fn close_when_last_document_gone(&mut self, ctx: &egui::Context) {
-        if !self.quit_when_empty {
-            return;
-        }
         if !self.views.is_empty() {
             self.had_document = true;
-        } else if self.had_document && self.close_request.is_none() && self.password_prompt.is_none() && self.dialog.is_none() {
+            // A document arrived since: the window has a tab again and stays.
+            self.moved_last_away = false;
+            return;
+        }
+        let ends = self.moved_last_away || (self.quit_when_empty && self.had_document);
+        #[cfg(not(target_arch = "wasm32"))]
+        let opening = !self.pending_opens.is_empty();
+        #[cfg(target_arch = "wasm32")]
+        let opening = false;
+        if ends && !opening && !self.combine_showing() && self.close_request.is_none() && self.password_prompt.is_none() && self.dialog.is_none() {
             self.request_quit(ctx);
         }
     }
@@ -373,6 +396,50 @@ mod tests {
         app.close_tab(0);
         app.close_when_last_document_gone(&ctx);
         assert!(app.allow_quit, "the last document is closed");
+    }
+
+    #[test]
+    fn a_window_whose_last_tab_moved_away_closes_unless_something_holds_it() {
+        let ctx = egui::Context::default();
+        let mut app = PdfCraftApp::new();
+        let bytes = app.session.create_blank(612.0, 792.0, 1).unwrap();
+        app.open_bytes("a.pdf", None, bytes.as_ref().clone()).unwrap();
+        // Moved to a window of another process: this one, emptied, closes.
+        app.close_handed_off(0);
+        assert!(app.views.is_empty() && app.moved_last_away);
+        // Not while a dialog is open over it.
+        app.dialog = Some(crate::Dialog::Shortcuts);
+        app.close_when_last_document_gone(&ctx);
+        assert!(!app.allow_quit, "a dialog holds the window");
+        app.dialog = None;
+        // A document arriving meanwhile keeps it.
+        app.open_bytes("b.pdf", None, bytes.as_ref().clone()).unwrap();
+        app.close_when_last_document_gone(&ctx);
+        assert!(!app.moved_last_away && !app.allow_quit, "it has a tab again");
+        app.close_tab(0);
+        app.close_when_last_document_gone(&ctx);
+        assert!(!app.allow_quit, "closing the last tab leaves the main window on the start page");
+        // Moved away again: now it closes.
+        app.open_bytes("c.pdf", None, bytes.as_ref().clone()).unwrap();
+        app.close_handed_off(0);
+        app.close_when_last_document_gone(&ctx);
+        assert!(app.allow_quit);
+    }
+
+    #[test]
+    fn a_handed_off_tab_that_was_not_the_last_leaves_the_window_open() {
+        let ctx = egui::Context::default();
+        let mut app = PdfCraftApp::new();
+        let bytes = app.session.create_blank(612.0, 792.0, 1).unwrap();
+        app.open_bytes("a.pdf", None, bytes.as_ref().clone()).unwrap();
+        app.open_bytes("b.pdf", None, bytes.as_ref().clone()).unwrap();
+        app.close_handed_off(1);
+        app.close_when_last_document_gone(&ctx);
+        assert!(!app.moved_last_away && !app.allow_quit);
+        assert_eq!(app.views.len(), 1);
+        // An index past the end changes nothing.
+        app.close_handed_off(7);
+        assert!(!app.moved_last_away && app.views.len() == 1);
     }
 
     #[test]

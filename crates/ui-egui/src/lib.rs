@@ -857,6 +857,10 @@ pub struct PdfCraftApp {
     /// window (and its process) closes too instead of sitting on the start page.
     pub quit_when_empty: bool,
     pub(crate) had_document: bool,
+    /// The main window's last tab went to a window of another process: this window closes (the
+    /// process quits) as soon as nothing holds it, instead of showing the start page
+    /// ([`Self::close_emptied_window`]).
+    pub(crate) moved_last_away: bool,
     /// Entries left by a previous session, offered in the Recovery dialog.
     pub recoverable: Vec<RecoveryMeta>,
     recovery_keys: std::collections::HashMap<DocId, String>,
@@ -1187,6 +1191,7 @@ impl PdfCraftApp {
             recovery: None,
             quit_when_empty: false,
             had_document: false,
+            moved_last_away: false,
             recoverable: Vec::new(),
             recovery_keys: Default::default(),
             last_autosave: 0.0,
@@ -3398,6 +3403,9 @@ impl eframe::App for PdfCraftApp {
             self.drag_ghost = None;
         }
         widgets::hand_over_clickables(&ctx);
+        // A tab moved away this frame may have emptied this window: it closes now, as nothing
+        // else may ask for another frame (the pointer is over the window that took it).
+        self.close_when_last_document_gone(&ctx);
         self.finish_render_frame(&ctx);
     }
 }

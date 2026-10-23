@@ -117,6 +117,49 @@ fn a_window_emptied_by_its_last_tab_leaving_closes() {
     assert_eq!(h.state().active.and_then(|i| h.state().views.get(i)).map(|v| v.id), Some(c), "it shows in the main window");
 }
 
+/// The same-process path a drop onto another window's strip takes (`drop_tab_on_window`): the
+/// window a tab left closes when that was its last tab, and keeps its other tabs otherwise.
+#[test]
+fn a_tab_dropped_on_another_window_of_this_process_closes_the_window_it_emptied() {
+    let mut h = three_documents();
+    let (a, b, c) = (id_of(h.state(), "a.pdf"), id_of(h.state(), "b.pdf"), id_of(h.state(), "c.pdf"));
+    h.state_mut().tear_off_tab(b, None);
+    h.state_mut().tear_off_tab(c, None);
+    let (wb, wc) = (h.state().doc_windows[0].id, h.state().doc_windows[1].id);
+    // c.pdf's window loses its only tab to b.pdf's: it closes.
+    h.state_mut().drop_tab_on_window(c, wb, None);
+    assert_eq!(names(h.state(), wb), ["b.pdf", "c.pdf"]);
+    assert!(h.state().doc_windows.iter().all(|w| w.id != wc), "the emptied window closed");
+    // b.pdf leaves for the main window, c.pdf stays: that window keeps it.
+    h.state_mut().drop_tab_on_window(b, 0, Some(a));
+    assert_eq!(names(h.state(), 0), ["b.pdf", "a.pdf"]);
+    assert_eq!(h.state().doc_windows.iter().map(|w| w.id).collect::<Vec<_>>(), [wb], "it still has c.pdf");
+    assert_eq!(h.state().doc_windows[0].active, Some(c));
+    h.run_steps(3);
+    assert!(!closes(&h), "nothing quits");
+    assert_eq!(names(h.state(), wb), ["c.pdf"]);
+}
+
+/// The main window can't close without the windows of its process: emptied by a drop onto one
+/// of them, it takes that window over (its tabs, the dropped one shown) and that window goes.
+#[test]
+fn the_main_window_emptied_into_another_window_of_this_process_takes_its_place() {
+    let mut h = three_documents();
+    let (a, b, c) = (id_of(h.state(), "a.pdf"), id_of(h.state(), "b.pdf"), id_of(h.state(), "c.pdf"));
+    h.state_mut().tear_off_tab(b, None);
+    h.state_mut().tear_off_tab(c, None);
+    let (wb, wc) = (h.state().doc_windows[0].id, h.state().doc_windows[1].id);
+    // a.pdf, the main window's last tab, onto c.pdf's window (not the first one), before c.pdf.
+    h.state_mut().drop_tab_on_window(a, wc, Some(c));
+    assert_eq!(names(h.state(), 0), ["a.pdf", "c.pdf"], "the main window holds that window's tabs");
+    assert_eq!(h.state().active.and_then(|i| h.state().views.get(i)).map(|v| v.id), Some(a), "the dropped tab shows");
+    assert_eq!(h.state().doc_windows.iter().map(|w| w.id).collect::<Vec<_>>(), [wb], "that window went, the other stays");
+    assert_eq!(names(h.state(), wb), ["b.pdf"]);
+    h.run_steps(3);
+    assert!(!closes(&h), "the process doesn't quit: its windows still show documents");
+    assert_eq!(names(h.state(), 0), ["a.pdf", "c.pdf"]);
+}
+
 #[test]
 fn pages_dropped_onto_a_document_in_another_window() {
     let mut h = three_documents();
@@ -475,6 +518,146 @@ fn without_another_process_a_tab_dropped_beside_the_window_stays() {
     assert_eq!(names(h.state(), 0), ["a.pdf", "b.pdf", "c.pdf"]);
     assert!(h.state().toast.is_none());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ---- The window a tab left closes when that was its last tab (task 031) ------------------------
+
+/// Whether the root window asked to close in the last frame.
+fn closes(h: &Harness<'static, PdfCraftApp>) -> bool {
+    h.output().viewport_output.values().any(|v| v.commands.contains(&egui::ViewportCommand::Close))
+}
+
+/// Like `drag`, but stops at the frame that takes the release: what follows is up to the app.
+fn drag_and_release(h: &mut Harness<'static, PdfCraftApp>, from: egui::Pos2, to: egui::Pos2) {
+    h.hover_at(from);
+    h.run_steps(2);
+    h.drag_at(from);
+    h.run_steps(2);
+    for k in 1..=10 {
+        h.hover_at(from + (to - from) * (k as f32 / 10.0));
+        h.run_steps(1);
+    }
+    h.drop_at(to);
+    h.step();
+}
+
+/// After a drop over another window, as the platform's event loop runs this one: the pointer is
+/// over the other window, so no input arrives here and a frame runs only when the app asks for
+/// one. Whether the window asked to close in any of them (the drop's frame included).
+fn closes_without_input(h: &mut Harness<'static, PdfCraftApp>) -> bool {
+    let mut closed = closes(h);
+    for _ in 0..30 {
+        let asked = h.output().viewport_output.get(&egui::ViewportId::ROOT).is_some_and(|v| v.repaint_delay == std::time::Duration::ZERO);
+        if !asked {
+            break;
+        }
+        h.step();
+        closed |= closes(h);
+    }
+    closed
+}
+
+/// A window of a process of its own (`torn_off`: a torn-off tab's) showing `docs`, with a
+/// recovery folder, publishing its strip in `dir`.
+fn process_with(dir: &std::path::Path, torn_off: bool, docs: &[&str]) -> Harness<'static, PdfCraftApp> {
+    let docs: Vec<String> = docs.iter().map(|s| (*s).to_owned()).collect();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.quit_when_empty = torn_off;
+        for name in &docs {
+            let bytes = app.session.create_blank(612.0, 792.0, 1).unwrap();
+            app.open_bytes(name, None, bytes.as_ref().clone()).unwrap();
+        }
+        app
+    });
+    h.state_mut().enable_recovery_without_offer(pdfcraft_ui_egui::RecoveryStore::new(dir.join("Recovery")));
+    h.state_mut().tab_peer = Some(Peer::start_as(Registry::new(dir.join("Windows")), u32::MAX - 5, || {}).unwrap());
+    h.run_steps(4);
+    h
+}
+
+#[test]
+fn a_torn_off_window_whose_last_tab_moved_to_another_process_quits() {
+    let dir = scratch("last-torn");
+    let other = OtherProcess::start(&dir.join("Windows"), beside(), Ok(()));
+    let mut h = process_with(&dir, true, &["only.pdf"]);
+    let tab = h.get_by_label("only.pdf").rect().center();
+    drag_and_release(&mut h, tab, egui::pos2(1600.0, 30.0));
+    assert_eq!(other.taken().len(), 1, "handed over");
+    assert!(h.state().views.is_empty(), "it left this window");
+    assert!(closes_without_input(&mut h), "and the window it left quits on its own, not waiting on the start page for input");
+    drop(other);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_main_window_whose_last_tab_moved_to_another_process_closes() {
+    let dir = scratch("last-main");
+    let other = OtherProcess::start(&dir.join("Windows"), beside(), Ok(()));
+    let mut h = process_with(&dir, false, &["only.pdf"]);
+    let tab = h.get_by_label("only.pdf").rect().center();
+    drag_and_release(&mut h, tab, egui::pos2(1600.0, 30.0));
+    assert_eq!(other.taken().len(), 1, "handed over");
+    assert!(h.state().views.is_empty());
+    assert!(closes_without_input(&mut h), "a window emptied by a move closes: the tab lives in the other window now");
+    drop(other);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_window_that_keeps_tabs_after_one_moved_to_another_process_stays() {
+    for torn_off in [true, false] {
+        let dir = scratch(if torn_off { "keeps-torn" } else { "keeps-main" });
+        let other = OtherProcess::start(&dir.join("Windows"), beside(), Ok(()));
+        let mut h = process_with(&dir, torn_off, &["a.pdf", "b.pdf"]);
+        let tab = h.get_by_label("b.pdf").rect().center();
+        drag_and_release(&mut h, tab, egui::pos2(1600.0, 30.0));
+        assert_eq!(other.taken().len(), 1);
+        assert_eq!(names(h.state(), 0), ["a.pdf"], "torn off: {torn_off}");
+        assert!(!closes_without_input(&mut h), "the other tab keeps the window (torn off: {torn_off})");
+        h.run_steps(4);
+        assert!(!closes(&h));
+        drop(other);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[test]
+fn a_last_tab_the_other_process_refuses_comes_back_and_the_window_stays() {
+    for torn_off in [true, false] {
+        let dir = scratch(if torn_off { "refused-torn" } else { "refused-main" });
+        let other = OtherProcess::start(&dir.join("Windows"), beside(), Err(tab_transfer::reason::BUSY.to_owned()));
+        let mut h = process_with(&dir, torn_off, &["only.pdf"]);
+        let tab = h.get_by_label("only.pdf").rect().center();
+        drag_and_release(&mut h, tab, egui::pos2(1600.0, 30.0));
+        assert_eq!(other.taken().len(), 1);
+        assert_eq!(names(h.state(), 0), ["only.pdf"], "the tab stays (torn off: {torn_off})");
+        assert!(h.state().toast.is_some(), "with a notice");
+        assert!(!closes_without_input(&mut h));
+        h.run_steps(4);
+        assert!(!closes(&h), "the window stays (torn off: {torn_off})");
+        drop(other);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[test]
+fn a_last_tab_whose_target_process_has_gone_stays_and_the_window_too() {
+    for torn_off in [true, false] {
+        let dir = scratch(if torn_off { "gone-torn" } else { "gone-main" });
+        let mut h = process_with(&dir, torn_off, &["only.pdf"]);
+        let gone = Peer::start_as(Registry::new(dir.join("unused")), 1, || {}).unwrap();
+        let target = Target { pid: 1, port: gone.port(), token: gone.token().to_owned(), window: 0, before: 0 };
+        drop(gone);
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let doc = id_of(h.state(), "only.pdf");
+        h.state_mut().send_tab(doc, target);
+        assert_eq!(names(h.state(), 0), ["only.pdf"], "the tab stays (torn off: {torn_off})");
+        h.run_steps(4);
+        assert!(!closes(&h), "the window stays (torn off: {torn_off})");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[test]

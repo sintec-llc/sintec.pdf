@@ -1,7 +1,8 @@
 //! Sintec.PDF: document tabs in windows of their own.
 //!
 //! A tab dragged out of the tab strip opens in a new window; dragged onto another window's strip
-//! it joins that window; dragged along its own strip it moves there. Every window shows the same
+//! it joins that window, and the window it left closes if that was its last tab
+//! ([`PdfCraftApp::drop_tab_on_window`]); dragged along its own strip it moves there. Every window shows the same
 //! tools and panels for its own tabs, and pages drag between documents in any windows.
 //!
 //! The desktop app opens a torn-off tab in a process of its own ([`crate::tear_off`]); these
@@ -105,6 +106,63 @@ impl PdfCraftApp {
                 (true, None) if old_window != 0 => self.doc_windows.retain(|w| w.id != old_window),
                 _ => {}
             }
+        }
+    }
+
+    /// Tab `doc` was let go over the tab strip of window `window` of this process, before tab
+    /// `before`: it moves there ([`Self::move_tab`]), and the window it left closes when that was
+    /// its last tab ([`Self::close_emptied_window`]).
+    pub fn drop_tab_on_window(&mut self, doc: DocId, window: u64, before: Option<DocId>) {
+        let Some(from) = self.view_index(doc).and_then(|i| self.views.get(i)).map(|v| v.window) else { return };
+        self.move_tab(doc, window, before);
+        if from != window {
+            self.close_emptied_window(from, Some(window));
+        }
+    }
+
+    /// Window `window` may just have lost its last tab to another window: then it closes rather
+    /// than showing the start page. A torn-off window of this process just goes. The main window
+    /// can't close while windows of this process remain (they'd go with it), so it takes one of
+    /// them over instead, `heir` when that is one: that window's tabs, place and size, and that
+    /// window goes. With none left, this process quits
+    /// ([`Self::close_when_last_document_gone`]). A window that still has tabs keeps them.
+    pub(crate) fn close_emptied_window(&mut self, window: u64, heir: Option<u64>) {
+        if self.window_tab_count(window) > 0 {
+            return;
+        }
+        if window != 0 {
+            self.doc_windows.retain(|w| w.id != window);
+            return;
+        }
+        let heir = heir.filter(|&h| h != 0 && self.doc_windows.iter().any(|w| w.id == h)).or_else(|| self.doc_windows.first().map(|w| w.id));
+        match heir {
+            Some(id) => self.take_over_doc_window(id),
+            None => self.moved_last_away = true,
+        }
+    }
+
+    /// The main window, emptied, takes over torn-off window `id`: its tabs (in their order, the
+    /// same one shown) and, where the platform says, its place and size on the screen.
+    fn take_over_doc_window(&mut self, id: u64) {
+        let Some(at) = self.doc_windows.iter().position(|w| w.id == id) else { return };
+        let gone = self.doc_windows.remove(at);
+        for v in self.views.iter_mut().filter(|v| v.window == id) {
+            v.window = 0;
+        }
+        if let Some(doc) = gone.active.filter(|&d| self.view_index(d).is_some()).or_else(|| self.views.iter().find(|v| v.window == 0).map(|v| v.id)) {
+            self.set_window_active(0, doc);
+        }
+        if let Some(ctx) = &self.ctx {
+            let viewport = egui::ViewportId::from_hash_of(("sintec-doc-window", id));
+            let (outer, inner) = ctx.input_for(viewport, |i| (i.viewport().outer_rect, i.viewport().inner_rect));
+            if let Some(outer) = outer.filter(|r| r.min.x.is_finite() && r.min.y.is_finite()) {
+                ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::OuterPosition(outer.min));
+            }
+            if let Some(inner) = inner.filter(|r| r.width().is_finite() && r.height().is_finite() && r.width() > 0.0 && r.height() > 0.0) {
+                ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::InnerSize(inner.size()));
+            }
+            ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Focus);
+            ctx.request_repaint();
         }
     }
 

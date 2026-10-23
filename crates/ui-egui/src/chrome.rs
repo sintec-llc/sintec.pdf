@@ -439,7 +439,7 @@ fn tab_drag(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, strip: Rect, t
         }
         TabDrop::ToWindow(g) => {
             let before = crate::doc_windows::tab_gap(&g.tabs, screen.x);
-            app.move_tab(drag.doc, g.window, before);
+            app.drop_tab_on_window(drag.doc, g.window, before);
         }
         #[cfg(not(target_arch = "wasm32"))]
         TabDrop::ToProcess(target) => app.send_tab(drag.doc, target),
