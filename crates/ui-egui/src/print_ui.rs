@@ -148,7 +148,7 @@ impl Default for PrintDraft {
             poster_scale: 200.0,
             overlap: 18.0,
             cut_marks: true,
-            orientation: Orientation::Portrait,
+            orientation: Orientation::Auto,
             content: Content::DocumentAndMarkups,
             as_image: false,
             dpi: 300.0,

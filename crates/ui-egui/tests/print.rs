@@ -425,16 +425,23 @@ fn a_printer_without_two_sided_printing_points_to_its_properties() {
 fn print_defaults_pick_no_paper_and_do_not_rotate() {
     use pdfcraft_engine::print::Orientation;
     let d = PdfCraftApp::new().print_draft;
-    assert_eq!(d.orientation, Orientation::Portrait, "no automatic landscape sheet");
+    assert_eq!(d.orientation, Orientation::Auto, "orientation defaults to Automatic");
     assert!(!d.auto_rotate);
-    // A landscape architectural page: the sheet stays A4 portrait after open_print.
+    // A landscape architectural page: paper stays A4, the sheet turns landscape automatically.
     let mut app = arch_app(false);
     app.open_print();
-    assert_eq!(app.print_draft.orientation, Orientation::Portrait);
+    assert_eq!(app.print_draft.orientation, Orientation::Auto);
     let s = app.print_draft.settings(1, &[]).unwrap();
     assert_eq!(s.paper, (595.28, 841.89));
     let sheets = pdfcraft_engine::print::layout(&[(2592.0, 1728.0)], &s).unwrap();
-    assert_eq!(sheets[0].size.0.min(sheets[0].size.1), sheets[0].size.0, "portrait sheet");
+    assert!(sheets[0].size.0 > sheets[0].size.1, "landscape page prints on a landscape sheet");
+    // An explicit choice sticks.
+    app.print_draft.orientation = Orientation::Portrait;
+    let s = app.print_draft.settings(1, &[]).unwrap();
+    let sheets = pdfcraft_engine::print::layout(&[(2592.0, 1728.0)], &s).unwrap();
+    assert!(sheets[0].size.0 < sheets[0].size.1, "explicit portrait");
+    app.open_print();
+    assert_eq!(app.print_draft.orientation, Orientation::Portrait, "reopening keeps the choice");
 }
 
 #[test]
