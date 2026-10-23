@@ -905,6 +905,8 @@ pub use added::{
 };
 
 #[cfg(test)]
+mod grouping_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod wrap_tests;

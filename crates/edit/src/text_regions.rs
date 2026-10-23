@@ -31,14 +31,73 @@ fn frame_row_rect(row: &[usize], lines: &[TextLine]) -> Option<[f64; 4]> {
     row.iter().filter_map(|i| lines.get(*i)).map(TextLine::frame_rect).reduce(union)
 }
 
-pub(super) fn group_blocks(lines: &[TextLine]) -> Vec<TextBlock> {
-    group_layout(lines, true)
+/// The paragraphs editing sees. `rules` are the page's straight lines ([`crate::ruling_segments`]):
+/// text on either side of a table border or other rule is never one paragraph.
+pub(super) fn group_blocks(lines: &[TextLine], rules: &[crate::Segment]) -> Vec<TextBlock> {
+    group_layout(lines, true, rules)
 }
 
 /// Exporters currently represent a block with one style. Keep their style boundaries until
 /// they support rich runs, while edit selection may encompass the complete visual region.
 pub(super) fn group_reading_blocks(lines: &[TextLine]) -> Vec<TextBlock> {
-    group_layout(lines, false)
+    group_layout(lines, false, &[])
+}
+
+/// Rule `s` in the frame of text running in direction `dir` ([`to_frame`]): `Some((true, at,
+/// [lo, hi]))` when it crosses the baseline direction (at `along` = `at`, spanning `across`
+/// from `lo` to `hi`), `Some((false, at, [lo, hi]))` when it runs along it (at `across` = `at`),
+/// `None` when it is slanted in that frame or not finite.
+fn rule_in_frame(dir: (f64, f64), s: &crate::Segment) -> Option<(bool, f64, [f64; 2])> {
+    let a = to_frame(dir, (s[0], s[1]));
+    let b = to_frame(dir, (s[2], s[3]));
+    let (d_along, d_across) = ((b.0 - a.0).abs(), (b.1 - a.1).abs());
+    if ![a.0, a.1, b.0, b.1].iter().all(|v| v.is_finite()) {
+        return None;
+    }
+    if d_along <= 1.0 && d_across > d_along {
+        Some((true, (a.0 + b.0) / 2.0, [a.1.min(b.1), a.1.max(b.1)]))
+    } else if d_across <= 1.0 && d_along > d_across {
+        Some((false, (a.1 + b.1) / 2.0, [a.0.min(b.0), a.0.max(b.0)]))
+    } else {
+        None
+    }
+}
+
+/// Whether one of `rules` crosses the baseline direction `dir` between `end` (where a run of
+/// text ends along it) and `start` (where the next begins), give or take `slack`, through the
+/// letters of both: across the baseline, it reaches every one of `heights` (each run's baseline
+/// plus a third of its size). As a table's column border between two cells does.
+pub(super) fn ruled_apart_along(rules: &[crate::Segment], dir: (f64, f64), end: f64, start: f64, slack: f64, heights: [f64; 2]) -> bool {
+    let (from, to) = (end.min(start) - slack, end.max(start) + slack);
+    rules
+        .iter()
+        .filter_map(|s| rule_in_frame(dir, s))
+        .any(|(crossing, at, [lo, hi])| crossing && at >= from && at <= to && heights.iter().all(|h| lo <= *h && hi >= *h))
+}
+
+/// Whether a rule stands between `prev` and `line` on one row ([`ruled_apart_along`]).
+fn ruled_apart_on_row(prev: &TextLine, line: &TextLine, rules: &[crate::Segment]) -> bool {
+    let em = prev.size.min(line.size).max(0.0);
+    let heights = [prev.frame_origin().1 + prev.size * 0.3, line.frame_origin().1 + line.size * 0.3];
+    ruled_apart_along(rules, prev.direction(), prev.frame_rect()[2], line.frame_rect()[0], 0.1 * em, heights)
+}
+
+/// Whether a rule runs between row `prev_row` (its first run `prev`) and the row below it,
+/// `row` (its first run `first`), both rows given by their frame boxes: a line along the
+/// baselines, under the descenders of the upper row and over the x-height of the lower, that
+/// reaches over both rows, as a table's row border does. An underline (closer to its baseline)
+/// or a strike-through (through the letters) keeps them together.
+fn ruled_apart_between_rows(prev: &TextLine, prev_row: [f64; 4], first: &TextLine, row: [f64; 4], rules: &[crate::Segment]) -> bool {
+    let dir = prev.direction();
+    let (top, bottom) = (prev.frame_origin().1 - prev.size * 0.2, first.frame_origin().1 + first.size * 0.5);
+    if bottom > top {
+        return false;
+    }
+    let reaches = |r: [f64; 4], lo: f64, hi: f64| lo < r[2] && hi > r[0];
+    rules
+        .iter()
+        .filter_map(|s| rule_in_frame(dir, s))
+        .any(|(crossing, at, [lo, hi])| !crossing && at >= bottom && at <= top && reaches(prev_row, lo, hi) && reaches(row, lo, hi))
 }
 
 /// Text-space units → user space along the baseline. It is the vertical scale ([`Origin::k`])
@@ -64,7 +123,7 @@ fn same_style(a: &TextLine, b: &TextLine) -> bool {
         && (a.size - b.size).abs() < 0.01
 }
 
-fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
+fn group_layout(lines: &[TextLine], mixed: bool, rules: &[crate::Segment]) -> Vec<TextBlock> {
     let mut rows: Vec<Vec<usize>> = Vec::new();
     for (i, line) in lines.iter().enumerate() {
         let joins = rows.last().and_then(|r| r.last()).and_then(|i| lines.get(*i)).is_some_and(|prev| {
@@ -72,12 +131,16 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
             // OCR words (invisible text over a scan) join only across a word space: a wider gap
             // is a table cell or a tab stop, which a rewrite would close up.
             let scanned = !mixed || (invisible(prev) == invisible(line) && (!invisible(line) || gap < prev.size.max(line.size) * 0.6));
+            // One text object's runs in one style (the words of a justified line positioned one
+            // by one) may stand up to 1.5 em apart; another object or style that far off is the
+            // next field of a form or the next cell of a table.
+            let reach = if prev.origin.bt_op == line.origin.bt_op && same_style(prev, line) { 1.5 } else { 1.0 };
             scanned
                 && (mixed || same_style(prev, line))
                 && same_plane(prev, line)
                 && (prev.frame_origin().1 - line.frame_origin().1).abs() < prev.size.min(line.size) * 0.2
                 && gap >= -prev.size.min(line.size) * 0.2
-                && gap < prev.size.max(line.size) * 1.5
+                && gap < prev.size.max(line.size) * reach
                 // Separate same-style text objects that merely touch or overlap, with no space
                 // between them, are separate labels (for example a paragraph dragged against
                 // another, #594). Style runs and words separated by a space or gap still join.
@@ -86,6 +149,8 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
                     || !same_style(prev, line)
                     || prev.text.ends_with(char::is_whitespace)
                     || line.text.starts_with(char::is_whitespace))
+                // A table's column border between them: two cells, however close.
+                && !ruled_apart_on_row(prev, line, rules)
         });
         if joins && let Some(row) = rows.last_mut() {
             row.push(i);
@@ -113,6 +178,8 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
                 && first.size.min(prev.size) >= first.size.max(prev.size) * 0.4
                 && gap > first.size.min(prev.size) * 0.8
                 && gap < first.size.max(prev.size) * 2.5
+                // A table's row border between them: two cells, however close.
+                && !ruled_apart_between_rows(prev, pr, first, frame, rules)
         });
         if !joins {
             blocks.push(TextBlock {
