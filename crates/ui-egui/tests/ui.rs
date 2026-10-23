@@ -45,7 +45,8 @@ fn tools_panel_side_preference_moves_and_persists() {
 
     let mut h = harness(|_| {});
     h.state_mut().dialog = Some(Dialog::Preferences);
-    h.run_steps(3);
+    // The dialog takes a few frames to settle into its place; a click sooner lands on where it was.
+    h.run_steps(12);
     h.get_by_label("Tools panel side");
     h.get_by_label("Right").click();
     h.run_steps(3);
@@ -981,7 +982,7 @@ fn use_system_title_bar_swaps_the_header_bar_for_the_window_frame() {
     assert_eq!(decorations(&h), None);
     assert!(h.query_by_label("Minimize").is_some(), "the header bar has the window buttons");
     h.state_mut().set_option("dialog", "preferences").unwrap();
-    h.run_steps(2);
+    h.run_steps(12);
     h.get_by_role_and_label(Role::CheckBox, "Use system title bar").scroll_to_me();
     h.run_steps(4);
     h.get_by_role_and_label(Role::CheckBox, "Use system title bar").click();
