@@ -256,24 +256,32 @@ impl PdfCraftApp {
     /// ([`PdfCraftApp::stand_in`]) behind its embedded subset in the editor's fonts, so characters
     /// the subset lacks show in that face as they're typed (not in the interface's own face). Once
     /// per document version; waits for the installed faces.
+    ///
+    /// Sintec.PDF (task 033): every font of the paragraph gets its stand-in, including one the
+    /// document doesn't embed (which has no program for the editor: its text is shown in the
+    /// stand-in, not in the interface's face). The stand-in is sized by the same
+    /// [`pdfcraft_engine::substitute_fit`] the edit applies, and the characters the edit will draw
+    /// in it ([`pdfcraft_engine::Document::substitute_chars`]) advance as far as they will.
     pub(crate) fn preview_substitutes(&mut self, ctx: &egui::Context) {
         for i in 0..self.views.len() {
             let Some((id, page, text, resources)) = self.views.get(i).and_then(|v| {
                 let ed = v.line_editor.as_ref()?;
                 let generation = self.session.get(v.id)?.edit_generation();
-                (ed.substitutes_for != Some(generation)).then(|| (v.id, ed.page, ed.text.clone(), ed.fonts.keys().cloned().collect::<Vec<_>>()))
+                (ed.substitutes_for != Some(generation)).then(|| (v.id, ed.page, ed.text.clone(), ed.preview_resources()))
             }) else {
                 continue;
             };
             if self.installed_faces().is_none() {
-                return;
+                break;
             }
             let mut substitutes = std::collections::BTreeMap::new();
             let mut budget: usize = 64 << 20;
             for resource in resources.iter().take(16) {
                 let Some(facts) = self.session.get(id).and_then(|d| d.font_facts(page, resource)) else { continue };
                 let Some(stand) = self.stand_in(id, &facts, &text) else { continue };
+                let italic = stand.face.style.italic;
                 let path = stand.face.path;
+                let face_path = path.clone();
                 let bytes = match self.fonts.preview_bytes.get(&path) {
                     Some(b) => b.clone(),
                     None => {
@@ -293,14 +301,66 @@ impl PdfCraftApp {
                     continue;
                 }
                 budget -= bytes.len();
-                substitutes.insert(resource.clone(), bytes);
+                let fit = pdfcraft_engine::substitute_fit(&facts, &bytes);
+                substitutes.insert(resource.clone(), crate::edit_text_ui::SubstituteFace { path: face_path, bytes, fit, italic });
             }
             let Some(doc) = self.session.get(id) else { continue };
             let generation = doc.edit_generation();
-            let fonts = crate::edit_text_ui::install_source_fonts_with(ctx, doc, page, &substitutes);
+            let (fonts, previews) = crate::edit_text_ui::install_source_fonts_with(ctx, doc, page, &substitutes);
             if let Some(ed) = self.views.get_mut(i).and_then(|v| v.line_editor.as_mut()) {
                 ed.fonts = fonts;
+                ed.substitutes = previews;
                 ed.substitutes_for = Some(generation);
+            }
+        }
+        self.classify_typed(ctx);
+    }
+
+    /// Sintec.PDF (task 033): which of the characters typed into an open paragraph the edit will
+    /// draw in each font's stand-in, asked of the engine once per character and font.
+    fn classify_typed(&mut self, ctx: &egui::Context) {
+        for i in 0..self.views.len() {
+            let Some(id) = self.views.get(i).map(|v| v.id) else { continue };
+            let Some(doc) = self.session.get(id) else { continue };
+            let Some(ed) = self.views.get_mut(i).and_then(|v| v.line_editor.as_mut()) else { continue };
+            let page = ed.page;
+            let (mut asked, mut drawn_new) = (false, false);
+            for (resource, sub) in &mut ed.substitutes {
+                let mut new: Vec<char> = ed.text.chars().filter(|c| *c != '\n' && !sub.chars.contains_key(c)).collect();
+                new.sort_unstable();
+                new.dedup();
+                // A bounded memory: past it, characters show through the font stack unmeasured.
+                new.truncate(crate::edit_text_ui::MAX_CLASSIFIED.saturating_sub(sub.chars.len()));
+                if new.is_empty() {
+                    continue;
+                }
+                let sample: String = new.iter().collect();
+                let drawn = doc.substitute_chars(page, resource, &sample);
+                for c in new {
+                    sub.chars.insert(c, drawn.contains(&c));
+                }
+                asked = true;
+                drawn_new |= !drawn.is_empty();
+            }
+            if asked {
+                ctx.request_repaint();
+            }
+            if !drawn_new {
+                continue;
+            }
+            // The edit ranks the installed faces for the text as it is then: when the text now
+            // needs letters the shown stand-in was not chosen for, find the stand-ins again.
+            let text = ed.text.clone();
+            let shown: Vec<(String, PathBuf)> = ed.substitutes.iter().map(|(r, s)| (r.clone(), s.path.clone())).collect();
+            let stale = shown.iter().any(|(resource, path)| {
+                self.session
+                    .get(id)
+                    .and_then(|d| d.font_facts(page, resource))
+                    .and_then(|facts| self.stand_in(id, &facts, &text))
+                    .is_some_and(|stand| stand.face.path != *path)
+            });
+            if stale && let Some(ed) = self.views.get_mut(i).and_then(|v| v.line_editor.as_mut()) {
+                ed.substitutes_for = None;
             }
         }
     }
@@ -381,53 +441,75 @@ impl PdfCraftApp {
         if style.resource.is_some() {
             return Prepared::Apply(rebuild(style));
         }
-        // The paragraph's fonts that can't encode the new text.
-        let short: Vec<String> = match self.session.get(id) {
-            Some(doc) => {
-                let lines = doc.text_lines(page);
-                let mut v: Vec<String> = Vec::new();
-                if let Some(b) = doc.text_blocks(page).into_iter().nth(block) {
-                    for l in b.lines.iter().filter_map(|i| lines.get(*i)) {
-                        if !v.contains(&l.font) && doc.first_unencodable(page, &l.font, &text).is_some() {
-                            v.push(l.font.clone());
-                        }
-                    }
-                }
-                v
-            }
-            None => Vec::new(),
-        };
         let _ = wanted;
-        for font in short {
+        for font in self.short_fonts(id, page, block, &text) {
             let Some(facts) = self.session.get(id).and_then(|d| d.font_facts(page, &font)) else { continue };
             let wanted = Wanted::from_facts(&facts, None, None, &text);
             let key = key_of(&wanted);
-            match self.fonts.choices.get(&(id, key.clone())).cloned() {
+            let choice = self.fonts.choices.get(&(id, key.clone())).cloned();
+            match &choice {
                 Some(FontChoice::Keep) => continue,
-                Some(FontChoice::Use { path, whole }) => {
-                    if let Some(resource) = self.load_substitute(id, page, &path)
-                        && whole
-                    {
+                Some(FontChoice::Use { path, whole: true }) => {
+                    if let Some(resource) = self.load_substitute(id, page, path) {
                         style.resource = Some(resource);
                         break;
                     }
                     continue;
                 }
-                None => {}
+                Some(FontChoice::Use { whole: false, .. }) | None => {}
             }
-            let Some((best, quality)) = self.styled_face(&wanted) else { continue };
-            if matches!(quality, Match::Exact | Match::Fingerprint | Match::Alias) {
+            // Sintec.PDF (task 033): the face the open editor previewed this font's missing
+            // characters in ([`PdfCraftApp::stand_in`]), so the edit draws them in that face.
+            let Some(stand) = self.stand_in(id, &facts, &text) else { continue };
+            if stand.chosen || matches!(stand.quality, Match::Exact | Match::Fingerprint | Match::Alias) {
                 // The same family is installed, or a metric-compatible stand-in for it (Carlito
                 // for Calibri, Tinos for Times New Roman), in the closest weight and slant: it
                 // draws the missing characters, fitted to the font (see the edit crate's `Fit`).
-                self.fonts.choices.insert((id, key), FontChoice::Use { path: best.path.clone(), whole: false });
-                let _ = self.load_substitute(id, page, &best.path);
+                if choice.is_none() {
+                    self.fonts.choices.insert((id, key), FontChoice::Use { path: stand.face.path.clone(), whole: false });
+                }
+                if let Some(resource) = self.load_substitute(id, page, &stand.face.path) {
+                    style.substitutes.push((font, resource));
+                }
                 continue;
             }
-            self.open_offer(id, page, &facts, wanted, Some(best.path), quality == Match::Other, Some(rebuild(style)), false);
+            self.open_offer(id, page, &facts, wanted, Some(stand.face.path), stand.quality == Match::Other, Some(rebuild(style)), false);
             return Prepared::Wait;
         }
         Prepared::Apply(rebuild(style))
+    }
+
+    /// The fonts of paragraph `block` of page `page` that can't encode `text`.
+    fn short_fonts(&self, id: DocId, page: usize, block: usize, text: &str) -> Vec<String> {
+        let Some(doc) = self.session.get(id) else { return Vec::new() };
+        let lines = doc.text_lines(page);
+        let mut v: Vec<String> = Vec::new();
+        if let Some(b) = doc.text_blocks(page).into_iter().nth(block) {
+            for l in b.lines.iter().filter_map(|i| lines.get(*i)) {
+                if !v.contains(&l.font) && doc.first_unencodable(page, &l.font, text).is_some() {
+                    v.push(l.font.clone());
+                }
+            }
+        }
+        v
+    }
+
+    /// Sintec.PDF (task 033): `edit` with each of its paragraph's fonts that lacks characters of
+    /// the text mapped to its loaded stand-in ([`PdfCraftApp::stand_in`], which follows the
+    /// choices made), as [`PdfCraftApp::prepare_text_edit`] maps them. Never asks.
+    fn with_stand_ins(&mut self, id: DocId, edit: Edit) -> Edit {
+        let Edit::EditTextBlock { page, block, text, mut style } = edit else { return edit };
+        for font in self.short_fonts(id, page, block, &text) {
+            if style.substitutes.iter().any(|(f, _)| *f == font) {
+                continue;
+            }
+            let Some(facts) = self.session.get(id).and_then(|d| d.font_facts(page, &font)) else { continue };
+            let Some(stand) = self.stand_in(id, &facts, &text) else { continue };
+            if let Some(resource) = self.load_substitute(id, page, &stand.face.path) {
+                style.substitutes.push((font, resource));
+            }
+        }
+        Edit::EditTextBlock { page, block, text, style }
     }
 
     /// Open the Font substitution dialog for `facts`.
@@ -651,6 +733,8 @@ fn finish(app: &mut PdfCraftApp, offer: FontOffer, choice: Option<FontChoice>) {
         (FontChoice::Keep, None) => {}
         (FontChoice::Use { path, whole }, Some(edit)) => {
             if let Prepared::Apply(edit) = app.with_substitute(offer.doc, offer.page, &path, whole, edit) {
+                // Only the characters it lacks: in the face just chosen, as the editor shows them.
+                let edit = if whole { edit } else { app.with_stand_ins(offer.doc, edit) };
                 app.fonts.bypass = true;
                 app.apply_edit(edit);
             }
@@ -664,7 +748,7 @@ fn finish(app: &mut PdfCraftApp, offer: FontOffer, choice: Option<FontChoice>) {
             {
                 ed.font_resource = Some(resource);
                 if let (Some(doc), Some(ctx)) = (app.session.get(offer.doc), app.ctx.as_ref()) {
-                    ed.fonts = crate::edit_text_ui::install_source_fonts(ctx, doc, offer.page);
+                    ed.reload_fonts(ctx, doc);
                 }
             }
         }

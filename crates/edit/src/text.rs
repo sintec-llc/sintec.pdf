@@ -22,6 +22,7 @@ use crate::EditError;
 
 #[path = "text_regions.rs"]
 mod regions;
+pub use regions::{Fit as SubstituteFit, substitute_fit};
 use regions::{group_blocks, rewrite_styled_block};
 
 /// One line of existing text.
@@ -345,6 +346,62 @@ pub fn first_unencodable(doc: &Document, page: usize, resource: &str, text: &str
     Ok(text.chars().filter(|c| !c.is_whitespace()).find(|c| m.encode(&c.to_string()).is_none()))
 }
 
+/// Sintec.PDF (task 033): the characters of `text` (each once, in order) that a rewrite of a run
+/// in page `page`'s font `resource` draws in a substitute face: those that neither the font, nor
+/// another subset of it on the page, nor a full face of it built into the app, nor the document's
+/// complete program of it can show. The steps are the rewrite's own (`rewrite_styled_block`),
+/// so the inline editor previews exactly these characters in the substitute. At most 4096.
+pub fn substitute_chars(doc: &Document, page: usize, resource: &str, text: &str) -> Result<Vec<char>, EditError> {
+    let p = page_dict(doc, page)?;
+    let resources = p.dict.get(b"Resources").and_then(|o| doc.dict(o)).unwrap_or_default();
+    let fonts = resources.get(b"Font").and_then(|o| doc.dict(o)).unwrap_or_default();
+    let font = fonts.get(resource.as_bytes()).and_then(|f| doc.dict(f)).ok_or_else(|| EditError::Invalid(format!("no font resource {resource}")))?;
+    let own = Metrics::from_dict(doc, &font);
+    let base_font = own.base_font.clone();
+    let mut metrics = std::collections::BTreeMap::new();
+    for (name, object) in fonts.iter().take(256) {
+        if let Some(f) = doc.resolve(object).as_dict() {
+            metrics.insert(String::from_utf8_lossy(name).into_owned(), Metrics::from_dict(doc, f));
+        }
+    }
+    metrics.insert(resource.to_owned(), own);
+    let mut program: Option<Option<Vec<u8>>> = None;
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for ch in text.chars().filter(|c| *c != '\n') {
+        if seen.len() >= 4096 {
+            break;
+        }
+        if !seen.insert(ch) {
+            continue;
+        }
+        let s = ch.to_string();
+        let shown = metrics.get(resource).is_some_and(|m| source_encodes(m, &s))
+            || sibling_encoding(&metrics, &base_font, &s).is_some()
+            || full_face_covering(&base_font, &s).is_some()
+            || program
+                .get_or_insert_with(|| source_program(doc, &fonts, resource))
+                .as_deref()
+                .is_some_and(|b| pdfcraft_fonts::embedding::covers(b, &s));
+        if !shown {
+            out.push(ch);
+        }
+    }
+    Ok(out)
+}
+
+/// The page font (a resource name of `metrics`) of the same face as `base_font` that encodes
+/// `s`: another subset of the same font.
+fn sibling_encoding<'a>(metrics: &'a std::collections::BTreeMap<String, Metrics>, base_font: &str, s: &str) -> Option<&'a String> {
+    let key = pdfcraft_fonts::embedding::face_key(base_font);
+    metrics.iter().find(|(_, m)| pdfcraft_fonts::embedding::face_key(&m.base_font) == key && source_encodes(m, s)).map(|(name, _)| name)
+}
+
+/// The full face of the font `base_font` that the app has built in (craft-fonts) and that shows `s`.
+fn full_face_covering(base_font: &str, s: &str) -> Option<&'static pdfcraft_fonts::CraftFont> {
+    pdfcraft_fonts::embedding::matching_faces(base_font).into_iter().find(|f| pdfcraft_fonts::embedding::covers(f.bytes, s))
+}
+
 /// Load an explicit full face into this page's resources. Nothing on the page is replaced;
 /// the new resource can complete matching source subsets or be chosen in a text style.
 pub fn register_text_font(doc: &mut Document, page: usize, bytes: &[u8]) -> Result<String, EditError> {
@@ -373,7 +430,7 @@ pub fn text_edit_layout(doc: &Document, page: usize, block: usize, text: &str, s
     let lines = text_lines(doc, page)?;
     let original = group_blocks(&lines);
     let source = original.get(block).ok_or(EditError::Invalid("text block does not exist".into()))?;
-    if text == source.editor_text && *style == BlockStyle::default() {
+    if text == source.editor_text && style.is_plain() {
         return Ok(TextEditLayout { source_rect: source.rect, draft_rect: Some(source.rect), overflow: false });
     }
     // Subtract the untouched runs by value, rather than by operator offsets: a rewrite may
@@ -2348,6 +2405,19 @@ pub struct BlockStyle {
     /// For an invisible paragraph ([`TextBlock::invisible`]): fill its old area with this colour
     /// (RGB 0–1) before the new text, hiding the scanned word beneath it.
     pub cover: Option<[f64; 3]>,
+    /// Sintec.PDF (task 033): per source font resource, the loaded face (a `PCFull…` resource from
+    /// [`register_text_font`]) that draws what that font can't show: the face the inline editor
+    /// previewed it in. A font not listed here gets the loaded face that matches it best. Only
+    /// says which face; it changes nothing by itself.
+    pub substitutes: Vec<(String, String)>,
+}
+
+impl BlockStyle {
+    /// No formatting at all: a rewrite with this style and the paragraph's own text changes
+    /// nothing. [`BlockStyle::substitutes`] only says which face draws missing characters.
+    pub(crate) fn is_plain(&self) -> bool {
+        BlockStyle { substitutes: Vec::new(), ..self.clone() } == BlockStyle::default()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3084,5 +3154,49 @@ endcmap end end";
         assert_eq!(first_unencodable(&doc, 0, "F1", "A A").expect("ok"), None);
         assert_eq!(first_unencodable(&doc, 0, "F1", "A q Z").expect("ok"), Some('q'));
         assert!(first_unencodable(&doc, 0, "Nope", "A").is_err());
+    }
+
+    /// Sintec.PDF (task 033): the characters a rewrite draws in a substitute are those the font,
+    /// its other subsets and its own program can't show; each once, line breaks aside.
+    #[test]
+    fn substitute_chars_are_the_ones_the_font_cannot_show() {
+        // A subset: its program has only A and the space.
+        let doc = cid_document(font_fixture::cff_font_styled("CIDFont+F1", "Regular", 400, 700, &[' ', 'A']));
+        assert_eq!(substitute_chars(&doc, 0, "F1", "A ЖЖ\nqA").expect("ok"), vec!['Ж', 'q']);
+        assert_eq!(substitute_chars(&doc, 0, "F1", "A A").expect("ok"), Vec::<char>::new());
+        assert!(substitute_chars(&doc, 0, "Nope", "Ж").is_err());
+    }
+
+    /// Sintec.PDF (task 033): one fitting rule for the preview and the rewrite: the stand-in gets
+    /// the source font's letter height, advance widths and weight, within bounds.
+    #[test]
+    fn substitute_fit_matches_letter_height_widths_and_weight() {
+        let chars = [' ', 'A', 'B', 'C', 'D', 'H', 'Ж'];
+        // Rectangles 700 units tall and 600 wide, regular.
+        let face = font_fixture::cff_font_styled("Stand-Regular", "Regular", 400, 700, &chars);
+        let shape = pdfcraft_fonts::weight::face_metrics(&face).expect("measurable");
+        let widths: Vec<(char, f32)> = ['A', 'B', 'C', 'D'].iter().map(|c| (*c, 630.0)).collect();
+        let facts = FontFacts { cap_height: Some(0.65), weight: 700, weight_from: StyleSource::Name, widths: widths.clone(), ..Default::default() };
+        let fit = substitute_fit(&facts, &face);
+        match shape.cap_height {
+            Some(cap) => assert!((fit.size - (0.65 / cap).clamp(0.85, 1.2)).abs() < 1e-9, "{fit:?} for {shape:?}"),
+            None => assert_eq!(fit.size, 1.0),
+        }
+        assert!((fit.scale - (630.0 / (600.0 * fit.size)).clamp(0.85, 1.15)).abs() < 1e-6, "{fit:?}");
+        assert!((fit.advance() - fit.size * fit.scale).abs() < 1e-12);
+        assert!(fit.stroke > 0.0, "a regular face standing in for a bold font is stroked");
+        // The same font, regular and as wide: nothing to fit.
+        let same = FontFacts {
+            cap_height: shape.cap_height,
+            widths: chars.iter().filter(|c| **c != ' ').map(|c| (*c, 600.0)).collect(),
+            ..Default::default()
+        };
+        assert_eq!(substitute_fit(&same, &face), SubstituteFit::NONE);
+        // Fewer than four letters in common say nothing about widths.
+        let few = FontFacts { widths: widths.into_iter().take(3).collect(), ..Default::default() };
+        assert_eq!(substitute_fit(&few, &face).scale, 1.0);
+        // Not a font program: no fit, no panic.
+        assert_eq!(substitute_fit(&facts, b"not a font"), SubstituteFit::NONE);
+        assert_eq!(substitute_fit(&facts, &[]), SubstituteFit::NONE);
     }
 }
