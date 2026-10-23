@@ -3,7 +3,10 @@
 User-visible changes in Sintec.PDF, newest first. Our versions are independent of upstream
 PdfCraft's; each entry says which upstream version the code is based on.
 
-## Unreleased
+## 0.3.0 — based on upstream PdfCraft v0.9.0
+
+This release was developed as 0.2.7; the user decided the post-sync release is 0.3.0, so the
+0.2.7 work ships here.
 
 ### Ours
 - **Linux x86_64:** CI tests on Linux and releases ship `sintec-pdf-<version>-linux-x86_64.AppImage`,
@@ -19,13 +22,6 @@ PdfCraft's; each entry says which upstream version the code is based on.
   predictors for images, packs objects tighter, and keeps a chart or screenshot lossless when
   that is smaller than JPEG. Optimize PDF with a Discard User Data choice no longer fails on a
   file that has none of that data.
-
-## 0.3.0 — based on upstream PdfCraft v0.9.0
-
-This release was developed as 0.2.7; the user decided the post-sync release is 0.3.0, so the
-0.2.7 work ships here.
-
-### Ours
 - **Text panel:** the floating text panel shows the paragraph's font, how much of it the document
   carries and whether it is installed, and judges "installed" from the same faces the Font
   substitution dialog uses. Replace font… lists installed faces in order of match.
