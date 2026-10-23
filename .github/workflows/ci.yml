@@ -1,6 +1,7 @@
 name: CI
 
-# Sintec.PDF ships for Windows and macOS (Apple silicon and Intel), so CI runs on all three. No
+# Sintec.PDF ships for Windows, macOS (Apple silicon and Intel) and Linux x86_64, so CI runs on
+# all four. No
 # schedule: nothing runs unless main changes, a pull request is opened, or it is started by hand.
 on:
   push:
@@ -92,6 +93,73 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}
+          path: dist/release/*
+          if-no-files-found: error
+
+  # Linux x86_64 (task 028): the Linux-only code paths (SANE scanning, CUPS printing, the
+  # freedesktop app id, X11/Wayland windowing) get linted and tested here, and the packages are
+  # built as artifacts so a pull request can be tried on a Linux desktop before a release.
+  linux:
+    name: test + packages (Linux x86_64)
+    # The oldest GitHub-hosted image, as in release.yml: binaries built here need only glibc 2.35.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # egui/winit/wgpu (X11, Wayland, xkbcommon, GL), fontconfig, CUPS (lp, for the print
+      # tests' tooling) and Xvfb for the tests that open a window or a clipboard.
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-dev \
+            libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev libegl1-mesa-dev \
+            libvulkan-dev libfontconfig1-dev libfreetype6-dev libcups2-dev libdbus-1-dev \
+            libgtk-3-dev xvfb xauth
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-x86_64
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: OCR models
+        run: cargo xtask models
+
+      # Headless: an X server on a virtual display for the tests that need one.
+      - name: Test
+        run: xvfb-run --auto-servernum -s "-screen 0 1920x1080x24" cargo test --workspace --no-fail-fast
+
+      - name: Layering
+        run: cargo xtask layers
+
+      - name: Assets (licences and attribution)
+        run: cargo xtask assets
+
+      # The AppImage, .deb and CLI tarball, unsigned, to try before a release.
+      - name: Packaging tools
+        run: |
+          sudo apt-get install -y --no-install-recommends desktop-file-utils appstream zsync file
+          curl -fsSL -o "$RUNNER_TEMP/nfpm.deb" \
+            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_amd64.deb"
+          sudo dpkg -i "$RUNNER_TEMP/nfpm.deb"
+        env:
+          NFPM_VERSION: 2.47.0
+
+      - name: Packages
+        run: packaging/linux/package.sh --formats "appimage deb cli"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
           path: dist/release/*
           if-no-files-found: error
 

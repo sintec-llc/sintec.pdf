@@ -1,7 +1,7 @@
 <h1 align="center">Sintec.PDF</h1>
 
 <p align="center">
-  <b>A fast, private PDF workbench for Windows — with a Russian interface and Russian OCR built in.</b><br>
+  <b>A fast, private PDF workbench for Windows, macOS and Linux — with a Russian interface and Russian OCR built in.</b><br>
   Read, annotate, fill, sign, organize, combine, split, secure and OCR PDFs. Everything runs locally:
   no account, no telemetry, no cloud.
 </p>
@@ -9,7 +9,7 @@
 <p align="center">
   <img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-12a58a">
   <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-0a7563">
-  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/runs%20on-Windows%2010%20%C2%B7%2011-12a58a">
+  <img alt="Windows 10 and 11, macOS 11+, Linux x86_64" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-12a58a">
 </p>
 
 Sintec.PDF is maintained by Sintec LLC and based on the open-source
@@ -41,6 +41,23 @@ releases are code-signed, Windows SmartScreen shows a warning the first time.
 
 **Requirements:** Windows 10 or 11 (x64; x86 and ARM64 builds can be made too). The app draws with
 DirectX 12, falling back to OpenGL; on machines without a GPU, Windows' software renderer is used.
+
+### macOS
+
+Download `sintec-pdf-<version>-macos-aarch64.dmg` (Apple silicon) or `-macos-x86_64.dmg` (Intel)
+and drag Sintec.PDF to Applications. macOS 11 or later.
+
+### Linux (x86_64)
+
+- **Debian, Ubuntu, Astra, Mint:** `sudo apt install ./sintec-pdf-<version>-linux-x86_64.deb`. It
+  adds Sintec.PDF to the applications menu and to "Open with" for PDFs.
+- **Any other distribution:** `chmod +x sintec-pdf-<version>-linux-x86_64.AppImage` and run it;
+  nothing to install.
+- **Command line only:** `sintec-pdf-cli-<version>-linux-x86_64.tar.gz`.
+
+Needs glibc 2.35 or later (Ubuntu 22.04, Debian 12, Astra 1.8 and newer) and X11 or Wayland.
+Printing goes through CUPS (`cups-client`) and scanning through SANE (`sane-utils`), both
+recommended by the .deb. The app tells you about new versions; install them the same way.
 
 ## What it does
 
@@ -75,6 +92,10 @@ cargo test --workspace    # run the tests
 To build the installer: install the WiX Toolset v5 (`dotnet tool install --global wix --version 5.0.2`)
 and PowerShell 7, then run `pwsh packaging/windows/package.ps1 -Arch x64`. The MSI and the portable
 zip land in `dist/release/`.
+
+On Linux, install the windowing headers first (Debian/Ubuntu: `sudo apt install pkg-config
+libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev`), and package
+with `packaging/linux/package.sh --formats "appimage deb cli"` (needs [nfpm](https://nfpm.goreleaser.com)).
 
 The Rust crates keep their upstream `pdfcraft-*` names; only what users see is called Sintec.PDF.
 

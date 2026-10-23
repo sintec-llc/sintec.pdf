@@ -2266,6 +2266,7 @@ key	Space	Пробел
 	Couldn't scan: {e}	Не удалось отсканировать: {e}
 	Scanning works on Windows, through its built-in scanner support	Сканирование работает в Windows через встроенную поддержку сканеров
 	Windows' scanner support (WIA) isn't available on this computer	Поддержка сканеров Windows (WIA) недоступна на этом компьютере
+	Scanning needs SANE's scanimage (the sane-utils package). Install it and try again	Для сканирования нужна программа scanimage из SANE (пакет sane-utils). Установите её и повторите попытку
 	No scanner was found. Check that it is connected and switched on	Сканер не найден. Проверьте, что он подключён и включён
 	The scanner is busy	Сканер занят
 	The scanner is offline. Check that it is connected and switched on	Сканер не в сети. Проверьте, что он подключён и включён

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata for Sintec.PDF (software centres). Template: package.sh substitutes
+     @VERSION@ and @DATE@ from Cargo.toml and the build date. The component id is the macOS bundle
+     id io.github.sintec-llc.sintec-pdf with underscores for hyphens, as freedesktop ids prefer. -->
+<component type="desktop-application">
+  <id>io.github.sintec_llc.sintec_pdf</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Sintec.PDF</name>
+  <summary>Read, organize, combine, split and secure PDFs</summary>
+  <summary xml:lang="ru">Просмотр, упорядочивание, объединение, разделение и защита PDF</summary>
+  <developer id="io.github.sintec_llc">
+    <name>Sintec LLC</name>
+  </developer>
+  <description>
+    <p>
+      Sintec.PDF is a PDF workbench based on the open-source PdfCraft. Read, comment on, fill in
+      and sign PDFs; organize, combine and split pages; edit, redact, protect, recognise (OCR) and
+      export documents. The interface is in English and Russian.
+    </p>
+    <p xml:lang="ru">
+      Sintec.PDF — рабочее место для PDF на основе открытого PdfCraft. Просмотр, комментарии,
+      заполнение и подпись PDF; упорядочивание, объединение и разделение страниц; правка,
+      скрытие, защита, распознавание текста (OCR) и экспорт документов. Интерфейс на русском и
+      английском.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.sintec_llc.sintec_pdf.desktop</launchable>
+  <icon type="stock">io.github.sintec_llc.sintec_pdf</icon>
+  <!-- Only url types known to appstream 0.15 (Ubuntu 22.04, where CI validates): no vcs-browser. -->
+  <url type="homepage">https://github.com/sintec-llc/sintec.pdf</url>
+  <url type="bugtracker">https://github.com/sintec-llc/sintec.pdf/issues</url>
+  <categories>
+    <category>Office</category>
+    <category>Viewer</category>
+  </categories>
+  <keywords>
+    <keyword>pdf</keyword>
+    <keyword>viewer</keyword>
+    <keyword>annotate</keyword>
+    <keyword>forms</keyword>
+    <keyword>ocr</keyword>
+  </keywords>
+  <requires>
+    <display_length compare="ge">760</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <provides>
+    <binary>sintec-pdf</binary>
+    <mediatype>application/pdf</mediatype>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

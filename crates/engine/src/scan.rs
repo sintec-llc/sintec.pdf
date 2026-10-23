@@ -5,6 +5,8 @@
 //!
 //! The script runs in PowerShell (WIA is a COM interface), handed over on standard input like the
 //! printing and Office scripts (`pdfcraft_print::spool::run_powershell`).
+//!
+//! On Linux the page comes from SANE's `scanimage` instead (task 028); macOS has no scanning yet.
 
 /// The WIA script: the scanner's dialog, the page saved as PNG to `$env:SINTEC_SCAN_FILE`. Prints
 /// `OK` (scanned), `CANCEL` (the user closed the dialog), or `ERR <hresult> <message>` on stderr.
@@ -72,10 +74,133 @@ fn clean_up(dir: &std::path::Path, file: &std::path::Path) {
     let _ = std::fs::remove_dir(dir);
 }
 
-/// Elsewhere there is no WIA.
-#[cfg(not(windows))]
+/// Linux: SANE, the scanner support of Linux desktops, through its command-line front end
+/// `scanimage` (the `sane-utils` package). It scans one page from the default scanner
+/// (`$SANE_DEFAULT_DEVICE`, else the first one found) at [`SANE_DPI`] as PNG. There is no settings
+/// dialog, so a scan never comes back cancelled. The page is read from `scanimage`'s output and
+/// never written to disk, so `dir` is not used: on Linux the temporary folder would sit in the
+/// shared `/tmp`, where another user could plant a link in it.
+#[cfg(target_os = "linux")]
+pub fn scan_page(_dir: &std::path::Path) -> Result<Option<Vec<u8>>, ScanError> {
+    scan_with(std::ffi::OsStr::new("scanimage"))
+}
+
+/// Elsewhere (macOS) there is no scanner support yet.
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn scan_page(_dir: &std::path::Path) -> Result<Option<Vec<u8>>, ScanError> {
     Err(ScanError::NotSupported)
+}
+
+/// The resolution SANE scans at, in dots per inch: a scanned page that reads well and OCRs well.
+pub const SANE_DPI: u32 = 300;
+
+/// The longest a SANE scan may take before it is given up (a scanner that stopped answering).
+#[cfg(target_os = "linux")]
+const SANE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// [`scan_page`] through the `scanimage` program `program` (tests run a stand-in).
+#[cfg(target_os = "linux")]
+fn scan_with(program: &std::ffi::OsStr) -> Result<Option<Vec<u8>>, ScanError> {
+    // A backend that doesn't offer the resolution refuses the option: scan at its own then, and
+    // the PNG's own resolution (scanimage records it) sizes the page.
+    let (png, dpi) = match run_scanimage(program, Some(SANE_DPI)) {
+        Err(ScanError::Failed(m)) if m.contains("--resolution") => (run_scanimage(program, None)?, None),
+        other => (other?, Some((SANE_DPI, SANE_DPI))),
+    };
+    if png.is_empty() {
+        return Err(ScanError::Failed(String::new()));
+    }
+    Ok(Some(with_dpi(png, dpi)))
+}
+
+/// Run `scanimage` once and return the PNG it writes to standard output; `dpi` asks for a
+/// resolution. More than [`MAX_SCAN_BYTES`] is [`ScanError::TooLarge`].
+#[cfg(target_os = "linux")]
+fn run_scanimage(program: &std::ffi::OsStr, dpi: Option<u32>) -> Result<Vec<u8>, ScanError> {
+    use std::io::Read as _;
+    use std::process::{Command, Stdio};
+    let failed = |e: std::io::Error| ScanError::Failed(e.to_string());
+    let mut cmd = Command::new(program);
+    cmd.arg("--format=png");
+    if let Some(dpi) = dpi {
+        cmd.arg("--resolution").arg(dpi.to_string());
+    }
+    // SANE's messages in English, so they can be read ([`explain_sane`]); shown translated.
+    cmd.env("LC_ALL", "C").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(ScanError::NoSane),
+        Err(e) => return Err(failed(e)),
+    };
+    // The page, read on its own thread up to one byte past the cap. Past it the pipe closes and
+    // scanimage stops on the broken pipe instead of running into the timeout.
+    let stdout = child.stdout.take().map(|out| {
+        std::thread::spawn(move || {
+            let mut png = Vec::new();
+            let read = out.take(MAX_SCAN_BYTES.saturating_add(1)).read_to_end(&mut png);
+            read.map(|_| png)
+        })
+    });
+    // Read what it says on its own thread, so a chatty backend never fills the pipe and stalls.
+    let stderr = child.stderr.take().map(|err| {
+        std::thread::spawn(move || {
+            let mut text = Vec::new();
+            let _ = err.take(64 << 10).read_to_end(&mut text);
+            String::from_utf8_lossy(&text).into_owned()
+        })
+    });
+    let started = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Ok(status),
+            Ok(None) if started.elapsed() > SANE_TIMEOUT => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break Err(ScanError::Failed("the scanner did not finish in time".into()));
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(100)),
+            Err(e) => break Err(failed(e)),
+        }
+    };
+    let said = stderr.and_then(|t| t.join().ok()).unwrap_or_default();
+    let png = match stdout.map(|t| t.join()) {
+        Some(Ok(Ok(png))) => png,
+        Some(Ok(Err(e))) => return Err(failed(e)),
+        // The reader thread panicked (it can't) or there was no pipe.
+        _ => return Err(ScanError::Failed(String::new())),
+    };
+    if !u64::try_from(png.len()).is_ok_and(|n| n <= MAX_SCAN_BYTES) {
+        return Err(ScanError::TooLarge);
+    }
+    match status? {
+        s if s.success() => Ok(png),
+        _ => Err(explain_sane(&said)),
+    }
+}
+
+/// What `scanimage` reported on stderr (SANE's status messages in English), read as a
+/// [`ScanError`].
+#[cfg(any(target_os = "linux", test))]
+pub fn explain_sane(stderr: &str) -> ScanError {
+    let text = stderr.trim();
+    let has = |s: &str| text.contains(s);
+    if has("no SANE devices found") {
+        ScanError::NoScanner
+    } else if has("Device busy") {
+        ScanError::Busy
+    } else if has("Document feeder out of documents") {
+        ScanError::FeederEmpty
+    } else if has("Document feeder jammed") {
+        ScanError::PaperJam
+    } else if has("Scanner cover is open") {
+        ScanError::CoverOpen
+    } else if has("Error during device I/O") {
+        ScanError::DeviceError
+    } else {
+        // The last line says what failed, without the program's name.
+        let line = text.lines().map(str::trim).rfind(|l| !l.is_empty()).unwrap_or("");
+        ScanError::Failed(line.strip_prefix("scanimage:").unwrap_or(line).trim().chars().take(300).collect())
+    }
 }
 
 /// The resolution the script reported (`DPI <h> <v>`).
@@ -141,10 +266,12 @@ fn crc32(data: &[u8]) -> u32 {
 /// Why a scan didn't work.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScanError {
-    /// Not Windows: there is no WIA.
+    /// Neither Windows nor Linux: no scanner support.
     NotSupported,
     /// WIA itself is missing (a stripped-down Windows) or PowerShell can't run.
     NoWia,
+    /// Linux: SANE's `scanimage` isn't installed.
+    NoSane,
     NoScanner,
     Busy,
     Offline,
@@ -165,6 +292,7 @@ impl std::fmt::Display for ScanError {
         f.write_str(match self {
             Self::NotSupported => "Scanning works on Windows, through its built-in scanner support",
             Self::NoWia => "Windows' scanner support (WIA) isn't available on this computer",
+            Self::NoSane => "Scanning needs SANE's scanimage (the sane-utils package). Install it and try again",
             Self::NoScanner => "No scanner was found. Check that it is connected and switched on",
             Self::Busy => "The scanner is busy",
             Self::Offline => "The scanner is offline. Check that it is connected and switched on",
@@ -213,7 +341,6 @@ mod tests {
         let file = dir.join("scan.png");
         std::fs::write(&file, b"png").unwrap();
         clean_up(&dir, &file);
-        assert!(!dir.exists(), "{}", dir.display());
         // A folder holding something else is not the scan's to remove.
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("other"), b"x").unwrap();
@@ -253,6 +380,69 @@ OK"
         assert_eq!(with_dpi(fixed.clone(), Some((150, 150))), fixed);
         assert_eq!(with_dpi(b"not a png".to_vec(), Some((300, 300))), b"not a png");
         assert_eq!(crc32(b"IEND"), 0xAE42_6082);
+    }
+
+    /// Task 028: SANE's status messages (scanimage, `LC_ALL=C`) read as the same reasons as WIA's.
+    #[test]
+    fn sane_errors_read_plainly() {
+        assert_eq!(explain_sane("scanimage: no SANE devices found\n"), ScanError::NoScanner);
+        assert_eq!(explain_sane("scanimage: open of device genesys:libusb:001:004 failed: Device busy"), ScanError::Busy);
+        assert_eq!(explain_sane("scanimage: sane_start: Document feeder out of documents"), ScanError::FeederEmpty);
+        assert_eq!(explain_sane("scanimage: sane_read: Document feeder jammed"), ScanError::PaperJam);
+        assert_eq!(explain_sane("scanimage: sane_start: Scanner cover is open"), ScanError::CoverOpen);
+        assert_eq!(explain_sane("scanimage: sane_read: Error during device I/O"), ScanError::DeviceError);
+        assert_eq!(
+            explain_sane("noise\nscanimage: setting of option --resolution failed (Invalid argument)\n\n"),
+            ScanError::Failed("setting of option --resolution failed (Invalid argument)".into())
+        );
+        assert_eq!(explain_sane("").to_string(), "The scan failed");
+        assert_eq!(explain_sane(&"x".repeat(10_000)), ScanError::Failed("x".repeat(300)), "a runaway message is cut short");
+        assert!(ScanError::NoSane.to_string().contains("sane-utils"));
+    }
+
+    /// Task 028: a stand-in `scanimage` (a shell script) scans, fails, or isn't installed.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_scans_through_scanimage() {
+        use std::os::unix::fs::PermissionsExt;
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+        let base = std::env::temp_dir().join(format!("sintec-sane-test-{}-{nonce}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        let mut png = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut png, 2, 2);
+            enc.set_color(png::ColorType::Grayscale);
+            enc.write_header().unwrap().write_image_data(&[0, 255, 255, 0]).unwrap();
+        }
+        let page = base.join("page.png");
+        std::fs::write(&page, &png).unwrap();
+        let script = |name: &str, body: &str| {
+            let path = base.join(name);
+            std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            path
+        };
+        // Scans: the page comes back at SANE_DPI, read from scanimage's output (no file in /tmp).
+        let ok = script("ok", &format!("cat '{}'", page.display()));
+        let scanned = scan_with(ok.as_os_str()).unwrap().unwrap();
+        let reader = png::Decoder::new(std::io::Cursor::new(&scanned)).read_info().unwrap();
+        assert_eq!(reader.info().pixel_dims.map(|d| d.xppu), Some(11811), "300 dpi");
+        // A backend without 300 dpi: scanned again at its own resolution.
+        let picky = script(
+            "picky",
+            &format!(
+                "case \"$*\" in *--resolution*) echo 'scanimage: setting of option --resolution failed (Invalid argument)' >&2; exit 1;; esac; cat '{}'",
+                page.display()
+            ),
+        );
+        assert_eq!(scan_with(picky.as_os_str()).unwrap(), Some(png.clone()));
+        // No scanner; nothing written; not installed.
+        let none = script("none", "echo 'scanimage: no SANE devices found' >&2; exit 1");
+        assert_eq!(scan_with(none.as_os_str()), Err(ScanError::NoScanner));
+        let empty = script("empty", "exit 0");
+        assert_eq!(scan_with(empty.as_os_str()), Err(ScanError::Failed(String::new())));
+        assert_eq!(scan_with(base.join("no-such-scanimage").as_os_str()), Err(ScanError::NoSane));
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

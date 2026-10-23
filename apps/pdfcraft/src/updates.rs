@@ -68,22 +68,29 @@ fn no_release_yet() -> Release {
 }
 
 /// The installer name suffix for this machine: `-windows-x64.msi` on Windows,
-/// `-macos-aarch64.dmg` / `-macos-x86_64.dmg` on a Mac.
-fn installer_suffix() -> String {
+/// `-macos-aarch64.dmg` / `-macos-x86_64.dmg` on a Mac. `None` elsewhere: Linux packages are
+/// updated by the package manager or by hand, so Update is not offered there and the dialog opens
+/// the release page instead (task 028).
+fn installer_suffix() -> Option<String> {
     installer_suffix_for(std::env::consts::OS, std::env::consts::ARCH)
 }
 
-fn installer_suffix_for(os: &str, arch: &str) -> String {
-    if os == "macos" {
-        let arch = if arch == "aarch64" { "aarch64" } else { "x86_64" };
-        return format!("-macos-{arch}.dmg");
+fn installer_suffix_for(os: &str, arch: &str) -> Option<String> {
+    match os {
+        "macos" => {
+            let arch = if arch == "aarch64" { "aarch64" } else { "x86_64" };
+            Some(format!("-macos-{arch}.dmg"))
+        }
+        "windows" => {
+            let arch = match arch {
+                "aarch64" => "arm64",
+                "x86" => "x86",
+                _ => "x64",
+            };
+            Some(format!("-windows-{arch}.msi"))
+        }
+        _ => None,
     }
-    let arch = match arch {
-        "aarch64" => "arm64",
-        "x86" => "x86",
-        _ => "x64",
-    };
-    format!("-windows-{arch}.msi")
 }
 
 /// The current Unix time in seconds (0 when the clock gives nothing usable).
@@ -124,8 +131,7 @@ fn parse(body: &str) -> Result<Release, String> {
                 .then(|| link.to_string())
         })
     };
-    let suffix = installer_suffix();
-    let installer = asset(&|n: &str| n.starts_with("sintec-pdf-") && n.ends_with(suffix.as_str()));
+    let installer = installer_suffix().and_then(|suffix| asset(&|n: &str| n.starts_with("sintec-pdf-") && n.ends_with(suffix.as_str())));
     let checksums = asset(&|n: &str| n == "SHA256SUMS.txt");
     Ok(Release { version, url, installer, checksums })
 }
@@ -217,29 +223,36 @@ fn launch_installer(dmg: &std::path::Path) -> Result<(), String> {
     std::process::Command::new("/usr/bin/open").arg(dmg).spawn().map(|_| ()).map_err(|e| format!("couldn't open the disk image: {e}"))
 }
 
+/// Never reached: elsewhere a release has no installer for this machine ([`installer_suffix`]).
 #[cfg(not(any(windows, target_os = "macos")))]
-fn launch_installer(_msi: &std::path::Path) -> Result<(), String> {
-    Err("automatic updates install the Windows installer; download the new version instead".into())
+fn launch_installer(_installer: &std::path::Path) -> Result<(), String> {
+    Err("updates aren't installed automatically on this system; download the new version from the release page".into())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Each Mac gets the disk image for its own processor, Windows the MSI.
+    /// Each Mac gets the disk image for its own processor, Windows the MSI, Linux nothing.
     #[test]
     fn installer_suffix_per_platform() {
-        assert_eq!(installer_suffix_for("macos", "aarch64"), "-macos-aarch64.dmg");
-        assert_eq!(installer_suffix_for("macos", "x86_64"), "-macos-x86_64.dmg");
-        assert_eq!(installer_suffix_for("windows", "x86_64"), "-windows-x64.msi");
-        assert_eq!(installer_suffix_for("windows", "aarch64"), "-windows-arm64.msi");
+        assert_eq!(installer_suffix_for("macos", "aarch64").as_deref(), Some("-macos-aarch64.dmg"));
+        assert_eq!(installer_suffix_for("macos", "x86_64").as_deref(), Some("-macos-x86_64.dmg"));
+        assert_eq!(installer_suffix_for("windows", "x86_64").as_deref(), Some("-windows-x64.msi"));
+        assert_eq!(installer_suffix_for("windows", "aarch64").as_deref(), Some("-windows-arm64.msi"));
+        // Task 028: a Linux build found the Windows MSI as its installer, downloaded it and failed.
+        assert_eq!(installer_suffix_for("linux", "x86_64"), None);
+        assert_eq!(installer_suffix_for("linux", "aarch64"), None);
+        assert_eq!(installer_suffix_for("freebsd", "x86_64"), None);
         let body = r#"{"tag_name": "v0.3.0", "html_url": "https://github.com/sintec-llc/sintec.pdf/releases/tag/v0.3.0", "assets": [
             {"name": "sintec-pdf-0.3.0-macos-aarch64.dmg", "browser_download_url": "https://github.com/sintec-llc/sintec.pdf/releases/download/v0.3.0/sintec-pdf-0.3.0-macos-aarch64.dmg"},
             {"name": "sintec-pdf-0.3.0-macos-x86_64.dmg", "browser_download_url": "https://github.com/sintec-llc/sintec.pdf/releases/download/v0.3.0/sintec-pdf-0.3.0-macos-x86_64.dmg"},
             {"name": "sintec-pdf-0.3.0-windows-x64.msi", "browser_download_url": "https://github.com/sintec-llc/sintec.pdf/releases/download/v0.3.0/sintec-pdf-0.3.0-windows-x64.msi"}]}"#;
         let release = parse(body).unwrap();
-        let installer = release.installer.unwrap();
-        assert!(installer.ends_with(&installer_suffix()), "{installer}");
+        match installer_suffix() {
+            Some(suffix) => assert!(release.installer.as_deref().is_some_and(|i| i.ends_with(&suffix)), "{release:?}"),
+            None => assert_eq!(release.installer, None, "no installer is offered where none fits"),
+        }
     }
 
     #[test]
@@ -266,7 +279,9 @@ mod tests {
 
     #[test]
     fn the_installer_and_checksums_come_only_from_our_downloads() {
-        let msi = format!("sintec-pdf-0.1.3{}", installer_suffix());
+        // Where no installer fits (Linux), every release reads as installer-less (above).
+        let Some(suffix) = installer_suffix() else { return };
+        let msi = format!("sintec-pdf-0.1.3{suffix}");
         let body = format!(
             r#"{{"tag_name":"v0.1.3","html_url":"https://github.com/sintec-llc/sintec.pdf/releases/tag/v0.1.3","assets":[
             {{"name":"sintec-pdf-0.1.3-windows-x64-portable.zip","browser_download_url":"https://github.com/sintec-llc/sintec.pdf/releases/download/v0.1.3/sintec-pdf-0.1.3-windows-x64-portable.zip"}},

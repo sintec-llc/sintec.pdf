@@ -6,6 +6,11 @@ PdfCraft's; each entry says which upstream version the code is based on.
 ## Unreleased
 
 ### Ours
+- **Linux x86_64:** CI tests on Linux and releases ship `sintec-pdf-<version>-linux-x86_64.AppImage`,
+  a `.deb` and a CLI tarball. The app installs as `sintec-pdf` with its own desktop entry and icon
+  (`io.github.sintec_llc.sintec_pdf`, English and Russian) and opens PDFs from the file manager.
+  Scanning uses SANE (`scanimage`) and printing CUPS. On Linux the update check opens the release
+  page instead of downloading a Windows installer.
 - **Reduce file size:** choose Strong, Medium or Light, with each level's estimated size shown
   before you pick (`~2.1 MB (64% smaller)`); Cancel writes nothing and the notice gives the real
   sizes. Light is lossless; Medium takes images to 150 ppi at JPEG quality 75; Strong to 100 ppi

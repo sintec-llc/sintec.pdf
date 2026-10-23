@@ -48,7 +48,14 @@ mod updates;
 #[path = "windows_manifest.rs"]
 mod windows_manifest;
 
-/// Freedesktop app id: the `.desktop` file name and the hicolor icon name.
+/// Freedesktop app id: the `.desktop` file name, the hicolor icon name and the Wayland app id /
+/// X11 `WM_CLASS` (packaging/linux/package.sh installs both under it). Sintec.PDF's own on Linux
+/// and the BSDs, so it never shares a launcher entry with an upstream PdfCraft.
+#[cfg(not(any(windows, target_os = "macos")))]
+const APP_ID: &str = "io.github.sintec_llc.sintec_pdf";
+/// Windows and macOS have no use for the freedesktop id, but eframe also falls back to it for its
+/// storage folder, so it stays the upstream one there.
+#[cfg(any(windows, target_os = "macos"))]
 const APP_ID: &str = "ai.storyteller.pdfcraft";
 
 /// The app icon (assets/app-icon/README.md). macOS gets the version on Apple's icon grid, with a
@@ -112,7 +119,7 @@ fn migrate_legacy_folders() {
 
 /// Desktop launchers (GNOME Files, KDE Dolphin…) only recognise an app as the default handler for a
 /// mime type if its `Exec` takes URIs (`%u`/`%U`), not just paths (`%F`); the packaged `.desktop`
-/// file uses `%U` accordingly (packaging/linux/ai.storyteller.pdfcraft.desktop). Decode a local
+/// file uses `%U` accordingly (packaging/linux/io.github.sintec_llc.sintec_pdf.desktop). Decode a local
 /// `file://` argument (`file:///path` or `file://localhost/path`) to a plain path here so the rest
 /// of the app, which only ever opens paths, is unaffected. Other schemes (`http://`, `mailto:`…),
 /// URIs naming another host, and plain paths pass through untouched.
@@ -353,7 +360,7 @@ fn native_options(integrated: bool, app_frame: bool, renderer: eframe::Renderer,
         .with_inner_size([1440.0, 920.0])
         .with_min_inner_size([820.0, 520.0])
         .with_drag_and_drop(true)
-        // Wayland app id: matches packaging/linux/ai.storyteller.pdfcraft.desktop.
+        // Wayland app id: matches packaging/linux/io.github.sintec_llc.sintec_pdf.desktop.
         .with_app_id(APP_ID);
     // Dock, taskbar, Alt-Tab and launcher icon when running unbundled.
     match eframe::icon_data::from_png_bytes(APP_ICON_PNG) {
@@ -1451,11 +1458,23 @@ mod tests {
     }
 
     /// X11 startup notification and docks match a window to its launcher by `StartupWMClass`,
-    /// so it has to be the class the window carries: the app id, on Wayland and X11 alike.
+    /// so it has to be the class the window carries: the app id, on Wayland and X11 alike. The
+    /// entry, its icon and the AppStream id all carry the same id (Sintec.PDF's own, task 028).
     #[test]
     fn the_desktop_entry_names_the_window_class() {
-        let entry = include_str!("../../../packaging/linux/ai.storyteller.pdfcraft.desktop");
-        let class = entry.lines().find_map(|line| line.strip_prefix("StartupWMClass="));
-        assert_eq!(class, Some(super::APP_ID));
+        const LINUX_APP_ID: &str = "io.github.sintec_llc.sintec_pdf";
+        #[cfg(not(any(windows, target_os = "macos")))]
+        assert_eq!(super::APP_ID, LINUX_APP_ID);
+        let entry = include_str!("../../../packaging/linux/io.github.sintec_llc.sintec_pdf.desktop");
+        let field = |key: &str| entry.lines().find_map(|line| line.strip_prefix(key)).map(str::to_owned);
+        assert_eq!(field("StartupWMClass=").as_deref(), Some(LINUX_APP_ID));
+        assert_eq!(field("Icon=").as_deref(), Some(LINUX_APP_ID));
+        assert_eq!(field("Name=").as_deref(), Some("Sintec.PDF"));
+        // The packages install the app as `sintec-pdf` (packaging/linux/package.sh).
+        assert_eq!(field("Exec=").as_deref(), Some("sintec-pdf %U"));
+        let metainfo = include_str!("../../../packaging/linux/io.github.sintec_llc.sintec_pdf.metainfo.xml.in");
+        assert!(metainfo.contains(&format!("<id>{LINUX_APP_ID}</id>")));
+        assert!(metainfo.contains(&format!("<launchable type=\"desktop-id\">{LINUX_APP_ID}.desktop</launchable>")));
+        assert!(metainfo.contains("<binary>sintec-pdf</binary>") && metainfo.contains("<mediatype>application/pdf</mediatype>"));
     }
 }

@@ -57,8 +57,9 @@ pub fn installed_directories() -> Vec<PathBuf> {
 }
 
 /// Where the app's own substitute fonts (Carlito, Caladea, Tinos, Cousine, PT Sans) live: `fonts`
-/// beside the executable (Windows), `../Resources/fonts` (macOS bundle), `../share/pdfcraft/fonts`
-/// (Linux packages) and the source tree's `assets/substitute-fonts` (`cargo xtask fonts`).
+/// beside the executable (Windows), `../Resources/fonts` (macOS bundle), `../share/sintec-pdf/fonts`
+/// (Sintec.PDF's Linux packages), `../share/pdfcraft/fonts` (upstream's) and the source tree's
+/// `assets/substitute-fonts` (`cargo xtask fonts`).
 /// Folders that don't exist are skipped by [`discover`].
 pub fn bundled_directories() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
@@ -66,6 +67,7 @@ pub fn bundled_directories() -> Vec<PathBuf> {
         dirs.push(exe_dir.join("fonts"));
         dirs.push(exe_dir.join("../Resources/fonts"));
         dirs.push(exe_dir.join("../share/pdfcraft/fonts"));
+        dirs.push(exe_dir.join("../share/sintec-pdf/fonts"));
     }
     dirs.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/substitute-fonts"));
     dirs
@@ -484,6 +486,8 @@ mod tests {
     fn bundled_directories_are_found_and_missing_ones_skipped() {
         let dirs = bundled_directories();
         assert!(dirs.iter().any(|d| d.ends_with("substitute-fonts")) && dirs.iter().any(|d| d.ends_with("fonts")));
+        // Sintec.PDF's Linux packages put them in share/sintec-pdf/fonts (packaging/linux/package.sh).
+        assert!(dirs.iter().any(|d| d.ends_with("share/sintec-pdf/fonts")), "{dirs:?}");
         assert!(scan(&[PathBuf::from("no/such/dir")], true).is_empty());
         let dir = std::env::temp_dir().join(format!("pdfcraft-bundled-fonts-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);

@@ -1,20 +1,24 @@
 # Releasing Sintec.PDF
 
-> **Sintec.PDF builds for Windows and macOS.** Every push to the `release` branch runs
-> `.github/workflows/release.yml`, which builds, in parallel:
+> **Sintec.PDF builds for Windows, macOS and Linux x86_64.** Every push to the `release` branch
+> runs `.github/workflows/release.yml`, which builds, in parallel:
 >
 > - the x64 MSI and portable zip (`sintec-pdf-<version>-windows-x64.*`), checked with
 >   `packaging/windows/test-msi.ps1`;
 > - a disk image and a CLI zip per Mac processor, each built natively: Apple silicon on
 >   `macos-15` (`sintec-pdf-<version>-macos-aarch64.dmg`) and Intel on `macos-15-intel`
->   (`sintec-pdf-<version>-macos-x86_64.dmg`).
+>   (`sintec-pdf-<version>-macos-x86_64.dmg`);
+> - for Linux x86_64 on `ubuntu-22.04` (task 028): `sintec-pdf-<version>-linux-x86_64.AppImage`
+>   (with its `.zsync`), `sintec-pdf-<version>-linux-x86_64.deb` and the CLI-only
+>   `sintec-pdf-cli-<version>-linux-x86_64.tar.gz`, from `packaging/linux/package.sh`
+>   (see [Linux](#linux)).
 >
 > It then creates or updates a **draft** GitHub Release named `Sintec.PDF v<version>` with all of
 > them and `SHA256SUMS.txt`. Nobody sees a draft until a maintainer publishes it. CI (`ci.yml`)
-> also tests on both Mac processors and uploads ad-hoc signed DMGs as artifacts for every pull
-> request. The Linux, FreeBSD, web and Windows ARM64 jobs described below come from upstream
-> PdfCraft; their workflows were removed here, and the packaging scripts are kept only as
-> reference.
+> also tests on both Mac processors and on Linux, and uploads ad-hoc signed DMGs and the unsigned
+> Linux packages as artifacts for every pull request. The Linux aarch64, rpm, Flatpak, FreeBSD,
+> web and Windows ARM64 jobs described below come from upstream PdfCraft; their workflows were
+> removed here, and their packaging scripts are kept only as reference.
 
 User-facing names say **Sintec.PDF**; crates and build outputs keep upstream's `pdfcraft` stem.
 
@@ -203,11 +207,34 @@ Locally: `dotnet tool install -g wix --version 5.0.2`, then `pwsh packaging/wind
 
 ### Linux
 
+**Sintec.PDF (task 028).** The `linux` job of `release.yml` runs
+`packaging/linux/package.sh --formats "appimage deb cli"` on `ubuntu-22.04` and checks the result
+(package contents, `--version` of the AppImage and the CLI, the AppImage's update information and
+`.zsync`). Our packages differ from upstream's:
+
+- The executables install as `sintec-pdf` and `sintec-pdf-cli` (cargo still builds `pdfcraft` and
+  `pdfcraft-cli`), the package is `sintec-pdf`, and shared files go to `share/sintec-pdf/{models,fonts}`,
+  so nothing clashes with an upstream PdfCraft installed beside it.
+- The freedesktop app id is `io.github.sintec_llc.sintec_pdf` (the macOS bundle id with underscores):
+  the desktop entry and its icon, the Wayland app id and X11 `WM_CLASS` (`APP_ID` in
+  `apps/pdfcraft/src/main.rs`) and the AppStream id. Windows and macOS keep the upstream id, which
+  eframe uses for its storage folder there.
+- The desktop entry (`io.github.sintec_llc.sintec_pdf.desktop`, English and Russian) declares only
+  `application/pdf`, which shared-mime-info already defines, so no MIME package is installed.
+- Updates: the in-app check still tells the user about a new version, but on Linux it offers the
+  release page instead of downloading an installer (`apps/pdfcraft/src/updates.rs`). The deb is
+  upgraded by installing the new one; the AppImage updates itself through AppImageUpdate.
+- Scanning goes through SANE's `scanimage` (`sane-utils`; `crates/engine/src/scan.rs`); printing
+  through CUPS's `lp`/`lpstat` (`cups-client`), both recommended by the deb.
+- aarch64 is one matrix row away (commented out in `release.yml`) once an Arm runner is available.
+
+The upstream description follows.
+
 `packaging/linux/package.sh` stages one FHS tree (both binaries, the desktop entry, hicolor icons,
 AppStream metainfo) and makes every format from it: an **AppImage** (any distribution, nothing to
 install), a **.deb** and an **.rpm** (built with [nfpm](https://nfpm.goreleaser.com) from
 `nfpm.yaml`; they integrate with the menu, MIME and icon caches), a **.tar.gz**, and a CLI-only
-**`pdfcraft-cli-<v>-linux-<arch>.tar.gz`** (the stripped `pdfcraft-cli` plus the licences and
+**`sintec-pdf-cli-<v>-linux-<arch>.tar.gz`** (the stripped CLI plus the licences and
 README, for servers, CI and agent sandboxes). `--formats` picks a subset (`appimage deb rpm tar cli`).
 
 The binaries are built on Ubuntu 22.04, the oldest GitHub-hosted image, so they need only
@@ -216,7 +243,7 @@ xkbcommon) and the GPU (Vulkan, EGL) are loaded at runtime from the system; the 
 them as dependencies (see `nfpm.yaml`).
 
 Each AppImage embeds update information
-(`gh-releases-zsync|storytold|pdfcraft|latest|pdfcraft-*-linux-<arch>.AppImage.zsync`), and its
+(`gh-releases-zsync|sintec-llc|sintec.pdf|latest|sintec-pdf-*-linux-<arch>.AppImage.zsync`), and its
 `.zsync` is published beside it, so AppImageUpdate and AppImageLauncher can update it in place,
 downloading only the changed blocks. `latest` is the newest published, non-pre-release version.
 `package.sh` writes the `.zsync` when `zsyncmake` (the `zsync` package) is installed and warns

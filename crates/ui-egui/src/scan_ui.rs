@@ -1,5 +1,5 @@
-//! Sintec.PDF: Scan into document. The scanner's own Windows dialog scans a page
-//! ([`pdfcraft_engine::scan`]); the page goes into the open document after the selection (or at
+//! Sintec.PDF: Scan into document. The scanner's own Windows dialog scans a page, or on Linux
+//! SANE's `scanimage` with no dialog ([`pdfcraft_engine::scan`]); the page goes into the open document after the selection (or at
 //! the gap a "+" in the page grid chose), or into a new document when none is open. Then
 //! «Сканировать ещё» scans the next page in after it, until the user is done.
 
@@ -136,6 +136,7 @@ fn scan_error_text(e: &ScanError) -> String {
     match e {
         ScanError::NotSupported => tl!("Scanning works on Windows, through its built-in scanner support").to_string(),
         ScanError::NoWia => tl!("Windows' scanner support (WIA) isn't available on this computer").to_string(),
+        ScanError::NoSane => tl!("Scanning needs SANE's scanimage (the sane-utils package). Install it and try again").to_string(),
         ScanError::NoScanner => tl!("No scanner was found. Check that it is connected and switched on").to_string(),
         ScanError::Busy => tl!("The scanner is busy").to_string(),
         ScanError::Offline => tl!("The scanner is offline. Check that it is connected and switched on").to_string(),

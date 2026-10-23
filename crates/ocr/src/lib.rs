@@ -228,10 +228,17 @@ impl Models {
     /// executable (packaging/*):
     /// - `models/` beside it: the Windows MSI and portable zip;
     /// - `../Resources/models`: the macOS app bundle (`Contents/MacOS` → `Contents/Resources`);
-    /// - `../share/pdfcraft/models`: the FHS-style trees (`bin/` → `share/`) of the Linux
-    ///   deb/rpm/tar.gz/AppImage/Flatpak and the FreeBSD tarball, wherever they are installed.
+    /// - `../share/pdfcraft/models`: the FHS-style trees (`bin/` → `share/`) of upstream's Linux
+    ///   deb/rpm/tar.gz/AppImage/Flatpak and the FreeBSD tarball, wherever they are installed;
+    /// - `../share/sintec-pdf/models`: the same for Sintec.PDF's Linux packages, which keep their
+    ///   files apart from an upstream PdfCraft installed beside them.
     pub fn dirs_beside_exe(exe_dir: &Path) -> Vec<PathBuf> {
-        vec![exe_dir.join("models"), exe_dir.join("../Resources/models"), exe_dir.join("../share/pdfcraft/models")]
+        vec![
+            exe_dir.join("models"),
+            exe_dir.join("../Resources/models"),
+            exe_dir.join("../share/pdfcraft/models"),
+            exe_dir.join("../share/sintec-pdf/models"),
+        ]
     }
 }
 
@@ -528,9 +535,10 @@ mod tests {
         let layouts = [
             ("windows", "Sintec.PDF", "Sintec.PDF/models"),
             ("macos", "Sintec PDF.app/Contents/MacOS", "Sintec PDF.app/Contents/Resources/models"),
-            ("linux-deb-rpm", "usr/bin", "usr/share/pdfcraft/models"),
-            ("linux-tar", "pdfcraft-1.0.0-linux-x86_64/bin", "pdfcraft-1.0.0-linux-x86_64/share/pdfcraft/models"),
-            ("appimage", "Sintec.PDF.AppDir/usr/bin", "Sintec.PDF.AppDir/usr/share/pdfcraft/models"),
+            ("linux-deb-rpm", "usr/bin", "usr/share/sintec-pdf/models"),
+            ("linux-tar", "sintec-pdf-1.0.0-linux-x86_64/bin", "sintec-pdf-1.0.0-linux-x86_64/share/sintec-pdf/models"),
+            ("appimage", "Sintec.PDF.AppDir/usr/bin", "Sintec.PDF.AppDir/usr/share/sintec-pdf/models"),
+            ("upstream-linux", "usr/bin", "usr/share/pdfcraft/models"),
             ("flatpak", "app/bin", "app/share/pdfcraft/models"),
             ("freebsd", "usr/local/bin", "usr/local/share/pdfcraft/models"),
         ];

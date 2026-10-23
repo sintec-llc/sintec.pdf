@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=Sintec.PDF
+GenericName=PDF Editor
+GenericName[ru]=Редактор PDF
+Comment=Read, organize, combine, split and secure PDFs
+Comment[ru]=Просмотр, упорядочивание, объединение, разделение и защита PDF
+Exec=sintec-pdf %U
+TryExec=sintec-pdf
+Icon=io.github.sintec_llc.sintec_pdf
+Terminal=false
+StartupNotify=true
+StartupWMClass=io.github.sintec_llc.sintec_pdf
+Categories=Office;Viewer;
+Keywords=pdf;viewer;editor;annotate;sign;forms;merge;split;scan;ocr;
+Keywords[ru]=pdf;просмотр;редактор;комментарии;подпись;формы;объединить;разделить;сканировать;распознавание;
+MimeType=application/pdf;

@@ -1,6 +1,7 @@
-# Release pipeline: every push to `release` builds the Windows installer and portable zip and the
-# macOS disk images (Apple silicon and Intel, in parallel), and creates or updates the draft GitHub
-# Release "Sintec.PDF v<version>". See docs/releasing.md.
+# Release pipeline: every push to `release` builds the Windows installer and portable zip, the
+# macOS disk images (Apple silicon and Intel) and the Linux x86_64 AppImage, .deb and CLI tarball,
+# in parallel, and creates or updates the draft GitHub Release "Sintec.PDF v<version>". See
+# docs/releasing.md.
 #
 # Jobs run in the `release` environment (restricted to the `release` branch), which holds the
 # optional code-signing secrets. Missing secrets produce unsigned artifacts and a warning, never a
@@ -172,9 +173,93 @@ jobs:
         run: |
           if [ -n "${MACOS_KEYCHAIN:-}" ]; then security delete-keychain "$MACOS_KEYCHAIN" || true; fi
 
+  linux:
+    name: Linux ${{ matrix.arch }}
+    needs: version
+    # The oldest GitHub-hosted image, so the binaries need only glibc >= 2.35 (Ubuntu 22.04+,
+    # Debian 12+, Astra 1.8, Fedora 36+). See docs/releasing.md.
+    runs-on: ${{ matrix.runner }}
+    # No `environment: release`: nothing here is signed, so the job gets no release secrets.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-22.04, deb: amd64 }
+          # aarch64 builds the same way on an Arm runner; add it when one is available to us:
+          # - { arch: aarch64, runner: ubuntu-22.04-arm, deb: arm64 }
+    env:
+      PDFCRAFT_VERSION: ${{ needs.version.outputs.version }}
+      PDFCRAFT_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NFPM_VERSION: 2.47.0
+    steps:
+      - uses: actions/checkout@v4
+      # The craft-fonts build input (Japanese fonts, OFL), embedded in every release.
+      - name: Check out craft-fonts
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: storytold/craft-fonts
+          ref: abb83316d96aa59c1cf64784289e378fe9fa5695
+          path: craft-fonts
+      - name: Install build and packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-dev \
+            libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev libegl1-mesa-dev \
+            libfontconfig1-dev libdbus-1-dev desktop-file-utils appstream zsync file
+          curl -fsSL -o "$RUNNER_TEMP/nfpm.deb" \
+            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_${{ matrix.deb }}.deb"
+          sudo dpkg -i "$RUNNER_TEMP/nfpm.deb"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-linux-${{ matrix.arch }}
+      - name: Apply version override
+        if: inputs.version != ''
+        run: cargo xtask version set "$PDFCRAFT_VERSION"
+      - name: Build and package (AppImage, deb, CLI tar.gz)
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+          CRAFT_FONTS_REQUIRED: "1"
+        run: packaging/linux/package.sh --formats "appimage deb cli"
+      - name: Check the packages
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          base="sintec-pdf-$PDFCRAFT_VERSION-linux-$ARCH"
+          deb="dist/release/$base.deb"
+          dpkg-deb --info "$deb"
+          contents="$(dpkg-deb --contents "$deb")"
+          grep -E 'usr/bin/sintec-pdf$' <<<"$contents"
+          grep -E 'usr/bin/sintec-pdf-cli$' <<<"$contents"
+          grep -E 'applications/io\.github\.sintec_llc\.sintec_pdf\.desktop$' <<<"$contents"
+          grep -E 'metainfo/io\.github\.sintec_llc\.sintec_pdf\.metainfo\.xml$' <<<"$contents"
+          grep -E 'icons/hicolor/256x256/apps/io\.github\.sintec_llc\.sintec_pdf\.png$' <<<"$contents"
+          # OCR models and substitute fonts where the installed app looks: <bin>/../share/sintec-pdf.
+          grep -E 'usr/share/sintec-pdf/models/.+\.rten$' <<<"$contents"
+          grep -E 'usr/share/sintec-pdf/fonts/.+\.ttf$' <<<"$contents"
+          ldd target/release/pdfcraft
+          # The CLI-only archive: the binary and its licences, and it runs.
+          cli="dist/release/sintec-pdf-cli-$PDFCRAFT_VERSION-linux-$ARCH.tar.gz"
+          tar -tzf "$cli" | grep -E '/sintec-pdf-cli$'
+          tar -tzf "$cli" | grep -E '/LICENSE-APACHE$'
+          mkdir -p "$RUNNER_TEMP/cli" && tar -xzf "$cli" -C "$RUNNER_TEMP/cli"
+          "$RUNNER_TEMP/cli/sintec-pdf-cli-$PDFCRAFT_VERSION-linux-$ARCH/sintec-pdf-cli" --version
+          appimage="dist/release/$base.AppImage"
+          chmod +x "$appimage"
+          APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" --version
+          # Update information is embedded, and the .zsync for delta updates sits beside it.
+          "$appimage" --appimage-updateinformation | grep -F 'gh-releases-zsync|'
+          test -s "$appimage.zsync"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-${{ matrix.arch }}
+          path: dist/release/*
+          if-no-files-found: error
+
   release:
     name: Draft GitHub Release
-    needs: [version, windows, macos]
+    needs: [version, windows, macos, linux]
     runs-on: ubuntu-latest
     environment: release
     permissions:
