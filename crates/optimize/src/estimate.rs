@@ -5,10 +5,11 @@
 //!
 //! - **Images:** the image settings are planned for every image without touching its pixels
 //!   (which are resampled, and to what size). The largest image of each kind (grey or colour,
-//!   JPEG or not) is then really resampled and encoded, and the next largest as long as the
-//!   [`Budget`]'s pixels last. The others are predicted from the bytes per output pixel the
-//!   trials of their kind came to, and are replaced only if that is smaller, as the optimizer
-//!   would.
+//!   JPEG or not, resampled or not) is then really resampled and encoded (with the quality
+//!   search), and the next largest as long as the [`Budget`]'s pixels last. The others are
+//!   predicted from their kind's trials: resampled ones from the bytes per output pixel, the
+//!   others from the share of their size the trials kept, weighted by how many trials were
+//!   replaced at all; an image is replaced only if that is smaller, as the optimizer would.
 //! - **Streams:** the lossless recompression is really tried on the largest streams of each kind
 //!   (image samples, other compressed streams, unencoded streams) within the budget's bytes; the
 //!   others are predicted from the ratio their class reached (kind, compressed or not, bits per
@@ -43,7 +44,7 @@ pub struct Budget {
 impl Default for Budget {
     /// About a second or two of work on an ordinary machine.
     fn default() -> Self {
-        Budget { image_pixels: 40_000_000, stream_bytes: 48 << 20 }
+        Budget { image_pixels: 24_000_000, stream_bytes: 48 << 20 }
     }
 }
 
@@ -114,14 +115,16 @@ struct Item {
     mask: Option<(ObjRef, usize, u64)>,
 }
 
-/// Images of one kind: grey or colour, JPEG or not.
-type Class = (usize, bool);
+/// Images of one kind: grey or colour, JPEG or not, resampled or not.
+type Class = (usize, bool, bool);
 
 #[derive(Default)]
 struct ClassStats {
     tried: usize,
     replaced: usize,
+    /// Of the images replaced: new bytes, their stored bytes before, and their output pixels.
     bytes: f64,
+    before: f64,
     pixels: f64,
 }
 
@@ -149,9 +152,12 @@ fn estimate_images(
         items.push(Item { r, plan, settings: st, raw: s.raw.len(), mask });
     }
     let source_px = |i: &Item| u64::from(i.plan.w) * u64::from(i.plan.h);
-    let class = |i: &Item| -> Class { (i.plan.n, i.plan.was_dct) };
+    let class = |i: &Item| -> Class { (i.plan.n, i.plan.was_dct, i.plan.resized()) };
     let mut order: Vec<usize> = (0..items.len()).collect();
-    order.sort_by_key(|i| std::cmp::Reverse(items.get(*i).map_or(0, source_px)));
+    // Largest first; images of one size (the pages of a scan) in an order spread evenly over
+    // the document, so a sample of them stands for all.
+    let spread = |i: usize| (i as u32).reverse_bits();
+    order.sort_by_key(|i| (std::cmp::Reverse(items.get(*i).map_or(0, source_px)), spread(*i)));
     let mut chosen = vec![false; items.len()];
     let (mut classes, mut spent) = (HashSet::new(), 0u64);
     for i in &order {
@@ -185,6 +191,7 @@ fn estimate_images(
         if let Some((new, smask)) = images::encode(doc, s, &item.plan, &item.settings) {
             st.replaced += 1;
             st.bytes += new.raw.len() as f64;
+            st.before += item.raw as f64;
             st.pixels += f64::from(item.plan.nw) * f64::from(item.plan.nh);
             sizes.insert(item.r, new.raw.len());
             if let Some((mr, m)) = smask {
@@ -196,16 +203,20 @@ fn estimate_images(
         return Err(OptimizeError::Cancelled);
     }
     for (item, _) in items.iter().zip(&chosen).filter(|(_, c)| !**c) {
-        // Every kind had a trial; one whose trials were never smaller isn't replaced.
-        let Some(st) = stats.get(&class(item)).filter(|s| s.replaced > 0 && s.pixels > 0.0) else { continue };
+        // Every kind had a trial; one whose trials were never replaced isn't replaced.
+        let Some(st) = stats.get(&class(item)).filter(|s| s.replaced > 0 && s.pixels > 0.0 && s.before > 0.0) else { continue };
         let out_px = f64::from(item.plan.nw) * f64::from(item.plan.nh);
-        let est = st.bytes / st.pixels * out_px;
+        // Resampled images come to about the same bytes per pixel as their kind's trials; the
+        // others to about the same share of their own size (re-encoding depends on content).
+        let replaced = if item.plan.resized() { st.bytes / st.pixels * out_px } else { item.raw as f64 * st.bytes / st.before };
+        // Trials of the kind that weren't replaced stand for images that keep their size.
+        let share = st.replaced as f64 / st.tried.max(1) as f64;
+        let est = share * replaced + (1.0 - share) * item.raw as f64;
         // A soft mask is resampled losslessly with its image: about in proportion to pixels.
         let mask_est = item.mask.map(|(_, raw, px)| raw as f64 * out_px / px as f64);
         let before = item.raw as f64 + item.mask.map_or(0.0, |(_, raw, _)| raw as f64);
         let after = est + mask_est.unwrap_or(0.0);
-        let worth = if !item.plan.resized() && item.plan.was_dct { after <= before * 0.9 } else { after < before };
-        if worth && est.is_finite() {
+        if after < before && est.is_finite() {
             // Finite, non-negative and below `before`, a `usize`: the casts are exact enough.
             sizes.insert(item.r, est.round() as usize);
             if let (Some((mr, _, _)), Some(m)) = (item.mask, mask_est) {

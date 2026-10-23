@@ -6,8 +6,13 @@
 //!   settings can work on it.
 //! - **Images:** each image's effective resolution is measured where pages draw it (the
 //!   smallest over its uses, through form XObjects); colour and grayscale images above a
-//!   threshold are resampled (bicubic) to a target resolution and recompressed as JPEG or Flate.
-//!   A new image replaces the old one only if it is smaller. Images PdfCraft can't decode
+//!   threshold are resampled (Lanczos) to a target resolution and recompressed as JPEG or Flate:
+//!   at a fixed quality, or ([`Compression::Targeted`]) at the lowest quality that keeps the
+//!   image's SSIM, graphics staying lossless and JPEGs that aren't resampled made smaller on
+//!   their own coefficients ([`Compression::Lossless`] only converts few-colour images to an
+//!   indexed palette). JPEG is written by PdfCraft's own encoder (4:2:0 chroma when the colours
+//!   allow it, Huffman tables made for each image). A new image replaces the old one only if it
+//!   is smaller. Images PdfCraft can't decode
 //!   faithfully (CMYK and other colour spaces, masks, decode arrays other than the default,
 //!   JPEG 2000, JBIG2, CCITT, other than 8 bits) are left alone.
 //! - **Discard objects:** page thumbnails, alternate images, document tags (structure tree),
@@ -16,8 +21,10 @@
 //!   image); Flate-compress streams that have no filter; remove a redundant outer ASCII85 or
 //!   ASCIIHex layer from streams that have one.
 //! - **Recompress streams** (lossless): every stream in a general-purpose encoding is stored
-//!   again with Flate at the best level, image samples with a PNG predictor; a stream is
-//!   replaced only when that is smaller. JPEG, JPEG 2000, JBIG2 and CCITT data stay as they are.
+//!   again with Flate at the best level, image samples with a PNG predictor; JPEGs are transcoded losslessly (the same
+//!   coefficients, better Huffman tables, no Exif); a stream is replaced only when that is
+//!   smaller and, for a JPEG, decodes to the same pixels. JPEG 2000, JBIG2 and CCITT data stay
+//!   as they are.
 //! - **Estimate:** [`estimate_with_progress`] predicts what the slow steps would make of each
 //!   stream, from trial encodes of a budgeted sample, so a caller can show sizes before it
 //!   optimizes.
@@ -32,7 +39,9 @@ mod audit;
 mod estimate;
 pub mod fragments;
 mod images;
+mod jpeg;
 mod links;
+mod quality;
 mod recompress;
 mod unused;
 
@@ -76,6 +85,31 @@ pub enum Compression {
     Flate,
     /// Keep the image's own compression (resampled images become Flate if they weren't JPEG).
     Retain,
+    /// Lossless only: an image that isn't JPEG is stored as an indexed palette when it has few
+    /// enough colours and that is smaller (JPEGs are left to the lossless stream pass).
+    Lossless,
+    /// JPEG at the lowest quality that keeps the image looking the same ([`Target`]); graphics
+    /// (few colours or large flat areas: screenshots, charts, line art, text) stay lossless.
+    Targeted(Target),
+}
+
+/// What [`Compression::Targeted`] holds an image to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Target {
+    /// The lowest structural similarity (SSIM of the luma over 8×8 windows) the JPEG may have to
+    /// the image it replaces (resampled, if it is), in ten-thousandths: 9850 is 0.985.
+    pub min_ssim: u16,
+    /// The JPEG qualities searched (1–100). The floor holds even when the SSIM would allow less.
+    pub floor: u8,
+    pub ceiling: u8,
+    /// A JPEG that isn't resampled is re-encoded only when that saves at least this share (in
+    /// percent) of its size after the lossless transcode.
+    pub min_saving: u8,
+    /// Store colour images that are grey to the eye (scans of black-and-white pages) as grey.
+    pub grey: bool,
+    /// A JPEG that isn't resampled is made smaller on its own coefficients: its quantization
+    /// steps multiplied by up to this (1 leaves them; the SSIM target still decides how far).
+    pub requantize: u8,
 }
 
 /// Acrobat's JPEG quality steps.

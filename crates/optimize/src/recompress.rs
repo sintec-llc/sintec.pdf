@@ -4,8 +4,12 @@
 //! makes screenshots, charts and 1-bit scans small. The decoded bytes are exactly the same, so
 //! nothing a page draws changes. A stream is replaced only when the new one is smaller.
 //!
-//! Left alone: image codecs (JPEG, JPEG 2000, JBIG2, CCITT: their data is already compact and
-//! decoding it would lose nothing only for CCITT), XMP metadata (kept readable, PDF/A needs it),
+//! JPEG images are transcoded losslessly instead ([`crate::jpeg::transcode`]): the same
+//! coefficients with Huffman tables made for them, baseline or progressive, without Exif and
+//! other metadata no reader draws; kept only when smaller and decoding to exactly the same pixels.
+//!
+//! Left alone: the other image codecs (JPEG 2000, JBIG2, CCITT: their data is already compact
+//! and decoding it would lose nothing only for CCITT), XMP metadata (kept readable, PDF/A needs it),
 //! cross-reference and object streams (the writer makes new ones), streams with external data,
 //! indirect or abbreviated filter descriptions, `Crypt` filters, and in an encrypted document
 //! embedded files (they may use their own crypt filter).
@@ -32,6 +36,8 @@ pub(crate) enum Kind {
     Compressed,
     /// Any other stream stored without a filter.
     Plain,
+    /// A JPEG (DCTDecode only), transcoded losslessly.
+    Jpeg,
 }
 
 /// Whether `s` may be recompressed, and what kind it is.
@@ -55,6 +61,9 @@ pub(crate) fn eligible(s: &Stream, encrypted: bool) -> Option<Kind> {
         Some(Object::Array(a)) => a.iter().map(Object::as_name).collect::<Option<Vec<_>>>()?,
         Some(_) => return None,
     };
+    if let [b"DCTDecode" | b"DCT"] = names.as_slice() {
+        return Some(Kind::Jpeg);
+    }
     if !names.iter().all(|n| GENERAL.contains(n)) {
         return None;
     }
@@ -114,6 +123,12 @@ fn row_bytes(p: &Params) -> Option<usize> {
 
 /// `s` recompressed losslessly, if that is smaller. `s` must be [`eligible`].
 pub(crate) fn recompress(doc: &Document, s: &Stream) -> Option<Stream> {
+    if eligible(s, false) == Some(Kind::Jpeg) {
+        let data = crate::jpeg::transcode(&s.raw)?;
+        let mut dict = s.dict.clone();
+        dict.remove(b"Length");
+        return Some(Stream::from_raw(dict, data));
+    }
     let data = if s.dict.contains(b"Filter") { pdfcraft_filters::decode(&s.filters(), &s.raw, MAX_DECODED).ok()? } else { s.raw.to_vec() };
     let mut dict = s.dict.clone();
     for k in [&b"Length"[..], b"Filter", b"DecodeParms"] {
@@ -222,7 +237,17 @@ mod tests {
     fn what_is_not_eligible() {
         let mut d = Dict::new();
         d.set(b"Filter".to_vec(), Object::name("DCTDecode"));
+        assert_eq!(eligible(&Stream::from_raw(d, vec![0; 100]), false), Some(Kind::Jpeg), "JPEG is transcoded");
+        let mut d = Dict::new();
+        d.set(b"Filter".to_vec(), Object::name("JPXDecode"));
         assert_eq!(eligible(&Stream::from_raw(d, vec![0; 100]), false), None, "image codecs");
+        let mut d = Dict::new();
+        d.set(b"Filter".to_vec(), Object::Array(vec![Object::name("FlateDecode"), Object::name("DCTDecode")]));
+        assert_eq!(eligible(&Stream::from_raw(d.clone(), vec![0; 100]), false), None, "JPEG under another filter");
+        // A JPEG that isn't one is left as it is.
+        let mut d = Dict::new();
+        d.set(b"Filter".to_vec(), Object::name("DCTDecode"));
+        assert!(recompress(&Document::new_empty(), &Stream::from_raw(d, [0xFF, 0xD8, 0xFF, 0xC0, 0, 2].repeat(20))).is_none());
         let mut d = Dict::new();
         d.set(b"Type".to_vec(), Object::name("Metadata"));
         assert_eq!(eligible(&Stream::from_raw(d, vec![b'a'; 100]), false), None, "XMP stays readable");

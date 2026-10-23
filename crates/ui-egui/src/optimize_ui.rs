@@ -122,8 +122,9 @@ fn image_row(ui: &mut egui::Ui, id: &str, title: &str, s: &mut ImageSettings) {
     ui.horizontal(|ui| {
         ui.label(tl!("Compression"));
         let label = match s.compression {
-            Compression::Jpeg(_) => "JPEG",
-            Compression::Flate => tl!("ZIP"),
+            // Reduce File Size's levels: automatic JPEG quality, or lossless only.
+            Compression::Jpeg(_) | Compression::Targeted(_) => "JPEG",
+            Compression::Flate | Compression::Lossless => tl!("ZIP"),
             Compression::Retain => tl!("Retain existing"),
         };
         egui::ComboBox::from_id_salt((id, "compression")).selected_text(label).show_ui(ui, |ui| {
@@ -337,9 +338,15 @@ impl Drop for ReduceDraft {
 /// The levels as the dialog lists them, most reduction first, with their descriptions.
 fn level_rows() -> [(Level, &'static str, &'static str); 3] {
     [
-        (Level::Strong, tl!("Strong compression"), tl!("Smallest file: images to 100 ppi, JPEG quality 55; metadata and other extras removed")),
-        (Level::Medium, tl!("Medium compression"), tl!("Balanced: images to 150 ppi, JPEG quality 75")),
-        (Level::Light, tl!("Light compression"), tl!("Lossless: images unchanged, streams and structure recompressed")),
+        (
+            Level::Strong,
+            tl!("Strong compression"),
+            tl!(
+                "Smallest file: images to 120 ppi, JPEG quality chosen per image but never low enough to show artifacts; metadata and other extras removed"
+            ),
+        ),
+        (Level::Medium, tl!("Medium compression"), tl!("Balanced: images to 150 ppi, JPEG quality chosen per image so it looks the same")),
+        (Level::Light, tl!("Light compression"), tl!("Lossless: images stay pixel for pixel the same; JPEGs, streams and structure recompressed")),
     ]
 }
 

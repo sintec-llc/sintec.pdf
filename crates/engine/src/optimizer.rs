@@ -16,16 +16,21 @@
 //!
 //! | | Light | Medium | Strong |
 //! |---|---|---|---|
-//! | Images | unchanged (lossless only) | above 200 ppi to 150 ppi; JPEG quality 75 | above 130 ppi to 100 ppi; JPEG quality 55 |
+//! | Images | lossless only: every pixel stays the same | above 220 ppi resampled to 150 ppi (Lanczos); JPEG quality searched per image for SSIM ≥ 0.985 (quality 70–92) | above 160 ppi resampled to 120 ppi; JPEG quality searched for SSIM ≥ 0.970 (quality 65–90) |
+//! | JPEGs not resampled | transcoded losslessly (Huffman tables made for the image, progressive when smaller, Exif/XMP/comments dropped) | grey-looking colour pages stored as their luma alone; quantization steps doubled where SSIM ≥ 0.985 holds; kept only if 5 % smaller than the lossless transcode | as Medium, steps up to tripled, SSIM ≥ 0.970, 3 % smaller |
+//! | Graphics (≤ 256 colours, or ≥ half the pixels equal to their neighbour) | indexed palette (1–8 bits) when smaller | same: never JPEG, never resampled | same |
 //! | Streams | Flate at the best level, PNG predictors for image samples | same | same |
 //! | Structure | object and cross-reference streams, identical objects merged, unused objects dropped | same | same |
 //! | Discarded | page thumbnails, alternate images | same | same, plus print settings, document information and XMP metadata, other applications' private data, invalid links and unreferenced named destinations |
 //! | Kept | text, fonts, forms, comments, attachments, bookmarks, links, tags, layers | same | same, except what is discarded |
 //!
 //! Images are measured where pages draw them, and every image or stream is replaced only when
-//! the new one is smaller (a JPEG re-encoded at its own size only when that saves a tenth). An
-//! image that wasn't JPEG stays lossless when Flate is smaller than the JPEG would be. Signed
-//! documents are refused: a full rewrite would invalidate their signatures.
+//! the new one is smaller. The SSIM is the luma's, over 8×8 windows, counting only windows with
+//! detail (the text of a scan, not the paper); grain that misses the target even at the ceiling
+//! quality is stored at the ceiling. Colour images are stored grey only when no pixel is more
+//! than slightly tinted (a coloured stamp or signature keeps the colour), and with 4:2:0 chroma
+//! only when that keeps sharp coloured edges. Signed documents are refused: a full rewrite would
+//! invalidate their signatures.
 
 use std::sync::Arc;
 
@@ -121,12 +126,14 @@ fn save_options(session: &Session) -> SaveOptions {
 /// Reduce File Size's levels (the [module documentation](self) has the table).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Level {
-    /// Lossless only: streams recompressed, structure compacted, thumbnails dropped.
+    /// Lossless only: every pixel stays; JPEGs transcoded, streams recompressed, structure
+    /// compacted, thumbnails dropped.
     Light,
-    /// Images to 150 ppi, JPEG quality 75.
+    /// Visually lossless: images to 150 ppi above 220, JPEG quality chosen per image for
+    /// SSIM ≥ 0.985.
     #[default]
     Medium,
-    /// Images to 100 ppi, JPEG quality 55, extras discarded.
+    /// Images to 120 ppi above 160, SSIM ≥ 0.970 and JPEG quality at least 65, extras discarded.
     Strong,
 }
 
@@ -149,7 +156,7 @@ impl Level {
 
     /// The optimizer's choices for this level.
     pub fn settings(self) -> optimize::Settings {
-        use optimize::{Compression, ImageSettings, Settings};
+        use optimize::{Compression, ImageSettings, Settings, Target};
         let base = Settings {
             merge_fragments: true,
             discard_thumbnails: true,
@@ -162,22 +169,32 @@ impl Level {
             remove_unreferenced_dests: false,
             ..Settings::default()
         };
-        let images =
-            |target_ppi, above_ppi, quality| ImageSettings { downsample: true, target_ppi, above_ppi, compression: Compression::Jpeg(quality) };
+        let targeted = |target_ppi, above_ppi, min_ssim, floor, ceiling, min_saving, requantize| ImageSettings {
+            downsample: true,
+            target_ppi,
+            above_ppi,
+            compression: Compression::Targeted(Target { min_ssim, floor, ceiling, min_saving, grey: true, requantize }),
+        };
         match self {
             Level::Light => {
-                let keep = ImageSettings { downsample: false, compression: Compression::Retain, ..ImageSettings::REDUCE };
+                let keep = ImageSettings { downsample: false, compression: Compression::Lossless, ..ImageSettings::REDUCE };
                 Settings { color: keep, gray: keep, ..base }
             }
-            Level::Medium => Settings { color: images(150.0, 200.0, 75), gray: images(150.0, 200.0, 75), ..base },
-            Level::Strong => Settings {
-                color: images(100.0, 130.0, 55),
-                gray: images(100.0, 130.0, 55),
-                discard_print_settings: true,
-                remove_invalid_links: true,
-                remove_unreferenced_dests: true,
-                ..base
-            },
+            Level::Medium => {
+                let images = targeted(150.0, 220.0, 9850, 70, 92, 5, 2);
+                Settings { color: images, gray: images, ..base }
+            }
+            Level::Strong => {
+                let images = targeted(120.0, 160.0, 9700, 65, 90, 3, 3);
+                Settings {
+                    color: images,
+                    gray: images,
+                    discard_print_settings: true,
+                    remove_invalid_links: true,
+                    remove_unreferenced_dests: true,
+                    ..base
+                }
+            }
         }
     }
 

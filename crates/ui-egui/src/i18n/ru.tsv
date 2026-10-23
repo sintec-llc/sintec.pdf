@@ -2836,9 +2836,9 @@ print handling	Label	Этикетка
 	Strong compression	Сильное сжатие
 	Medium compression	Среднее сжатие
 	Light compression	Лёгкое сжатие
-	Smallest file: images to 100 ppi, JPEG quality 55; metadata and other extras removed	Наименьший файл: изображения до 100 ppi, качество JPEG 55; метаданные и прочие лишние данные удаляются
-	Balanced: images to 150 ppi, JPEG quality 75	Сбалансированно: изображения до 150 ppi, качество JPEG 75
-	Lossless: images unchanged, streams and structure recompressed	Без потерь: изображения не меняются, потоки и структура сжимаются заново
+	Smallest file: images to 120 ppi, JPEG quality chosen per image but never low enough to show artifacts; metadata and other extras removed	Наименьший файл: изображения до 120 ppi, качество JPEG подбирается для каждого изображения, но не ниже порога заметных артефактов; метаданные и прочие лишние данные удаляются
+	Balanced: images to 150 ppi, JPEG quality chosen per image so it looks the same	Сбалансированно: изображения до 150 ppi, качество JPEG подбирается для каждого изображения без заметных потерь
+	Lossless: images stay pixel for pixel the same; JPEGs, streams and structure recompressed	Без потерь: изображения не меняются ни на пиксель; JPEG, потоки и структура сжимаются заново
 	~{size} ({pct}% smaller)	~{size} (меньше на {pct}%)
 	~{size} (not smaller)	~{size} (не меньше)
 	Current size: {size}	Текущий размер: {size}
