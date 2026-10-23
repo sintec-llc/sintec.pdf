@@ -1,5 +1,7 @@
 //! Page layouts, zoom modes and link navigation, checked by where pages land on screen.
 
+#[path = "support/render.rs"]
+mod render_lock;
 use egui::{Key, Modifiers, MouseWheelUnit, TouchPhase};
 use egui_kittest::Harness;
 use pdfcraft_ui_egui::PdfCraftApp;
@@ -15,7 +17,7 @@ const PAGES: &[u8] = b"%PDF-1.7
 trailer << /Root 1 0 R >>
 %%EOF";
 
-/// Tests that render pixels (`h.render()`) take this first, so only one wgpu device compiles
+/// Tests that render pixels (`render_lock::locked(|| h.render())`) take this first, so only one wgpu device compiles
 /// shaders at a time. On machines without a GPU, wgpu falls back to Microsoft's WARP, whose ARM64
 /// pixel-shader JIT crashes (access violation in `d3d10warp!PixelJitProgram::ClassifyVars`) when
 /// two devices compile at once, as on GitHub's Windows 11 ARM64 runner. Hold it for the whole
@@ -118,7 +120,7 @@ fn middle_button_scrolling_keeps_page_colours_in_both_themes() {
             let page = if organize { h.get_by_label("Page 1").rect() } else { rect(&h, 0).unwrap() };
             let at = page.center();
             let ppp = h.ctx.pixels_per_point();
-            let before = *h.render().unwrap().get_pixel((at.x * ppp) as u32, (at.y * ppp) as u32);
+            let before = *render_lock::locked(|| h.render()).unwrap().get_pixel((at.x * ppp) as u32, (at.y * ppp) as u32);
             assert_eq!(
                 before,
                 image::Rgba([255, 255, 255, 255]),
@@ -131,7 +133,7 @@ fn middle_button_scrolling_keeps_page_colours_in_both_themes() {
             h.event(egui::Event::PointerButton { pos: anchor, button: egui::PointerButton::Middle, pressed: false, modifiers: Modifiers::NONE });
             h.run_steps(1);
             assert!(h.state().views[0].auto_scrolling());
-            let during = *h.render().unwrap().get_pixel((at.x * ppp) as u32, (at.y * ppp) as u32);
+            let during = *render_lock::locked(|| h.render()).unwrap().get_pixel((at.x * ppp) as u32, (at.y * ppp) as u32);
             assert_eq!(during, before, "scrolling preserves page colours: theme={theme}, organize={organize}");
         }
     }
@@ -928,7 +930,7 @@ fn highlight_fields_tints_the_field_area() {
     // The field spans x 50..250, y 300..330 (PDF space, y up) on a 300×400 page; sample inside it.
     let at = egui::pos2(r.min.x + r.width() * (60.0 / 300.0), r.min.y + r.height() * (1.0 - 305.0 / 400.0));
     let pixel = |h: &mut Harness<'static, PdfCraftApp>| {
-        let img = h.render().expect("renders");
+        let img = render_lock::locked(|| h.render()).expect("renders");
         let ppp = h.ctx.pixels_per_point();
         *img.get_pixel((at.x * ppp) as u32, (at.y * ppp) as u32)
     };
@@ -975,7 +977,7 @@ fn required_radio_buttons_get_a_round_red_border() {
     }
     let r = rect(&h, 0).expect("page 1");
     let ppp = h.ctx.pixels_per_point();
-    let img = h.render().expect("renders");
+    let img = render_lock::locked(|| h.render()).expect("renders");
     // The first button spans x 50..90, y 300..340 on the 300×400 pt page (y up).
     let at = |x: f32, y: f32| {
         let p = egui::pos2(r.min.x + r.width() * (x / 300.0), r.min.y + r.height() * (1.0 - y / 400.0));
@@ -1067,7 +1069,7 @@ fn required_fields_get_a_red_border_when_highlighting() {
     // Just inside the left edge of the field (x 50, y 300..330 on a 300×400 page).
     let ppp = h.ctx.pixels_per_point();
     let at = egui::pos2(r.min.x + r.width() * (50.0 / 300.0) + 0.75, r.min.y + r.height() * (1.0 - 315.0 / 400.0));
-    let img = h.render().expect("renders");
+    let img = render_lock::locked(|| h.render()).expect("renders");
     let px = *img.get_pixel((at.x * ppp) as u32, (at.y * ppp) as u32);
     assert!(px[0] > 180 && px[1] < 100 && px[2] < 100, "a red border: {px:?}");
 }
@@ -1127,7 +1129,7 @@ fn compare_page_with_raster(h: &mut Harness<'static, PdfCraftApp>, pdf: &[u8], z
     }
     let ppp = h.ctx.pixels_per_point();
     let r = rect(h, 0).expect("page 1");
-    let img = h.render().expect("renders");
+    let img = render_lock::locked(|| h.render()).expect("renders");
     let scale = zoom * 96.0 / 72.0 * ppp;
     let mut renderer = pdfcraft_render::PageRenderer::new(std::sync::Arc::new(pdf.to_vec()), pdfcraft_render::RenderConfig::default());
     let page = renderer.render(pdfcraft_render::RenderRequest {
@@ -1201,7 +1203,7 @@ fn settle(h: &mut Harness<'static, PdfCraftApp>) {
 
 /// Detail in the middle of the window: the summed difference between neighbouring pixels.
 fn centre_detail(h: &mut Harness<'static, PdfCraftApp>) -> u64 {
-    let img = h.render().expect("renders");
+    let img = render_lock::locked(|| h.render()).expect("renders");
     let (cx, cy) = (img.width() / 2, img.height() / 2);
     let mut sum = 0u64;
     for y in cy - 100..cy + 100 {

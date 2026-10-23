@@ -1,6 +1,8 @@
 //! Sintec.PDF: Pages panel ▸ Export to: the selected pages (or the page right-clicked) as Word,
 //! Excel, HTML, RTF, images or text, and only those pages.
 
+#[path = "support/render.rs"]
+mod render_lock;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use pdfcraft_ui_egui::{PdfCraftApp, RightPanel};
@@ -25,7 +27,7 @@ fn export_from_menu(h: &mut Harness<'static, PdfCraftApp>, thumbnail: &str, item
     h.get_by_label("Export to ⏵").hover();
     h.run_steps(3);
     if let Ok(dir) = std::env::var("SINTEC_SHOT_DIR") {
-        h.render().unwrap().save(std::path::Path::new(&dir).join("pages-export-menu.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(std::path::Path::new(&dir).join("pages-export-menu.png")).unwrap();
     }
     h.get_by_label(item).click();
     h.run_steps(3);

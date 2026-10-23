@@ -37,6 +37,9 @@ pub mod canvas;
 mod chrome;
 mod combine_grid;
 mod image_pick;
+#[cfg(test)]
+#[path = "../tests/support/render.rs"]
+mod render_lock;
 mod tags_ui;
 pub use combine_grid::ThumbState as CombineThumb;
 mod combine_ui;

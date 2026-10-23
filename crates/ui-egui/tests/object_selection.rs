@@ -1,4 +1,6 @@
 //! Multi-object editing through the real shell. Synthetic artwork and standard-font text only.
+#[path = "support/render.rs"]
+mod render_lock;
 #[path = "support/mod.rs"]
 mod support;
 use egui::{Key, Modifiers, Pos2};
@@ -145,7 +147,7 @@ fn marquee_and_mixed_group_drag_move_once_and_undo_together() {
     let app = h.state();
     assert_eq!(app.session.get(app.views[0].id).unwrap().can_undo(), Some("Move objects"));
     if let Ok(path) = std::env::var("PDFCRAFT_GROUP_SHOT") {
-        h.render().unwrap().save(path).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(path).unwrap();
     }
     h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
     h.run_steps(4);

@@ -2,6 +2,8 @@
 
 mod support;
 
+#[path = "support/render.rs"]
+mod render_lock;
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
 use pdfcraft_ui_egui::PdfCraftApp;
@@ -377,7 +379,7 @@ fn overflowing_tabs_can_be_reached_by_scrolling() {
     assert!(h.state().active.is_some_and(|i| i < 19));
     if let Ok(dir) = std::env::var("PDFCRAFT_TAB_SHOTS") {
         settle(&mut h);
-        h.render().unwrap().save(format!("{dir}/overflow-tabs.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/overflow-tabs.png")).unwrap();
     }
 }
 
@@ -494,7 +496,7 @@ fn narrow_tab_strips_accept_vertical_wheel_scrolling() {
         assert!(h.get_by_label_contains("Display theme:").rect().right() <= width);
         if let Ok(dir) = std::env::var("PDFCRAFT_TAB_SHOTS") {
             settle(&mut h);
-            h.render().unwrap().save(format!("{dir}/tabs-{width}.png")).unwrap();
+            render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/tabs-{width}.png")).unwrap();
         }
     }
 }
@@ -1196,7 +1198,7 @@ fn document_tabs_expose_selection_and_activate_from_keyboard() {
         }
         if let Ok(dir) = std::env::var("PDFCRAFT_TAB_SHOTS") {
             settle(&mut h);
-            h.render().unwrap().save(format!("{dir}/focused-tab-{key:?}.png")).unwrap();
+            render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/focused-tab-{key:?}.png")).unwrap();
         }
     }
 }
@@ -1286,7 +1288,7 @@ fn dragging_a_tab_moves_it_and_shows_the_dragged_document() {
     if let Ok(dir) = std::env::var("PDFCRAFT_TAB_SHOTS") {
         let to = tab(&h, "first.pdf").left_center() - egui::vec2(10.0, 0.0);
         drag_named_tab(&mut h, "last.pdf", to, false);
-        h.render().unwrap().save(format!("{dir}/dragging-tab.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/dragging-tab.png")).unwrap();
     }
 }
 
@@ -1299,7 +1301,7 @@ fn the_drop_line_shows_in_front_of_the_first_tab() {
     let first = h.get_by_role_and_label(Role::Tab, "first.pdf").rect();
     // Pixels in the strip just left of the first tab that are strongly blue (the accent line).
     let blue_left_of = |h: &mut Harness<'static, PdfCraftApp>, rect: egui::Rect| {
-        let image = h.render().unwrap();
+        let image = render_lock::locked(|| h.render()).unwrap();
         let scale = image.width() as f32 / h.ctx.content_rect().width();
         let x0 = ((rect.left() - 3.0) * scale).max(0.0) as u32;
         let x1 = ((rect.left() + 1.0) * scale).max(0.0) as u32;
@@ -1322,7 +1324,7 @@ fn the_drop_line_shows_in_front_of_the_first_tab() {
     let during = blue_left_of(&mut h, first);
     assert!(during > before + 10, "no drop line left of the first tab ({before} -> {during})");
     if let Ok(dir) = std::env::var("PDFCRAFT_TAB_SHOTS") {
-        h.render().unwrap().save(format!("{dir}/dragging-to-front.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/dragging-to-front.png")).unwrap();
     }
 }
 

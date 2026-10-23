@@ -1,5 +1,7 @@
 //! Editing bookmarks in the Bookmarks panel (M4.6), driven like a user would.
 
+#[path = "support/render.rs"]
+mod render_lock;
 use egui::{Key, Modifiers};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -181,7 +183,7 @@ fn search_finds_collapsed_bookmarks_and_keeps_original_paths() {
     assert!(h.query_by_label("Other chapter").is_none());
     assert_eq!(h.state().session.save_full_bytes(id).unwrap(), before, "search doesn't edit the PDF");
     if let Ok(dir) = std::env::var("PDFCRAFT_BOOKMARK_SHOTS") {
-        h.render().unwrap().save(std::path::Path::new(&dir).join("filtered-bookmarks.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(std::path::Path::new(&dir).join("filtered-bookmarks.png")).unwrap();
     }
     menu(&mut h, "Résumé results", "Delete");
     assert_eq!(outline(&h).len(), 3);
@@ -243,7 +245,7 @@ trailer << /Root 1 0 R >>
     h.get_by_label("Method");
     assert_eq!(h.state().session.get(id).unwrap().can_undo(), Some("New bookmarks from structure"));
     if let Ok(dir) = std::env::var("PDFCRAFT_BOOKMARK_SHOTS") {
-        h.render().unwrap().save(std::path::Path::new(&dir).join("bookmarks-from-structure.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(std::path::Path::new(&dir).join("bookmarks-from-structure.png")).unwrap();
     }
 }
 

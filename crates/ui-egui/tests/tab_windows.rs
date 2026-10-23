@@ -5,6 +5,8 @@
 //! where their tools clash), so pulling a tab out does nothing here, as on the web; the window
 //! logic is tested through the same functions the drags call.
 
+#[path = "support/render.rs"]
+mod render_lock;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use pdfcraft_engine::DocId;
@@ -200,7 +202,7 @@ fn a_dragged_tab_shows_its_ghost_under_the_pointer() {
     let ghost = h.state().drag_ghost().expect("a ghost while dragging");
     assert!(ghost.preview, "pulled out: the page too");
     if let Ok(dir) = std::env::var("SINTEC_SHOT_DIR") {
-        h.render().unwrap().save(std::path::Path::new(&dir).join("tab-drag-ghost.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(std::path::Path::new(&dir).join("tab-drag-ghost.png")).unwrap();
     }
     h.drop_at(out);
     h.run_steps(4);

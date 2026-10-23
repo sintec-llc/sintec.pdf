@@ -1,5 +1,7 @@
 //! Add a stamp: the palette and placing stamps on the page.
 
+#[path = "support/render.rs"]
+mod render_lock;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use pdfcraft_ui_egui::{PdfCraftApp, QuickTool};
@@ -40,7 +42,7 @@ fn choosing_and_placing_stamps() {
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     if let Ok(dir) = std::env::var("PDFCRAFT_SHOTS") {
-        h.render().unwrap().save(format!("{dir}/stamps.png")).unwrap();
+        render_lock::locked(|| h.render()).unwrap().save(format!("{dir}/stamps.png")).unwrap();
     }
 }
 

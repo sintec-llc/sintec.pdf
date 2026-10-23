@@ -173,7 +173,7 @@ mod tests {
         assert!(h.query_by_label("Light gray").is_some() && h.query_by_label("Dark gray").is_some());
         assert_eq!(h.query_all_by_label("Active").count(), 1);
         if let Ok(path) = std::env::var("PDFCRAFT_APPEARANCE_SHOT") {
-            h.render().unwrap().save(path).unwrap();
+            crate::render_lock::locked(|| h.render()).unwrap().save(path).unwrap();
         }
 
         let combo = egui::accesskit::Role::ComboBox;

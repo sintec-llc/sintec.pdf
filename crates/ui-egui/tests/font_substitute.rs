@@ -1,6 +1,8 @@
 //! Sintec.PDF: the Font substitution dialog. Text that needs glyphs the paragraph's font lacks
 //! asks for a substitute instead of failing; cancelling leaves the paragraph as it was.
 
+#[path = "support/render.rs"]
+mod render_lock;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use pdfcraft_engine::FontFamily;
@@ -70,7 +72,7 @@ fn text_the_font_cant_show_opens_the_substitution_dialog() {
     h.get_by_label("Keep the original font");
     if let Ok(path) = std::env::var("SINTEC_SHOT") {
         h.run_steps(30);
-        if let Ok(image) = h.render() {
+        if let Ok(image) = render_lock::locked(|| h.render()) {
             image.save(path).unwrap();
         }
     }
