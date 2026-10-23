@@ -161,6 +161,8 @@ pub struct LineEditor {
     /// stacks (see `PdfCraftApp::preview_substitutes`), so typed characters a source subset lacks
     /// show in the face the edit will use.
     pub(crate) substitutes_for: Option<u64>,
+    /// Sintec.PDF (task 033): per source font resource, its stand-in as the editor shows it.
+    pub(crate) substitutes: BTreeMap<String, SubstitutePreview>,
     /// The draft extends outside the source container; its frame follows the live draft bounds.
     pub overflow: bool,
     /// The initial source container width in screen pixels.
@@ -175,6 +177,40 @@ pub struct LineEditor {
     /// horizontal scale (%), and what they were.
     pub extras: Extras,
     extras0: Extras,
+}
+
+/// Sintec.PDF (task 033): how many typed characters per font the editor remembers the engine's
+/// answer for (see [`SubstitutePreview::chars`]).
+pub(crate) const MAX_CLASSIFIED: usize = 4096;
+
+/// Sintec.PDF (task 033): a source font's stand-in, to install in the editor's fonts: the installed
+/// face's program, its fit to the font, and whether the face is italic.
+pub(crate) struct SubstituteFace {
+    pub path: std::path::PathBuf,
+    pub bytes: Arc<Vec<u8>>,
+    pub fit: pdfcraft_engine::SubstituteFit,
+    pub italic: bool,
+}
+
+/// Sintec.PDF (task 033): a source font's stand-in in the editor: the egui family that starts with
+/// it, its fit to the font (the edit's own), and which typed characters the edit draws in it.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SubstitutePreview {
+    /// The installed face's file, as [`crate::font_substitute`] resolved it.
+    pub path: std::path::PathBuf,
+    pub family: String,
+    pub fit: pdfcraft_engine::SubstituteFit,
+    pub italic: bool,
+    /// Per character typed: whether the edit draws it in the stand-in (asked of the engine,
+    /// `Document::substitute_chars`). A character not yet asked shows through the font stack.
+    pub chars: BTreeMap<char, bool>,
+}
+
+impl SubstitutePreview {
+    /// Whether the edit draws `c` in the stand-in, as far as is known yet.
+    pub fn draws(&self, c: char) -> bool {
+        self.chars.get(&c).copied().unwrap_or(false)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -302,6 +338,30 @@ impl LineEditor {
         self.source = Some((block.clone(), lines));
         self.text = block.editor_text.clone();
         self.original = self.text.clone();
+    }
+
+    /// Install the editor's page's source fonts again (a face was loaded or the paragraph was
+    /// rewritten). Their stand-ins are found again too (`PdfCraftApp::preview_substitutes`).
+    pub(crate) fn reload_fonts(&mut self, ctx: &egui::Context, doc: &pdfcraft_engine::Document) {
+        self.fonts = install_source_fonts(ctx, doc, self.page);
+        self.substitutes.clear();
+        self.substitutes_for = None;
+    }
+
+    /// Sintec.PDF (task 033): the font resources whose stand-ins the editor shows: the
+    /// paragraph's own fonts first (embedded or not, a face loaded earlier included), then the
+    /// page's other programs, less the faces the app loaded itself (`PCFull…`, `PCApproved…`),
+    /// which stand in for fonts rather than need a stand-in.
+    pub(crate) fn preview_resources(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let own = self.source.iter().flat_map(|(block, lines)| block.lines.iter().filter_map(|i| lines.get(*i)).map(|l| l.font.clone()));
+        let others = self.fonts.keys().filter(|r| !r.starts_with("PCFull") && !r.starts_with("PCApproved")).cloned();
+        for resource in own.chain(others) {
+            if !out.contains(&resource) {
+                out.push(resource);
+            }
+        }
+        out
     }
 
     /// The paragraph wraps at `width` (user space; a width kept by [`KeptWidth`]).
@@ -1160,6 +1220,7 @@ fn open_editor(
         source: Some((l.clone(), source_lines)),
         fonts: install_source_fonts(ui.ctx(), doc, page),
         substitutes_for: None,
+        substitutes: BTreeMap::new(),
         overflow: false,
         max_width,
         size: (l.size as f32 * scale).clamp(8.0, 72.0),
@@ -1383,28 +1444,43 @@ pub(crate) fn page_input(
 
 /// One TextEdit lays out all source runs; its caret and selection span the whole region.
 pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::Document, page: usize) -> BTreeMap<String, String> {
-    install_source_fonts_with(ctx, doc, page, &BTreeMap::new())
+    install_source_fonts_with(ctx, doc, page, &BTreeMap::new()).0
 }
 
-/// Sintec.PDF: [`install_source_fonts`], with `substitutes` (source resource → an installed face's
-/// program) drawing what each source font lacks, before the interface's own faces.
+/// Sintec.PDF: [`install_source_fonts`], with `substitutes` (source resource → its stand-in)
+/// drawing what each source font lacks, before the interface's own faces. Each stand-in is also a
+/// family of its own (task 033), drawn at the size its fit gives it; returned per resource.
 pub(crate) fn install_source_fonts_with(
     ctx: &egui::Context,
     doc: &pdfcraft_engine::Document,
     page: usize,
-    substitutes: &BTreeMap<String, Arc<Vec<u8>>>,
-) -> BTreeMap<String, String> {
+    substitutes: &BTreeMap<String, SubstituteFace>,
+) -> (BTreeMap<String, String>, BTreeMap<String, SubstitutePreview>) {
     let programs = doc.text_editor_fonts(page);
     let mut definitions = ctx.fonts(|f| f.definitions().clone());
+    let before = (definitions.font_data.len(), definitions.families.len());
     // Only the current editor's document fonts live in the atlas. Never accumulate the
     // programs of previously opened files or add them to the interface's default families.
-    definitions.font_data.retain(|name, _| !name.starts_with("pdf-source-"));
-    definitions.families.retain(|family, _| !matches!(family, FontFamily::Name(name) if name.starts_with("pdf-source-")));
-    definitions.font_data.retain(|name, _| !name.starts_with("pdf-substitute-"));
+    let ours = |name: &str| name.starts_with("pdf-source-") || name.starts_with("pdf-substitute-");
+    definitions.font_data.retain(|name, _| !ours(name));
+    definitions.families.retain(|family, _| !matches!(family, FontFamily::Name(name) if ours(name)));
+    let removed = before != (definitions.font_data.len(), definitions.families.len());
+    let fallback = definitions.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
     let mut substitute_names = BTreeMap::new();
-    for (index, (resource, bytes)) in substitutes.iter().enumerate() {
+    let mut previews = BTreeMap::new();
+    for (index, (resource, face)) in substitutes.iter().enumerate() {
         let name = format!("pdf-substitute-{index}");
-        definitions.font_data.insert(name.clone(), Arc::new(egui::FontData::from_owned(bytes.to_vec())));
+        // The glyphs at the fitted size; their advances are made up in the layout (`editor_job`).
+        let size = face.fit.size as f32;
+        let tweak = egui::FontTweak { scale: if size.is_finite() && size > 0.0 { size } else { 1.0 }, ..Default::default() };
+        definitions.font_data.insert(name.clone(), Arc::new(egui::FontData::from_owned(face.bytes.to_vec()).tweak(tweak)));
+        let mut stack = vec![name.clone()];
+        stack.extend(fallback.iter().cloned());
+        definitions.families.insert(FontFamily::Name(name.clone().into()), stack);
+        previews.insert(
+            resource.clone(),
+            SubstitutePreview { path: face.path.clone(), family: name.clone(), fit: face.fit, italic: face.italic, chars: BTreeMap::new() },
+        );
         substitute_names.insert(resource.clone(), name);
     }
     let mut families = BTreeMap::new();
@@ -1428,15 +1504,13 @@ pub(crate) fn install_source_fonts_with(
                 .filter_map(|p| families.get(&p.resource).cloned()),
         );
         stack.extend(substitute_names.get(&program.resource).cloned());
-        if let Some(fallback) = definitions.families.get(&FontFamily::Proportional) {
-            stack.extend(fallback.iter().cloned());
-        }
+        stack.extend(fallback.iter().cloned());
         definitions.families.insert(FontFamily::Name(name.clone().into()), stack);
     }
-    if !families.is_empty() {
+    if removed || !families.is_empty() || !previews.is_empty() {
         ctx.set_fonts(definitions);
     }
-    families
+    (families, previews)
 }
 
 fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> egui::text::LayoutJob {
@@ -1485,20 +1559,52 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
             if embedded && let Some(name) = ed.fonts.get(&line.font) {
                 font.family = FontFamily::Name(name.clone().into());
             }
+            // Sintec.PDF (task 033): the font's stand-in, the face the edit draws what the font
+            // lacks in. A font the editor has no program of is shown in it entirely, not in the
+            // interface's face.
+            let stand_in = ed.substitutes.get(&line.font).filter(|_| original_face);
+            let stand_in_font = stand_in.map(|s| FontId::new(font.size, FontFamily::Name(s.family.clone().into())));
+            if !embedded && let Some(f) = &stand_in_font {
+                font = f.clone();
+            }
             let native_width = ui.fonts_mut(|f| f.layout_no_wrap(line.text.clone(), font.clone(), Color32::BLACK).size().x);
             let target_width = ((line.rect[2] - line.rect[0]) * look.size / line.size.max(0.01)) as f32 * scale;
             let spacing = if original_face { (target_width - native_width) / line.text.chars().count().saturating_sub(1).max(1) as f32 } else { 0.0 };
-            job.append(
-                text.get(range).unwrap_or_default(),
-                0.0,
-                egui::TextFormat {
-                    font_id: font,
-                    extra_letter_spacing: spacing + ed.extras.char_spacing as f32 * scale,
-                    color: color32(look.color),
-                    italics: look.italic && !embedded,
-                    ..Default::default()
-                },
-            );
+            let spacing = spacing + ed.extras.char_spacing as f32 * scale;
+            let format = |font_id: FontId, extra: f32, italics: bool| egui::TextFormat {
+                font_id,
+                extra_letter_spacing: extra,
+                color: color32(look.color),
+                italics,
+                ..Default::default()
+            };
+            let segment = text.get(range).unwrap_or_default();
+            let italics = look.italic && !embedded && !stand_in.is_some_and(|s| s.italic);
+            match (stand_in, stand_in_font) {
+                (Some(stand_in), Some(stand_in_font)) => {
+                    // What the edit draws in the stand-in: in it, as far apart as the edit sets it
+                    // (its fit's size and scale; egui draws a tweaked face larger but advances it
+                    // as at its own size).
+                    let mut own = String::new();
+                    for c in segment.chars() {
+                        if !stand_in.draws(c) {
+                            own.push(c);
+                            continue;
+                        }
+                        if !own.is_empty() {
+                            job.append(&std::mem::take(&mut own), 0.0, format(font.clone(), spacing, italics));
+                        }
+                        let advance = ui.fonts_mut(|f| f.glyph_width(&stand_in_font, c));
+                        let extra = advance * (stand_in.fit.advance() as f32 - 1.0);
+                        let extra = if extra.is_finite() { extra } else { 0.0 };
+                        job.append(c.encode_utf8(&mut [0; 4]), 0.0, format(stand_in_font.clone(), spacing + extra, false));
+                    }
+                    if !own.is_empty() {
+                        job.append(&own, 0.0, format(font, spacing, italics));
+                    }
+                }
+                _ => job.append(segment, 0.0, format(font, spacing, italics)),
+            }
         }
     } else {
         job.append(
@@ -1612,7 +1718,12 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
     // while the format panel was open.
     // A font definition becomes active at the start of the next egui pass. Keep the source
     // raster visible until then instead of flashing an unrelated interface face.
-    if !ctx.fonts(|f| ed.fonts.values().all(|name| f.definitions().families.contains_key(&FontFamily::Name(name.clone().into())))) {
+    if !ctx.fonts(|f| {
+        ed.fonts
+            .values()
+            .chain(ed.substitutes.values().map(|s| &s.family))
+            .all(|name| f.definitions().families.contains_key(&FontFamily::Name(name.clone().into())))
+    }) {
         ctx.request_repaint();
         return None;
     }
@@ -1738,9 +1849,59 @@ pub(crate) fn caret_color_on(fill: Color32) -> Color32 {
     if luma > 127_500 { Color32::BLACK } else { Color32::WHITE }
 }
 
+// At file level: a `#[path]` inside `mod tests` would resolve under `edit_text_ui/tests/`.
+#[cfg(test)]
+#[path = "../../engine/tests/support/font_fixture.rs"]
+mod font_fixture;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Sintec.PDF (task 033): a letter the edit draws in a font's stand-in advances in the editor
+    /// as far as the edit sets it: the face's own advance times the fit's size and scale (the
+    /// rewrite's `width × size × fit.size × fit.scale`), so the preview wraps where the result
+    /// will. A letter not drawn in the stand-in keeps its own advance.
+    #[test]
+    fn stand_in_letters_advance_as_far_as_the_edit_sets_them() {
+        let (app, mut ed) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        let block = doc.text_blocks(0).remove(0);
+        let lines = doc.text_lines(0);
+        let line = block.lines.first().and_then(|i| lines.get(*i)).unwrap();
+        let (resource, size) = (line.font.clone(), line.size as f32);
+        ed.source = Some((block, lines));
+        ed.text = "ЖЖ".into();
+        let face = super::font_fixture::cff_font_styled("Stand-Regular", "Regular", 400, 700, &[' ', 'A', 'Ж']);
+        let fit = pdfcraft_engine::SubstituteFit { size: 1.1, scale: 1.05, stroke: 0.0 };
+        let ctx = egui::Context::default();
+        let pass = |ed: &LineEditor| {
+            let mut gap = None;
+            let out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                if ed.substitutes.is_empty() {
+                    return;
+                }
+                let galley = editor_galley(ui, ed, &ed.text, 1.0, f32::INFINITY);
+                let glyphs = &galley.rows[0].glyphs;
+                gap = Some(glyphs[1].pos.x - glyphs[0].pos.x);
+            });
+            out.drop_without_applying_deltas();
+            gap
+        };
+        assert_eq!(pass(&ed), None);
+        let substitutes =
+            BTreeMap::from([(resource.clone(), SubstituteFace { path: "Stand-Regular.otf".into(), bytes: Arc::new(face), fit, italic: false })]);
+        let (fonts, previews) = install_source_fonts_with(&ctx, doc, 0, &substitutes);
+        ed.fonts = fonts;
+        ed.substitutes = previews;
+        let _ = pass(&ed); // the fonts become active
+        let unmeasured = pass(&ed).unwrap();
+        ed.substitutes.get_mut(&resource).unwrap().chars.insert('Ж', true);
+        let measured = pass(&ed).unwrap();
+        // The rectangle's advance is 600/1000 em at the run's size.
+        let expected = 0.6 * size.clamp(1.0, 300.0) * (fit.advance() as f32 - 1.0);
+        assert!((measured - unmeasured - expected).abs() < 0.05, "{measured} - {unmeasured} != {expected}");
+    }
 
     /// An app with one text document open, and an editor on its first paragraph.
     fn preview_app() -> (crate::PdfCraftApp, LineEditor) {
@@ -1764,6 +1925,7 @@ mod tests {
             source: None,
             fonts: BTreeMap::new(),
             substitutes_for: None,
+            substitutes: BTreeMap::new(),
             overflow: false,
             max_width: 400.0,
             size: block.size as f32,

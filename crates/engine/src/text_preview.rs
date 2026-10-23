@@ -79,6 +79,13 @@ impl Document {
         self.editor.as_ref().and_then(|e| pdfcraft_edit::text::first_unencodable(&e.cos, page, resource, text).ok()).flatten()
     }
 
+    /// Sintec.PDF (task 033): the characters of `text` a rewrite of a run in page `page`'s font
+    /// `resource` draws in a substitute face (see [`pdfcraft_edit::text::substitute_chars`]);
+    /// empty when the font can't be read.
+    pub fn substitute_chars(&self, page: usize, resource: &str, text: &str) -> Vec<char> {
+        self.editor.as_ref().and_then(|e| pdfcraft_edit::text::substitute_chars(&e.cos, page, resource, text).ok()).unwrap_or_default()
+    }
+
     /// Preparing the background never changes working bytes, dirty state or undo history.
     pub fn text_edit_preview(&self, page: usize, block: usize) -> Result<TextEditPreview, String> {
         guard(|| {

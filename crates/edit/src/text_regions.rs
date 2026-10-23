@@ -280,46 +280,54 @@ fn registered_substitute(metrics: &std::collections::BTreeMap<String, Metrics>, 
 /// a size factor that gives them its cap height, a horizontal scale that gives them its advance
 /// widths, and a stroke (per em) that thickens a regular face standing in for a bold font when no
 /// bold face is loaded.
+///
+/// Sintec.PDF (task 033): one rule, [`substitute_fit`], for the rewrite and for the inline
+/// editor's preview of the same substitute, so the letters typed look as they will be drawn.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct Fit {
-    size: f64,
-    scale: f64,
-    stroke: f64,
+pub struct Fit {
+    /// Font size factor (letter height).
+    pub size: f64,
+    /// Horizontal scale on top of the size factor (advance widths).
+    pub scale: f64,
+    /// Outline stroke per em (synthetic bold); 0 for none.
+    pub stroke: f64,
 }
 
 impl Fit {
-    const NONE: Fit = Fit { size: 1.0, scale: 1.0, stroke: 0.0 };
+    pub const NONE: Fit = Fit { size: 1.0, scale: 1.0, stroke: 0.0 };
+
+    /// How much wider each substitute glyph advances than its face's own advance at the same
+    /// font size: `size × scale`.
+    pub fn advance(&self) -> f64 {
+        self.size * self.scale
+    }
 }
 
-/// The [`Fit`] of the loaded substitute `name` to page `page`'s font `source` (a resource name).
-/// [`Fit::NONE`] when either can't be measured.
-fn substitute_fit(doc: &Document, page: usize, fonts: &Dict, metrics: &std::collections::BTreeMap<String, Metrics>, source: &str, name: &str) -> Fit {
-    let Ok(facts) = font_facts(doc, page, source) else { return Fit::NONE };
-    let shape = fonts
-        .get(name.as_bytes())
-        .and_then(|f| doc.dict(f))
-        .and_then(|f| pdfcraft_fonts::pdf::embedded_sfnt(doc, &f))
-        .and_then(|b| pdfcraft_fonts::weight::face_metrics(&b));
-    let Some(shape) = shape else { return Fit::NONE };
+/// Sintec.PDF: the [`Fit`] of the substitute face `face` (a TrueType/OpenType program) to the
+/// source font `facts` describes: its letter height, advance widths and weight. [`Fit::NONE`]
+/// when the face can't be measured.
+pub fn substitute_fit(facts: &FontFacts, face: &[u8]) -> Fit {
+    let Some(shape) = pdfcraft_fonts::weight::face_metrics(face) else { return Fit::NONE };
     // Same letter height: capitals, else lowercase. Within 2 % is the same (no rescaling).
     let size = match (facts.cap_height.zip(shape.cap_height), facts.x_height.zip(shape.x_height)) {
         (Some((a, b)), _) | (None, Some((a, b))) if b > 0.0 => (a / b).clamp(0.85, 1.2),
         _ => 1.0,
     };
     let size = if (size - 1.0).abs() < 0.02 { 1.0 } else { size };
-    // Same advance widths: the median ratio over the letters both have.
-    let scale = match (metrics.get(source), metrics.get(name)) {
-        (Some(src), Some(sub)) => {
-            let width = |m: &Metrics, c: char| m.encode(&c.to_string()).map(|b| m.codes(&b).iter().map(|(code, _)| m.width(*code)).sum::<f64>());
-            let mut ratios: Vec<f64> = pdfcraft_fonts::embedding::probe_chars()
-                .filter_map(|c| Some(width(src, c)? / (width(sub, c)? * size)))
-                .filter(|r| r.is_finite() && *r > 0.0)
-                .collect();
-            ratios.sort_by(f64::total_cmp);
-            if ratios.len() >= 4 { ratios.get(ratios.len() / 2).copied().unwrap_or(1.0).clamp(0.85, 1.15) } else { 1.0 }
-        }
-        _ => 1.0,
-    };
+    // Same advance widths: the median ratio over the letters both have (per 1000 em: the source
+    // font's PDF widths, the face's own advances).
+    let face_widths = pdfcraft_fonts::embedding::probe_widths(face);
+    let mut ratios: Vec<f64> = facts
+        .widths
+        .iter()
+        .filter_map(|(c, src)| {
+            let sub = face_widths.iter().find(|(f, _)| f == c).map(|(_, w)| f64::from(*w))?;
+            Some(f64::from(*src) / (sub * size))
+        })
+        .filter(|r| r.is_finite() && *r > 0.0)
+        .collect();
+    ratios.sort_by(f64::total_cmp);
+    let scale = if ratios.len() >= 4 { ratios.get(ratios.len() / 2).copied().unwrap_or(1.0).clamp(0.85, 1.15) } else { 1.0 };
     let scale = if (scale - 1.0).abs() < 0.02 { 1.0 } else { scale };
     // A regular face for a bold font: stroke the difference in stem thickness.
     let stroke = if facts.is_bold() && shape.os2_weight.is_some_and(|w| w < 600) {
@@ -328,6 +336,16 @@ fn substitute_fit(doc: &Document, page: usize, fonts: &Dict, metrics: &std::coll
         0.0
     };
     Fit { size, scale, stroke }
+}
+
+/// The [`substitute_fit`] of the loaded substitute `name` (its embedded program) to page `page`'s
+/// font `source` (a resource name). [`Fit::NONE`] when either can't be read.
+fn loaded_fit(doc: &Document, page: usize, fonts: &Dict, source: &str, name: &str) -> Fit {
+    let Ok(facts) = font_facts(doc, page, source) else { return Fit::NONE };
+    match fonts.get(name.as_bytes()).and_then(|f| doc.dict(f)).and_then(|f| pdfcraft_fonts::pdf::embedded_sfnt(doc, &f)) {
+        Some(face) => substitute_fit(&facts, &face),
+        None => Fit::NONE,
+    }
 }
 
 /// The stroke colour operator matching fill colour operators `fill` (`rg` → `RG`, `g` → `G`, …).
@@ -458,7 +476,7 @@ pub(super) fn rewrite_styled_block(
     if draft.len() > 4_000_000 {
         return Err(EditError::Invalid("the replacement text is too large".into()));
     }
-    if draft == block.editor_text && *style == BlockStyle::default() {
+    if draft == block.editor_text && style.is_plain() {
         return Ok(LineEdit { substituted: None });
     }
     let mut ranges: Vec<_> = style.ranges.iter().collect();
@@ -608,13 +626,9 @@ pub(super) fn rewrite_styled_block(
                 resource.clone()
             } else if metrics.get(&source.font).is_some_and(|m| source_encodes(m, &s)) {
                 source.font.clone()
-            } else if let Some((name, _)) = metrics.iter().find(|(_, m)| {
-                pdfcraft_fonts::embedding::face_key(&m.base_font) == pdfcraft_fonts::embedding::face_key(&source.base_font) && source_encodes(m, &s)
-            }) {
+            } else if let Some(name) = sibling_encoding(&metrics, &source.base_font, &s) {
                 name.clone()
-            } else if let Some(face) =
-                pdfcraft_fonts::embedding::matching_faces(&source.base_font).into_iter().find(|f| pdfcraft_fonts::embedding::covers(f.bytes, &s))
-            {
+            } else if let Some(face) = full_face_covering(&source.base_font, &s) {
                 let key = face.name();
                 if let Some(name) = full_faces.get(&key) {
                     name.clone()
@@ -650,15 +664,22 @@ pub(super) fn rewrite_styled_block(
                     full_faces.insert(key, name.clone());
                     name
                 }
-            } else if let Some(name) = {
-                let face = faces.entry(source.font.clone()).or_insert_with(|| source_face(doc, page, source));
-                registered_substitute(&metrics, face, &s)
-            } {
+            } else if let Some(name) = style
+                .substitutes
+                .iter()
+                .find(|(font, name)| *font == source.font && metrics.get(name).is_some_and(|m| source_encodes(m, &s)))
+                .map(|(_, name)| name.clone())
+                .or_else(|| {
+                    let face = faces.entry(source.font.clone()).or_insert_with(|| source_face(doc, page, source));
+                    registered_substitute(&metrics, face, &s)
+                })
+            {
                 // Sintec.PDF: a face loaded for this page (an installed font chosen as the
                 // substitute) shows what the source font can't, before any generated fallback,
-                // fitted to the source font's letter height, widths and weight.
+                // fitted to the source font's letter height, widths and weight. The face the
+                // editor previewed for this font ([`BlockStyle::substitutes`]) comes first.
                 if !fits.contains_key(&(source.font.clone(), name.clone())) && fits.len() < 64 {
-                    let fit = substitute_fit(doc, page, &fonts, &metrics, &source.font, &name);
+                    let fit = loaded_fit(doc, page, &fonts, &source.font, &name);
                     fits.insert((source.font.clone(), name.clone()), fit);
                 }
                 name
@@ -830,7 +851,7 @@ pub(super) fn rewrite_styled_block(
     let ops = pieces.parse().ops;
     // A row the edit doesn't reach keeps its source operators, so its kerning, TJ word gaps and
     // glyph widths stay exactly as they were instead of being rebuilt from the text state.
-    let plain = BlockStyle { ranges: Vec::new(), ..style.clone() } == BlockStyle::default();
+    let plain = BlockStyle { ranges: Vec::new(), ..style.clone() }.is_plain();
     let mut kept = if plain {
         untouched_rows(block, draft, &row_ranges).into_iter().zip(&rows).map(|(same, row)| same && row.iter().all(|c| c.1 < source_count)).collect()
     } else {

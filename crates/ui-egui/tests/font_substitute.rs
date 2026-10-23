@@ -288,3 +288,92 @@ fn the_open_paragraph_previews_missing_letters_in_the_stand_in() {
     let bold = h.ctx.fonts(|f| f.definitions().font_data.get("pdf-substitute-0").map(|d| d.font.to_vec()));
     assert_eq!(bold.as_deref(), Some(font_fixture::cff_font_styled("RectFont-Bold", "Bold", 700, 700, &chars).as_slice()), "the bold face");
 }
+
+/// One page with paragraph `text` in the non-embedded Type 1 font `base_font`, whose descriptor
+/// gives a cap height of 600 and whose widths give 'A'–'D' 660 units: the facts a stand-in is fitted
+/// to.
+fn described_fixture(text: &str, base_font: &str) -> Vec<u8> {
+    let body = format!("BT /F1 24 Tf 20 150 Td ({text}) Tj ET");
+    let widths = vec!["660"; 37].join(" ");
+    let objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 300] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>".into(),
+        format!("<< /Length {} >>\nstream\n{body}\nendstream", body.len()),
+        format!("<< /Type /Font /Subtype /Type1 /BaseFont /{base_font} /FirstChar 32 /LastChar 68 /Widths [{widths}] /FontDescriptor 6 0 R >>"),
+        format!(
+            "<< /Type /FontDescriptor /FontName /{base_font} /Flags 32 /FontBBox [0 -200 1000 800] /ItalicAngle 0 /Ascent 800 /Descent -200 /CapHeight 600 /StemV 80 >>"
+        ),
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    out
+}
+
+/// The editor's stand-in families (`pdf-substitute-…`): each one's program and the size its
+/// glyphs are drawn at.
+fn preview_faces(h: &Harness<'static, PdfCraftApp>) -> Vec<(Vec<u8>, f32)> {
+    h.ctx.fonts(|f| {
+        let d = f.definitions();
+        d.families
+            .iter()
+            .filter(|(family, _)| matches!(family, egui::FontFamily::Name(n) if n.starts_with("pdf-substitute-")))
+            .filter_map(|(_, stack)| d.font_data.get(stack.first()?))
+            .map(|data| (data.font.to_vec(), data.tweak.scale))
+            .collect()
+    })
+}
+
+/// Sintec.PDF (task 033): a font the document doesn't embed (Calibri Bold, not installed) is
+/// previewed in the same stand-in the edit then draws its missing letters in, at the same fit,
+/// even when another face loaded on the page (an earlier edit's bold face) would match the
+/// font's weight better. Before, the editor showed such a font in the interface's own face and
+/// the edit picked whichever loaded face matched best, so preview, result and original differed.
+#[test]
+fn a_font_without_a_program_is_previewed_and_drawn_in_one_stand_in() {
+    let face_chars = [' ', 'A', 'B', 'C', 'D', 'H', 'Ж'];
+    let carlito_bytes = font_fixture::cff_font_styled("Carlito-Regular", "Regular", 400, 700, &face_chars);
+    let mut carlito = installed_face("Stand-Carlito-Regular.otf", "Carlito", "Carlito-Regular", 400, &carlito_bytes);
+    carlito.bundled = true;
+    // An earlier edit loaded a bold face of another family into the page.
+    let mut s = pdfcraft_engine::Session::new();
+    let id = s.open("p.pdf", None, std::sync::Arc::new(described_fixture("A A", "Calibri-Bold")), None).unwrap();
+    let decoy = font_fixture::cff_font_styled("Decoy-Bold", "Bold", 700, 700, &face_chars);
+    s.apply(id, Edit::RegisterTextFont { page: 0, bytes: std::sync::Arc::new(decoy) }).unwrap();
+    let bytes = s.save_bytes(id).unwrap().to_vec();
+
+    let mut h = app_with(bytes, vec![carlito]);
+    open_paragraph(&mut h);
+    h.run_steps(4);
+    // The preview: the paragraph's font is shown in its stand-in, sized by the edit's fit.
+    let previewed = preview_faces(&h);
+    assert_eq!(previewed.len(), 1, "one stand-in, for F1");
+    let (face, size) = previewed.into_iter().next().unwrap();
+    assert_eq!(face, carlito_bytes, "the stand-in is Carlito Regular");
+    let doc_id = h.state().views[0].id;
+    let facts = h.state().session.get(doc_id).unwrap().font_facts(0, "F1").unwrap();
+    let fit = pdfcraft_engine::substitute_fit(&facts, &carlito_bytes);
+    assert!((fit.size - 1.0).abs() > 0.02 && (fit.scale - 1.0).abs() > 0.02, "a fixture that needs fitting: {fit:?}");
+    assert_eq!(size, fit.size as f32, "drawn at the edit's size");
+    // The typed letter the font lacks is the one the edit draws in the stand-in.
+    assert_eq!(h.state().session.get(doc_id).unwrap().substitute_chars(0, "F1", "A Ж"), vec!['Ж']);
+
+    // The commit: the same face, fitted the same way.
+    let edit = Edit::EditTextBlock { page: 0, block: 0, text: "A Ж".into(), style: BlockStyle::default() };
+    assert!(h.state_mut().apply_edit(edit), "applied without asking");
+    let doc = h.state().session.get(doc_id).unwrap();
+    let lines = doc.text_lines(0);
+    assert!(lines.iter().any(|l| l.text.contains('Ж') && l.base_font == "Carlito-Regular"), "the previewed face, not the decoy: {lines:?}");
+    let loaded = doc.text_editor_fonts(0).into_iter().find(|f| f.bytes == carlito_bytes).expect("Carlito is loaded into the page");
+    assert_eq!(pdfcraft_engine::substitute_fit(&facts, &loaded.bytes), fit, "the edit's fit is the preview's");
+}

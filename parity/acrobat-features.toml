@@ -1922,8 +1922,8 @@ milestone = "M7"
 status = "shipped"
 commands = ["edit.edit_text"]
 tools = ["text_edit"]
-evidence = ["crates/edit/src/tests.rs::missing_glyphs_substitute_helvetica_and_impossible_text_is_refused", "crates/fonts/src/pdf.rs::subset_fonts_only_encode_the_glyphs_they_have", "crates/fonts/src/pdf.rs::composite_fonts_use_to_unicode"]
-notes = "the line's font is reused when every character has a code and a glyph (ToUnicode, encodings, Differences; subset glyph checks); otherwise Helvetica (WinAnsi) is used and reported; text no font can show is refused"
+evidence = ["crates/edit/src/tests.rs::missing_glyphs_substitute_helvetica_and_impossible_text_is_refused", "crates/fonts/src/pdf.rs::subset_fonts_only_encode_the_glyphs_they_have", "crates/fonts/src/pdf.rs::composite_fonts_use_to_unicode", "crates/edit/src/text.rs::substitute_fit_matches_letter_height_widths_and_weight", "crates/edit/src/text.rs::substitute_chars_are_the_ones_the_font_cannot_show", "crates/ui-egui/tests/font_substitute.rs::a_font_without_a_program_is_previewed_and_drawn_in_one_stand_in", "crates/ui-egui/src/edit_text_ui.rs::stand_in_letters_advance_as_far_as_the_edit_sets_them"]
+notes = "the line's font is reused when every character has a code and a glyph (ToUnicode, encodings, Differences; subset glyph checks); otherwise an installed or bundled stand-in (same family, else metric-compatible) fitted to the font's cap height, widths and weight draws the missing characters, else Helvetica (WinAnsi) is used and reported; text no font can show is refused. The inline editor previews the same stand-in, fit and advances as the edit (one resolver, one fit rule). Still missing: the preview can't draw the fit's horizontal glyph scale or the synthetic-bold stroke (spacing matches, shapes are slightly narrower/lighter), and text in a non-embedded font is previewed in its stand-in while the renderer draws the original with its standard-14 face"
 
 [[feature]]
 id = "edit.text-format-font"

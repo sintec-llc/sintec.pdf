@@ -491,7 +491,7 @@ impl PdfCraftApp {
                     && let Some(ed) = self.views[index].line_editor.as_mut()
                     && let Some(ctx) = self.ctx.as_ref()
                 {
-                    ed.fonts = crate::edit_text_ui::install_source_fonts(ctx, doc, page);
+                    ed.reload_fonts(ctx, doc);
                 }
             }
             FilePurpose::Combine => self.stage_combine(files),
