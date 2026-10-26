@@ -1,0 +1,2213 @@
+{
+  "tasks": {
+    "001": {
+      "title": "Finish the font analysis WIP and make the branch green",
+      "status": "done",
+      "started": "2026-10-16T09:37:37",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.00435605,
+          "turns": 6,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 1940,
+            "cache_read": 43575,
+            "cache_write": 13417
+          },
+          "at": "2026-10-14T17:25:49"
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "cost_usd": 0.16645300000000002,
+          "turns": 9,
+          "error": true,
+          "attempt": 1,
+          "tokens": {
+            "input": 10,
+            "output": 1208,
+            "cache_read": 123376,
+            "cache_write": 35425
+          },
+          "at": "2026-10-14T17:26:11"
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.00551033,
+          "turns": 7,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 2349,
+            "cache_read": 45633,
+            "cache_write": 17299
+          },
+          "at": "2026-10-16T09:37:58"
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "cost_usd": 0.9985503,
+          "turns": 49,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 84,
+            "output": 24837,
+            "cache_read": 3075619,
+            "cache_write": 110531
+          },
+          "at": "2026-10-16T09:56:50"
+        }
+      ],
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Goal: make branch feature/0.2.6 clippy-clean (`cargo clippy --workspace -- -D warnings`) by wiring the unused font-analysis code, then add the tests and Russian strings listed below. Commit only green states.\n\n1. Wire `suggest_fonts` (crates/ui-egui/src/font_substitute.rs:169). Call it when Edit PDF's text editing is active and a page is shown. Candidate hook: canvas.rs ~2429, where `view.objects.prepare(doc, tool == QuickTool::EditText && can_modify, ...)` runs for `QuickTool::EditText`; or edit_text_ui.rs `page_input` (camera_ui.rs:61 is the input entry point). Pick one that runs once per page view, not every frame. `page_fonts` is cached per `(id, page)` by `edit_generation()`, so the call is cheap, but `suggest_fonts` opens a dialog, so it must not reopen after dismissal (it uses `fonts.suggested`; verify that). Do not change the Match::Other logic.\n2. Tests:\n   - pdfcraft-edit (crates/edit/src/text.rs:169 `font_facts`, :212 `first_unencodable`): synthetic CIDFontType2 whose FontFile2 name table says family \"Rect Font\", weight 700, with /BaseFont \"CIDFont+F1\". Assert family/weight come from the program. Assert `first_unencodable` returns the first unencodable char. Build the font with crates/engine/tests/support/font_fixture.rs (in-memory generator). Check whether that helper is reachable from the edit crate's tests; if not, build the fixture locally.\n   - pdfcraft-engine (crates/engine/src/text_fonts.rs:149 `Wanted::from_facts`): assert program family/weight win over flags.\n   - Styled edit: bold on a paragraph whose real family has an installed or registered bold face must pick that face, not standard Helvetica-Bold. See `styled_face` and `rank` in font_substitute.rs.\n3. Add Russian lines to crates/ui-egui/src/i18n/ru.tsv for every new UI string (the `sintec_guard` test checks coverage), e.g. \"No similar font is installed. Choose the font edited text in it is set in.\" Then run `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv` and `cargo xtask assets`.\n\nConstraints (CLAUDE.md/AGENTS.md): no unwrap/expect/panic/indexing on input-derived positions in non-test code; use checked arithmetic and `get`. Never commit fonts, Downloads PDFs or corpus files. Use `Result` and existing error enums. No unsafe.\n\nDone when: `cargo fmt --all --check`, `cargo clippy --workspace -- -D warnings`, and `cargo test -p pdfcraft-edit -p pdfcraft-engine -p pdfcraft-ui-egui` (plus the fourth crate you touched) all pass, `cargo xtask assets` passes, and the new tests fail if the feature is reverted. Report the call site you chose and why.",
+      "last_failure": "rceFace { family: pdfcraft_fonts::embedding::family_key(&line.base_font), bold: line.bold, italic: line.italic },\n     }\n }\nDiff in \\\\?\\C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\001\\crates\\ui-egui\\src\\font_substitute.rs:86:\n \n /// The memory's key for a font in a style.\n fn key_of(wanted: &Wanted) -> String {\n\u001b[31m-    format!(\"{}{}{}\", pdfcraft_engine::text_fonts::family_key(&wanted.base_font), if wanted.bold { \"-b\" } else { \"\" }, if wanted.italic { \"-i\" } else { \"\" })\n\u001b[0m\u001b[32m+    format!(\n\u001b[0m\u001b[32m+        \"{}{}{}\",\n\u001b[0m\u001b[32m+        pdfcraft_engine::text_fonts::family_key(&wanted.base_font),\n\u001b[0m\u001b[32m+        if wanted.bold { \"-b\" } else { \"\" },\n\u001b[0m\u001b[32m+        if wanted.italic { \"-i\" } else { \"\" }\n\u001b[0m\u001b[32m+    )\n\u001b[0m }\n \n /// Choices, the analysis and the open dialog.\nDiff in \\\\?\\C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\001\\crates\\ui-egui\\src\\font_substitute.rs:408:\n         };\n         ui.label(crate::i18n::fmt(why, &[(\"font\", &format!(\"«{}»\", offer.base_font))]));\n         if offer.pending.is_none() && !offer.paragraph {\n\u001b[31m-            ui.label(egui::RichText::new(tl!(\"No similar font is installed. Choose the font edited text in it is set in.\")).color(t.text_muted).small());\n\u001b[0m\u001b[32m+            ui.label(\n\u001b[0m\u001b[32m+                egui::RichText::new(tl!(\"No similar font is installed. Choose the font edited text in it is set in.\")).color(t.text_muted).small(),\n\u001b[0m\u001b[32m+            );\n\u001b[0m         }\n         ui.add_space(8.0);\n         match &fonts {",
+      "commit": "21b972be",
+      "branch": "auto/001",
+      "finished": "2026-10-16T09:58:39"
+    },
+    "002": {
+      "title": "Photoshop-like floating text panel on the right",
+      "status": "done",
+      "started": "2026-10-17T10:00:01",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.0034113900000000003,
+          "turns": 4,
+          "error": false,
+          "tokens": {
+            "input": 4,
+            "output": 1503,
+            "cache_read": 24669,
+            "cache_write": 10796
+          },
+          "at": "2026-10-16T09:58:56"
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.00483066,
+          "turns": 5,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 2064,
+            "cache_read": 46506,
+            "cache_write": 15392
+          },
+          "at": "2026-10-16T15:27:41",
+          "usage_before": 52.0,
+          "usage_after": 52.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.00586081,
+          "turns": 8,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 2363,
+            "cache_read": 46601,
+            "cache_write": 19725
+          },
+          "at": "2026-10-16T20:25:11",
+          "usage_before": 74.0,
+          "usage_after": 75.0,
+          "usage_used_pct": 1.0
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.005439640000000001,
+          "turns": 5,
+          "error": false,
+          "tokens": {
+            "input": 4,
+            "output": 1664,
+            "cache_read": 16594,
+            "cache_write": 20868
+          },
+          "at": "2026-10-17T10:00:18",
+          "usage_before": 26.0,
+          "usage_after": 26.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "cost_usd": 1.6482294,
+          "turns": 52,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 86,
+            "output": 19981,
+            "cache_read": 2686641,
+            "cache_write": 88830
+          },
+          "at": "2026-10-17T10:11:01",
+          "usage_before": 26.0,
+          "usage_after": 27.0,
+          "usage_used_pct": 1.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "cost_usd": 2.2079522,
+          "turns": 19,
+          "error": false,
+          "attempt": 2,
+          "tokens": {
+            "input": 32,
+            "output": 5280,
+            "cache_read": 1578654,
+            "cache_write": 17283
+          },
+          "at": "2026-10-17T10:24:19",
+          "usage_before": 27.0,
+          "usage_after": 27.0,
+          "usage_used_pct": 0.0
+        }
+      ],
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Task 002 (Sintec.PDF, crates/ui-egui). Move the \"Format text\" controls out of the left tools panel into a new floating panel on the right side of the document area, immediately left of the right icon rail.\n\nGoal:\n- The panel is visible only while text is being edited: `views[i].line_editor.is_some()`, or a selected added text box, or the Add text tool. It closes when editing stops.\n- Every control keeps working exactly as it does now: font, size, bold/italic, colour, alignment, spacing, font status line, Replace font…, installed fonts list.\n\nFiles:\n- crates/ui-egui/src/panels.rs: `format_section` at ~L366 (called from ~L206 in the tools panel). Its body reads and writes `app.views[i].line_editor` at ~L369 and ~L476. Remove it from the tools panel.\n- New module, e.g. crates/ui-egui/src/text_panel.rs. Register it in lib.rs.\n- crates/ui-egui/src/chrome.rs: `right_rail` at ~L664. The panel must sit to its left and not overlap it.\n- Line editor: crates/ui-egui/src/edit_text_ui.rs (~L748 creates `LineEditor`, ~L1068 takes it); canvas.rs ~L1275 and ~L408.\n- Docking and torn-off windows: docking.rs, doc_windows.rs, tear_off.rs. Check that the panel is drawn in the correct window/viewport.\n- Styling: theme.rs (`Tokens`) and widgets.rs. Match the other panels.\n\nConstraints (CLAUDE.md / AGENTS.md):\n- Never panic in non-test code. No unwrap/expect, no indexing with input-derived positions, and use `get`.\n- Do not steal focus from the text being typed. Check that Esc still reaches the line editor first.\n- Every new UI string needs a line in crates/ui-egui/src/i18n/ru.tsv. The row needs a leading TAB. Check for `\\r` first, since this tree may be LF. Then run `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`.\n- Gates: `cargo fmt --all --check`, `cargo clippy --workspace -- -D warnings`, `cargo test --workspace`.\n- Use a separate CARGO_TARGET_DIR. Do not commit fonts or PDFs from Downloads.\n\nTests:\n- Add a kittest test in crates/ui-egui/tests/ (see editing.rs or font_substitute.rs for the harness). Set `app.fonts.installed_override = standard_faces()`. The test should open a paragraph, assert the panel is shown, press Esc, and assert the panel is closed.\n- Visual check: `cargo run -p pdfcraft-ui-egui --example shot`.\n\nDone when: the panel appears only during text editing, sits left of the right rail, does not steal focus, Esc closes it, all controls behave as before, the gates pass, and the ru.tsv rehash is done.",
+      "last_failure": "      pdfcraft_engine::text_fonts::Match::Fingerprint => todo!(),\n    |\n\nerror[E0063]: missing field `widths` in initializer of `pdfcraft_engine::text_fonts::Wanted`\n   --> crates\\ui-egui\\src\\font_substitute.rs:229:13\n    |\n229 | ...   Wanted { base_font: base, bold, italic, serif: None, monospace: fam == pdfcraft_engine::FontFamily::Courier, sample: text.clo...\n    |       ^^^^^^ missing `widths`\n\nerror[E0063]: missing field `widths` in initializer of `pdfcraft_engine::text_fonts::Wanted`\n   --> crates\\ui-egui\\src\\text_panel.rs:195:64\n    |\n195 |             let want = source.as_ref().map(|(f, bold, italic)| pdfcraft_engine::text_fonts::Wanted {\n    |                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `widths`\n\nerror: unused variable: `want`\n   --> crates\\ui-egui\\src\\font_substitute.rs:498:13\n    |\n498 | fn label_of(want: &Wanted) -> impl Fn(&FontFile) -> String + '_ {\n    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_want`\n    |\n    = note: `-D unused-variables` implied by `-D warnings`\n    = help: to override `-D warnings` add `#[allow(unused_variables)]`\n\nSome errors have detailed explanations: E0004, E0063.\nFor more information about an error, try `rustc --explain E0004`.\nerror: could not compile `pdfcraft-ui-egui` (lib) due to 4 previous errors\nwarning: build failed, waiting for other jobs to finish...\nerror: could not compile `pdfcraft-ui-egui` (lib test) due to 4 previous errors",
+      "crashes": 3,
+      "commit": "2e084dea",
+      "branch": "auto/002",
+      "finished": "2026-10-17T11:20:55"
+    },
+    "003": {
+      "title": "Bigger, reliable drag handle for text boxes in Edit PDF",
+      "status": "done",
+      "started": "2026-10-17T11:20:55",
+      "last_failure": "worker exited unexpectedly",
+      "crashes": 2,
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.00234227,
+          "turns": 6,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 1625,
+            "cache_read": 49617,
+            "cache_write": 3337
+          },
+          "at": "2026-10-16T15:33:17",
+          "usage_before": 52.0,
+          "usage_after": 52.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.00572321,
+          "turns": 6,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 2032,
+            "cache_read": 33721,
+            "cache_write": 19826
+          },
+          "at": "2026-10-17T11:21:13",
+          "usage_before": 27.0,
+          "usage_after": 27.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "cost_usd": 0.5619457000000001,
+          "turns": 34,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 54,
+            "output": 15047,
+            "cache_read": 1364771,
+            "cache_write": 68649
+          },
+          "at": "2026-10-17T11:32:54",
+          "usage_before": 27.0,
+          "usage_after": 28.0,
+          "usage_used_pct": 1.0
+        }
+      ],
+      "tier": "standard",
+      "why": "Interaction changes confined to one UI file plus one kittest file. The hit-testing and drag-start logic is local, though egui press/drag semantics need care, so it is not mechanical.",
+      "brief": "Task 003: bigger, reliable move handle for paragraph text boxes in Edit PDF (Sintec.PDF, a PdfCraft fork).\n\nCurrent state (crates/ui-egui/src/edit_text_ui.rs):\n- `BlockDrag` struct ~L362 (fields page, block, generation, start, grip); `Grip` enum just above it (Move, Left, Right).\n- `EDGE_REACH` = 6.0 ~L373. `width_handles` ~L376 draws only two 7×h edge handles (left/right). There is NO move handle yet, so add one.\n- `edge_at` ~L383 and `grab_at` ~L398 (topmost box wins; edges only when `upright`; otherwise Move if `b.contains(p)`).\n- In `page_input` ~L711-732: drag start uses `ui.input(|i| i.pointer.press_origin())` with `grab_at`. Hover path calls `draw_handles(boxes[hit])` (L730) and sets cursor at L732 (ResizeHorizontal on edge, else Text). Cursor must become a move cursor (CursorIcon::Move or similar) over the move handle.\n\nWhat to build:\n1. A move grip clearly visible, drawn at least 16×16 logical px, sitting above the top-left corner of the box so it does not cover text. Give it a larger invisible hit rect (~24 px). Its hit test should take priority over the body and edges.\n2. Keep dragging the box body working (Grip::Move). Keep the edge resize behavior.\n3. Reliable start: decide the grip from press_origin (already done), and make sure a fast move or the pointer leaving the box does not drop the drag. Check whether `active`/`view.block_drag` continue to update when the pointer leaves the box rect.\n4. Hover cursor: move cursor over the handle.\n5. Any new UI string needs a ru.tsv line (TAB-prefixed, check for `\\r` first; project notes say this tree is LF). Then run `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`. Only if you add a string. Also check whether a tooltip is needed.\n\nTest: add a kittest in crates/ui-egui/tests/ (the editing tests are in `tests/editing.rs`, and the editing harnesses set `app.fonts.installed_override = standard_faces()`). Look at how existing tests open a PDF, select a text block, and drag. Write a test that drags a paragraph by its move handle and asserts the block's position changed (for example via the pending edit or the block's bounds). Use synthetic fixtures only.\n\nConstraints (CLAUDE.md/AGENTS.md): never panic in non-test code. No unwrap/expect, no indexing with input-derived positions, and use `get` on `boxes`. No unsafe. Work in the worktree only.\n\nGates before done: `cargo fmt --all --check`, `cargo clippy --workspace -- -D warnings`, `cargo test -p pdfcraft-ui-egui` (or the workspace). Commit with a message beginning `Task 003:` and the attribution line. Do not push. Do not use bare git stash.\n\nDone when: the handle is ≥16×16 and visible, its hit area is ~24 px, the new kittest drags a paragraph by the handle and passes, existing editing tests still pass, the gates are green, and the summary reports the handle geometry and test name.",
+      "commit": "1fb234d3",
+      "branch": "auto/003",
+      "finished": "2026-10-17T11:34:25"
+    },
+    "004": {
+      "title": "Ship metric-compatible substitute fonts with the app",
+      "status": "done",
+      "started": "2026-10-17T11:34:25",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.00554027,
+          "turns": 7,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 3040,
+            "cache_read": 46087,
+            "cache_write": 15760
+          },
+          "at": "2026-10-16T15:40:10",
+          "usage_before": 52.0,
+          "usage_after": 52.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.005958000000000001,
+          "turns": 6,
+          "error": false,
+          "tokens": {
+            "input": 4,
+            "output": 2967,
+            "cache_read": 33570,
+            "cache_write": 18733
+          },
+          "at": "2026-10-16T15:57:11",
+          "usage_before": 84.0,
+          "usage_after": 84.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "cost_usd": 0.10517169999999999,
+          "turns": 6,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 12,
+            "output": 2025,
+            "cache_read": 160301,
+            "cache_write": 17103
+          },
+          "at": "2026-10-16T15:57:53",
+          "usage_before": 84.0,
+          "usage_after": 85.0,
+          "usage_used_pct": 1.0
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.0003236,
+          "turns": 1,
+          "error": true,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "at": "2026-10-17T00:39:28",
+          "usage_before": 100.0,
+          "usage_after": 25.0,
+          "usage_used_pct": 0.0
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.008811590000000001,
+          "turns": 8,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 3285,
+            "cache_read": 50429,
+            "cache_write": 31626
+          },
+          "at": "2026-10-17T11:34:58",
+          "usage_before": 28.0,
+          "usage_after": 28.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "cost_usd": 0.6564117,
+          "turns": 35,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 68,
+            "output": 14543,
+            "cache_read": 2158853,
+            "cache_write": 73646
+          },
+          "at": "2026-10-17T11:48:44",
+          "usage_before": 28.0,
+          "usage_after": 28.0,
+          "usage_used_pct": 0.0
+        }
+      ],
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Goal: Sintec.PDF ships metric-compatible open substitute fonts (Carlito, Caladea, Tinos, Cousine, PT Sans) so edited text keeps its layout without the originals installed. Follow Task 004 in the brief, in five parts. Fonts are never committed.\n\n1. ATTRIBUTION.toml (root): add the [[fetched]] entries, kind = \"substitute-font\". Start from C:/Users/kochurin.a/sintec-pdf/wip-0.2.7/substitute-fonts.toml (pinned google/fonts commit 9710da1…, hashes given). Tinos has no OFL.txt in ofl/tinos at that commit. Find its licence file, and compute licence_sha256 and sha256 the way wip-0.2.7/fontmanifest.py does. Verify each font has Cyrillic before adding it.\n2. xtask/src/assets.rs: add `cargo xtask fonts [DIR]`, modelled on `models()` (~line 338), into assets/substitute-fonts/ (git-ignored), with a licence file per font. Wire it into xtask/src/main or the dispatcher.\n3. Packaging: packaging/windows/package.ps1 (~lines 100-106, models stage) and pdfcraft.wxs (~lines 324-386, components with GUIDs) get a fonts\\ component beside the exe. Also add stage_fonts to packaging/env.sh (~line 68-83) and call it from macos/package.sh (~line 127, Resources/fonts), linux/package.sh (~line 76, share/pdfcraft/fonts), freebsd/package.sh (~line 55), and the flatpak bundle yml (~line 48).\n4. Runtime, crates/engine/src/text_fonts.rs: add bundled_directories() (exe_dir/fonts, ../Resources/fonts, ../share/pdfcraft/fonts, and the source tree's assets/substitute-fonts). Feed them into discover(). Add `bundled: bool` to FontFile (~line 9). Installed exact matches win over bundled ones. Bundled metric-compatible faces count as Match::Alias for their originals, using ALIASES (~line 113). Add ptsans to the arial group as a class fallback only. Match now has Fingerprint (Other < Alias < Fingerprint < Exact), so any new match arm must handle it. FontFile literals need `widths`. The UI labels bundled fonts \"included with Sintec.PDF\". Keep the layering rule: nothing below L7 depends on egui.\n5. Tests: tests/editing.rs and the crates/edit FontFacts path use installed_override. Add synthetic regression tests for the new matching rules. Never panic (no unwrap, no input-derived indexing).\n\nPartial patch: C:/Users/kochurin.a/sintec-pdf/wip-0.2.7/004-partial.patch. It is uncompiled and predates the fingerprint work, so use it as a reference only, with git apply --3way or by hand.\n\nProject notes: every new UI string needs a ru.tsv line (leading TAB), then run `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`. Check for \\r before assuming line endings; ru.tsv here is LF. Don't commit any font files.\n\nDone when: `cargo xtask assets` passes after `cargo xtask assets --write` regenerates ATTRIBUTION.md; `cargo fmt --all --check`, `cargo clippy --workspace -- -D warnings`, and `cargo test --workspace` pass; new tests cover exact-beats-bundled and bundled-alias matching; and the diff is committed under one task id (e.g. 004). Don't push or open a PR without the user's approval.",
+      "last_failure": "worker exited unexpectedly (code 1)",
+      "crashes": 2,
+      "commit": "ae7cb0e4",
+      "branch": "auto/004",
+      "finished": "2026-10-17T11:52:38"
+    },
+    "005": {
+      "title": "Tab tear-off opens an independent window and process",
+      "status": "done",
+      "started": "2026-10-16T16:28:19",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.0127722,
+          "turns": 14,
+          "error": false,
+          "tokens": {
+            "input": 18,
+            "output": 4488,
+            "cache_read": 185600,
+            "cache_write": 42120
+          },
+          "at": "2026-10-16T16:28:55",
+          "usage_before": 94.0,
+          "usage_after": 94.0,
+          "usage_used_pct": 0.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "cost_usd": 1.9464082,
+          "turns": 26,
+          "error": true,
+          "attempt": 1,
+          "tokens": {
+            "input": 46,
+            "output": 25781,
+            "cache_read": 1331983,
+            "cache_write": 145489
+          },
+          "at": "2026-10-16T19:33:13",
+          "usage_before": 94.0,
+          "usage_after": 18.0,
+          "usage_used_pct": 0.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "cost_usd": 3.7400153999999985,
+          "turns": 41,
+          "error": false,
+          "attempt": 2,
+          "tokens": {
+            "input": 74,
+            "output": 23990,
+            "cache_read": 4471036,
+            "cache_write": 52413
+          },
+          "at": "2026-10-16T19:45:58",
+          "usage_before": 18.0,
+          "usage_after": 34.0,
+          "usage_used_pct": 16.0
+        }
+      ],
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Goal: tearing a tab off spawns a separate Sintec.PDF process that owns the document. The tab leaves the original window, and the two windows close independently. Keep the in-process torn-off viewport only where spawning isn't possible (wasm, and ctx.embed_viewports() in tests).\n\nCurrent code:\n- crates/ui-egui/src/doc_windows.rs:110 tear_off_tab pushes a DocWindow and calls move_tab. :118 close_doc_window sends tabs back to window 0, which is the \"reappears in main window\" bug. :172 show_doc_windows draws the in-process viewports, guarded by embed_viewports().\n- crates/ui-egui/src/chrome.rs:354 calls app.tear_off_tab(drag.doc, Some(screen)) on release outside the strip. crates/ui-egui/src/lib.rs:2126 is a second caller.\n- apps/pdfcraft/src/main.rs: argument parsing ~159-175. Unknown \"--flag value\" pairs go to options and set_option, so a new flag needs its own match arm. may_hand_off (~198) forwards files-only launches to the running instance, so the child must pass --new-window or single_instance::claim swallows it. app_creator (~300-397) applies files, options and control_file.\n- RecoveryStore (~353) is the existing data-dir store. Reuse its directory for the temp copy.\n\nConstraints:\n- Never panic in non-test code (CLAUDE.md). No unwrap/expect, no indexing with input-derived positions. The crate denies unwrap and expect. Propagate errors, log and fall back.\n- Never lose work. If spawning fails, keep the tab in place and show a notice. Write unsaved state via the engine's save/export path to a temp copy. Never overwrite the original.\n- Layering: nothing below L7 depends on egui, winit, eframe or rfd.\n- Each new UI string needs a ru.tsv row (leading TAB, empty context column). Afterwards run python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv.\n- Working-tree files are CRLF. Edit with newline='' in scripts.\n- Don't commit PDFs from Downloads, fonts or corpus files. Don't push or open a PR without the user's approval.\n- Gates: cargo fmt --all --check, cargo clippy --workspace -- -D warnings, cargo test --workspace. One task id per commit.\n\nSuggested shape (to confirm): add a validated --window-pos x,y flag (finite, clamped), pass --new-window, and build the argument list and temp path in a pure function for unit tests.\n\nDone when:\n1. Unit tests cover argument-list construction (saved path; unsaved temp copy with the original name; position; --new-window). The temp file bytes are checked. A bad position is rejected.\n2. Existing tab tests in crates/ui-egui/tests/ pass.\n3. A failed spawn leaves the tab in place and shows a notice.\n4. Closing the torn-off window doesn't return the tab to the main window, and closing the main window doesn't close the new process.\n5. Gates are green. Report that the real drag gesture was not verified manually.",
+      "last_failure": "6.2\n   Compiling pdfcraft-xfdf v0.2.6 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\crates\\xfdf)\n   Compiling pdfcraft-audit v0.2.6 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\crates\\audit)\n   Compiling hayro v0.7.1 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\vendor\\hayro)\n   Compiling pdfcraft-redact v0.2.6 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\crates\\redact)\n   Compiling pdfcraft-measure v0.2.6 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\crates\\measure)\n   Compiling pdfcraft-render v0.2.6 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\crates\\render)\n   Compiling pdfcraft-optimize v0.2.6 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\crates\\optimize)\n   Compiling pdfcraft-sign v0.2.6 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\crates\\sign)\n   Compiling pdfcraft-a11y v0.2.6 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\crates\\a11y)\n   Compiling pdfcraft-create v0.2.6 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\crates\\create)\n   Compiling pdfcraft-ocr v0.2.6 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\crates\\ocr)\n   Compiling pdfcraft-engine v0.2.6 (C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\005\\crates\\engine)\n   Compiling egui_kittest v0.36.2\n    Finished `test` profile [optimized] target(s) in 4m 30s\n     Running unittests src\\lib.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\pdfcraft_ui_egui-1154e0ecfeff0144.exe)\nerror: test failed, to rerun pass `-p pdfcraft-ui-egui --lib`",
+      "commit": "30ce0938",
+      "branch": "auto/005"
+    },
+    "006": {
+      "title": "Identify anonymised fonts by their glyph widths",
+      "status": "done",
+      "started": "2026-10-16T19:51:49",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.0061237900000000005,
+          "turns": 7,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 2698,
+            "cache_read": 44219,
+            "cache_write": 20443
+          },
+          "at": "2026-10-16T19:52:07",
+          "usage_before": 48.0,
+          "usage_after": 48.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "cost_usd": 0.4839176,
+          "turns": 24,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 38,
+            "output": 16134,
+            "cache_read": 992117,
+            "cache_write": 55751
+          },
+          "at": "2026-10-16T20:05:07",
+          "usage_before": 48.0,
+          "usage_after": 72.0,
+          "usage_used_pct": 24.0
+        }
+      ],
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Goal: identify anonymised PDF fonts (e.g. `CIDFont+F1`, no usable name table) by a glyph-width fingerprint, and use it in ranking and the analysis text.\n\nFiles:\n- crates/engine/src/text_fonts.rs: `FontFile` (l.9-15, derives PartialEq; add a width field); `discover` (l.61-101) reads each face's bytes, so compute widths here for a fixed probe set (A–Z, a–z, Cyrillic А–я/Ё/ё, 0–9, common punctuation), normalised to 1000 em. `Wanted` (l.133-143) needs the PDF side's widths and a `from_facts` path (l.149). `Match` (l.205) and `rank` (l.228-256): add a fingerprint match between Exact (10_000) and Alias (6_000). Tests live in the module at l.258+; `face()` helper at l.263.\n- crates/edit/src/text.rs: `FontFacts` (l.123-145), `font_facts` (l.169-207). Widths come from `pdfcraft_fonts::pdf::Metrics` (crates/fonts/src/pdf.rs l.31; `width(code)` l.720; `text_of(code)` l.755 for ToUnicode, `codes` l.693). Map each char to its code and width; only chars the font actually has.\n- Installed-face widths: check which font parser crate pdfcraft_fonts already uses (hmtx/cmap for TrueType/OTF, CFF charstring widths otherwise). Reuse it; don't add a dependency without need.\n- crates/ui-egui/src/font_substitute.rs ~l.486: the analysis/display line that shows the match reason. Show the fingerprint there.\n\nRules:\n- Score = mean absolute difference over shared characters (scaled to 1000 em). Need at least 8 shared characters; otherwise no claim (no match).\n- Close means mean difference < 15 units.\n- CLAUDE.md: no unwrap/expect/panic, no indexing with input-derived positions, checked arithmetic, guard against NaN/inf and divide-by-zero (units_per_em = 0), cap loops over font data.\n- Any new UI string needs a line in crates/ui-egui/src/i18n/ru.tsv (leading TAB, empty context column), then run `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`. Working-tree files are CRLF: edit with `newline=''`.\n- Gates: `cargo fmt --all --check`, `cargo clippy --workspace -- -D warnings`, `cargo test --workspace`. Commit message: task id, e.g. \"006: ...\".\n\nDone when: synthetic tests show (a) a PDF font whose widths match an installed face (with no name) ranks it as Exact-level, (b) fewer than 8 shared characters gives no claim, (c) mean difference ≥ 15 gives no claim, and (d) the analysis text shows the fingerprint. Gates are green.",
+      "commit": "db3c373f",
+      "branch": "auto/006",
+      "finished": "2026-10-16T20:06:43"
+    },
+    "008": {
+      "title": "Stability audit: find and fix crashes, panics, hangs and leaks",
+      "status": "done",
+      "started": "2026-10-17T12:19:14",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.00382607,
+          "turns": 4,
+          "error": false,
+          "tokens": {
+            "input": 4,
+            "output": 1631,
+            "cache_read": 25137,
+            "cache_write": 11617
+          },
+          "at": "2026-10-17T12:19:32",
+          "usage_before": 37.0,
+          "usage_after": 37.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "cost_usd": 5.3383923,
+          "turns": 121,
+          "error": true,
+          "attempt": 1,
+          "tokens": {
+            "input": 240,
+            "output": 52557,
+            "cache_read": 13952159,
+            "cache_write": 186945
+          },
+          "at": "2026-10-17T12:35:11",
+          "usage_before": 37.0,
+          "usage_after": 73.0,
+          "usage_used_pct": 36.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "cost_usd": 5.5984425,
+          "turns": 5,
+          "error": false,
+          "attempt": 2,
+          "tokens": {
+            "input": 10,
+            "output": 1030,
+            "cache_read": 1022531,
+            "cache_write": 4363
+          },
+          "at": "2026-10-17T12:35:56",
+          "usage_before": 73.0,
+          "usage_after": 73.0,
+          "usage_used_pct": null
+        }
+      ],
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Task 008: stability audit of Sintec.PDF (Rust, Windows, worktree C:\\Users\\kochurin.a\\sintec-pdf\\.claude\\worktrees\\sintec-pdf). Find and fix crashes, panics, hangs, leaks. Do NOT change features. Smallest safe change per fix, each with a synthetic regression test.\n\nRead first: CLAUDE.md \"Never panic\" section (no unwrap/expect/panic/indexing with input-derived positions, checked arithmetic, lock poisoning handled, no unsafe). Project notes: ru.tsv needs a line for every new UI string; tests must not open the real scanner or native dialogs (use fakes or the injection points); UI tests use egui_kittest in crates/ui-egui/tests/; `app.fonts.installed_override` for font-dependent tests.\n\nMethod:\n1. Triage panic sites in non-test code of crates/ui-egui/src (about 263 unwrap/expect/index hits; highest: editing.rs ~46, tab_context.rs ~25, docking.rs ~19, web_print.rs ~18, image_pick.rs ~11, sign_ui.rs ~11, combine_ui.rs ~10, optimize_ui.rs ~10), crates/engine, crates/fonts, and the app crates. Prioritise paths reachable with empty docs, 0 pages, page index after delete/reorder, closed tab, stale DocId, zero-size rects, NaN/inf geometry.\n2. Background threads and long jobs (OCR, scan incl. sintec-scan-<pid> temp dirs, font discovery, export, render): check cancellation on tab close and app exit, no Mutex held across UI calls, no leaked threads or temp files.\n3. State transitions: undo/redo, closing a tab mid-job, tear-off to another process (tear_off.rs), reopening, save-as over an open file.\n4. Memory: unbounded texture/page/font caches, whole-file clones.\n5. Run existing fuzz/corpus tests if present. Hostile PDFs are generated in tests, never from Downloads.\n\nGates: cargo fmt --all --check; cargo clippy -p xtask -p pdfcraft-engine -p pdfcraft-fonts -p pdfcraft-ui-egui --all-targets -- -D warnings; cargo test for the same crates. Use a separate CARGO_TARGET_DIR. Do not commit or push without the user's approval (local build before PR). Working-tree files are CRLF; ru.tsv may be LF or mixed, so check before editing.\n\nDone when: gates are green, each fix has a regression test, and the final report lists three groups: found, fixed (with test name), left (with reason). Also update STATUS/notes only if the repo convention requires it.",
+      "last_failure": "   format!(\n\u001b[0m\u001b[32m+            \"{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\\n3 0 obj << /Type /Pages /Kids [3 0 R] /Parent 2 0 R /Count 1 >> endobj\\n{tail}\"\n\u001b[0m\u001b[32m+        ),\n\u001b[0m         // A /Count that promises a billion pages and no Kids.\n         format!(\"{head}2 0 obj << /Type /Pages /Kids [] /Count 999999999 >> endobj\\n{tail}\"),\n         // Zero-size, inverted and absurd boxes.\nDiff in \\\\?\\C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\008\\crates\\engine\\src\\tests.rs:4465:\n         format!(\"{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\\n{}{tail}\", page(\"[0 0 1e400 -1e400]\")),\n         format!(\"{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\\n{}{tail}\", page(\"[0 0 99999999 99999999]\")),\n         // Deeply nested arrays in the page and in its content.\n\u001b[31m-        format!(\"{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 99 99] /X {deep} >> endobj\\n{tail}\"),\n\u001b[0m\u001b[32m+        format!(\n\u001b[0m\u001b[32m+            \"{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 99 99] /X {deep} >> endobj\\n{tail}\"\n\u001b[0m\u001b[32m+        ),\n\u001b[0m         format!(\n             \"{head}2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 99 99] /Contents 4 0 R >> endobj\\n4 0 obj << /Length {} >> stream\\n{deep}\\nendstream endobj\\n{tail}\",\n             deep.len()",
+      "commit": "43dda510",
+      "branch": "auto/008",
+      "finished": "2026-10-17T12:42:05"
+    },
+    "009": {
+      "title": "Print: automatic paper matching to PDF size becomes an option, off by default",
+      "status": "done",
+      "started": "2026-10-20T09:31:15",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.00529107,
+          "turns": 8,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 2858,
+            "cache_read": 46597,
+            "cache_write": 14656
+          },
+          "at": "2026-10-20T09:31:32",
+          "usage_before": 73.0,
+          "usage_after": 73.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "cost_usd": 0.34560749999999996,
+          "turns": 32,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 36,
+            "output": 8981,
+            "cache_read": 763254,
+            "cache_write": 44759
+          },
+          "at": "2026-10-20T09:38:13",
+          "usage_before": 73.0,
+          "usage_after": 73.0,
+          "usage_used_pct": 0.0
+        }
+      ],
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Goal: make \"match paper to PDF page size\" a user option, default OFF (Sintec.PDF, branch from feature/0.2.6). With it off, nothing changes paper or orientation automatically; the default paper stays A4 (PrintDraft default, unchanged). With it on, behaviour is exactly as today.\n\nFindings so far (verify, don't trust blindly):\n- The only paper write I found is the \"Match page at 100%\" button, crates/ui-egui/src/print_ui.rs ~L835-849: sets d.paper, handling=Size, size=Actual, orientation=Auto, sheet=0.\n- open_print() (print_ui.rs L277-312) does NOT set paper; it keeps `..keep`. Still, grep for every `paper =` / `.paper =` / `matching_paper` caller (including any page-change handler and the wasm/CLI paths) and record each in reports/009.md. The task asks for that report.\n- \"Auto portrait/landscape\" (print_ui.rs ~L971, Orientation::Auto) only rotates the sheet; it is not a paper pick. Leave it alone.\n\nWhat to build:\n1. Bool preference, default false, e.g. `match_paper_to_page`. Store it like `units` in the app: field near lib.rs L510, default at L917, save in the prefs JSON near L1919, load near L2014 via serde_json on v[\"key\"]. Follow that exact pattern, including the load-failure fallback.\n2. Gate the automatic match on the preference. Keep the \"Match page at 100%\" button as an explicit action, always available when a match exists.\n3. Keep PrintDraft default and print::layout / matching_paper APIs unchanged.\n4. Add a checkbox/option in the print dialog or Preferences. Every new UI string needs a line in crates/ui-egui/src/i18n/ru.tsv (leading TAB; check for \\r before editing; ru.tsv has mixed endings, so use byte-level inserts), then run `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`.\n\nTests (crates/ui-egui/tests/print.rs; existing test around L325-345 clicks \"Match page at 100%\"):\n- Fresh profile, non-A4 page: after open_print(), draft.paper is unchanged.\n- Option on: open or match behaves as before.\n- Preference round-trips through save/load like the other prefs (follow the existing prefs test pattern).\n- Existing \"Match page\" test still passes, or enable the option first.\nTests must never open a real printer or native dialog; use the existing harness and installed_override where needed.\n\nConstraints (CLAUDE.md/AGENTS.md): no unwrap/expect/indexing on input-derived values in non-test code. No unsafe. Keep the diff small (task 008 also touches ui-egui).\n\nDone when: `cargo fmt --all --check`, `cargo clippy -p pdfcraft-engine -p pdfcraft-ui-egui --all-targets -- -D warnings`, and `cargo test -p pdfcraft-engine -p pdfcraft-ui-egui -p <print package>` all pass, and reports/009.md lists the auto-pick paths, the changes, and the tests run. Commit as \"009: ...\" (one task id), do not push.",
+      "commit": "07abc4d9",
+      "branch": "auto/009",
+      "finished": "2026-10-20T09:39:33"
+    },
+    "010": {
+      "title": "Tab drag into another window's tab strip must work across processes",
+      "status": "done",
+      "started": "2026-10-20T11:09:15",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.00601371,
+          "turns": 7,
+          "error": false,
+          "tokens": {
+            "input": 8,
+            "output": 2236,
+            "cache_read": 66421,
+            "cache_write": 19517
+          },
+          "at": "2026-10-20T11:09:30",
+          "usage_before": 75.0,
+          "usage_after": 75.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "cost_usd": 4.319555999999999,
+          "turns": 81,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 116,
+            "output": 75544,
+            "cache_read": 7357673,
+            "cache_write": 167045
+          },
+          "at": "2026-10-20T11:32:44",
+          "usage_before": 75.0,
+          "usage_after": 77.0,
+          "usage_used_pct": 2.0
+        }
+      ],
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Goal (task 010): dropping a tab from window A (process P1) onto the tab strip of window B (process P2, or the same process) must add the document to B at the pointer's gap and remove it from A. Works both directions, including unsaved work. The source closes the tab only after the target confirms it took it. On failure the tab stays and a notice shows. The single-process behaviour must not change.\n\nCurrent code:\n- crates/ui-egui/src/chrome.rs ~297-358 `tab_drag`: target lookup uses `app.window_geometry` (same process only, lines 315 and 352-354). Label \"Release to move it to that window\" at 330-331. Drop calls `app.move_tab` (doc_windows.rs:71) or `detach_tab`.\n- chrome.rs ~238-239 publishes geometry into `window_geometry_next`. panels.rs ~681 updates it. lib.rs 748-749 and 2743 swap the two lists. doc_windows.rs ~147 reads geometry.\n- crates/ui-egui/src/tear_off.rs: the existing hand-off to a new process. It has `HandOff` (line 47), `hand_off_args` (72), `valid_recovery_key` (66), `parse_window_pos` (55), `write_hand_off` (100), `spawn_self` (111), and `detach_tab`/`hand_off`/`close_handed_off` (144-200). Reuse the recovery-entry path for unsaved work. Find where `--new-window`, `--torn-off`, `--recover-key` are parsed in the CLI (grep for \"--torn-off\").\n\nDesign guidance (choose, don't ask): publish each window's strip rect (screen coords) with pid and a local endpoint into a small per-user file or localhost socket. Ignore entries whose pid is dead or whose timestamp is stale, and cap the entry count. The sender must use short timeouts. A dead peer means the tab stays and a notice shows. The message is a HandOff plus an insert index. Validate every field on receipt: finite numbers, bounded lengths, valid_recovery_key, a path check, and a size cap on the message. Never unwrap or index on input.\n\nConstraints (CLAUDE.md): never panic in non-test code; bound allocations and loops; no unsafe; the wasm target and other platforms must still compile (cfg-gate Windows-only code). Every new UI string needs a ru.tsv line (tab-indented; check for \\r first; rerun `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`, which updates ATTRIBUTION.toml). Use egui_kittest for UI tests where practical. Do not commit fonts or PDFs. Don't push.\n\nDone when: regression tests cover message parse/validation, the registry with stale entries ignored, and the drop decision. Write reports/010.md with a manual two-window test checklist. `cargo fmt --all --check`, `cargo clippy -p pdfcraft-ui-egui -- -D warnings` and `cargo test -p pdfcraft-ui-egui` pass. Update the plan/STATUS notes if the workflow requires it. Commit as `010: ...`, using the task-id commit convention.",
+      "commit": "5f71e191",
+      "branch": "auto/010",
+      "finished": "2026-10-20T11:38:43"
+    },
+    "011": {
+      "title": "Text box move grip / width handles: make them reliable",
+      "status": "done",
+      "started": "2026-10-20T11:38:43",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.007699210000000001,
+          "turns": 8,
+          "error": false,
+          "tokens": {
+            "input": 10,
+            "output": 3875,
+            "cache_read": 77161,
+            "cache_write": 23270
+          },
+          "at": "2026-10-20T11:39:05",
+          "usage_before": 78.0,
+          "usage_after": 77.0,
+          "usage_used_pct": 0.0
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "cost_usd": 1.215537,
+          "turns": 60,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 108,
+            "output": 38995,
+            "cache_read": 4235057,
+            "cache_write": 100392
+          },
+          "at": "2026-10-20T11:58:06",
+          "usage_before": 77.0,
+          "usage_after": 79.0,
+          "usage_used_pct": 2.0
+        }
+      ],
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Goal: make the paragraph-box move grip and both width handles reliable (task 011). Grip and side handles must be visible and grabbable for the hovered OR selected/being-edited box. Hit areas must be at least 24px. A grab must continue until release wherever the pointer goes. Side-handle drags must always change the width, including while editing. Rotated pages must work too.\n\nFiles (crates/ui-egui/src/edit_text_ui.rs unless noted):\n- Constants and geometry: EDGE_REACH (~l.373), width_handles (~l.376, 7px wide, height clamped 14-28), MOVE_GRIP/MOVE_GRIP_SLOP (~l.382), move_handle (~l.388, clamped to bounds only at the page top), handle_at (~l.394), edge_at/grab_at (~l.408-428; edges only when upright).\n- page_input (~l.659). Known problems:\n  - ~l.766: the hover position is dropped unless xf.rect.contains(p), so the grip above a box near or past the page top is lost.\n  - ~l.767 and ~l.773: grip and handles are gated on active.is_none(), so they vanish while editing. ~l.687 gates upright for handles.\n  - ~l.758-765: drag start uses press_origin, but it only runs for active.is_none().\n  - ~l.719-720: the live preview clamps width at 12px.\n  - ~l.735: the committed width depends on the l.rect width plus the preview delta.\n  - ~l.728: drag ends on drag_stopped() or when no pointer is down.\n- object_ui.rs ~l.249: on_move_grip is checked only when view.line_editor.is_none(). While editing, a grip press falls through to selection/marquee. Object_ui runs before edit_text_ui (see project notes).\n- canvas.rs ~l.2851-2881 decides call order and allow_interaction.\n\nConstraints (CLAUDE.md/AGENTS.md): never panic in non-test code (no indexing with input-derived positions; use get). No unwrap/expect. No unsafe. New UI strings need ru.tsv rows; rerun python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv. Working-tree files may be CRLF. Keep layering rules.\n\nTests: add egui_kittest tests in crates/ui-egui/tests/editing.rs (or a new file). See rotated_pages.rs for rotated-page setup, and set app.fonts.installed_override per project notes. Cover: (1) hover the box, then move the pointer up onto the grip; the grip stays grabbable. (2) Drag the grip; the box moves (MoveObjects edit). (3) Drag each side handle; the width widens or narrows (EditTextBlock with width). (4) Same while a box is being edited. (5) A rotated page; the grip must still work.\n\nDone when: the new tests pass, cargo fmt --all --check, cargo clippy --workspace -- -D warnings and cargo test -p pdfcraft-ui-egui are green. Report the root causes you confirmed by reproducing them.",
+      "commit": "905250ef",
+      "branch": "auto/011",
+      "finished": "2026-10-20T12:00:11"
+    },
+    "012": {
+      "title": "Print dialog: no automatic paper choice by default, visible switch in the dialog",
+      "status": "done",
+      "started": "2026-10-20T12:00:11",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "cost_usd": 0.00487452,
+          "turns": 4,
+          "error": false,
+          "tokens": {
+            "input": 4,
+            "output": 2434,
+            "cache_read": 25842,
+            "cache_write": 14582
+          },
+          "at": "2026-10-20T12:00:28",
+          "usage_before": 79.0,
+          "usage_after": 78.0,
+          "usage_used_pct": 0.0
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "cost_usd": 0.3339836,
+          "turns": 25,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 42,
+            "output": 8477,
+            "cache_read": 868790,
+            "cache_write": 40480
+          },
+          "at": "2026-10-20T12:10:16",
+          "usage_before": 78.0,
+          "usage_after": 78.0,
+          "usage_used_pct": 0.0
+        }
+      ],
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Task 012, Sintec.PDF (PdfCraft fork), worktree C:\\Users\\kochurin.a\\sintec-pdf\\.claude\\worktrees\\sintec-pdf. Read CLAUDE.md and the project notes first.\n\nGOAL\n1. Find the REAL cause of the print dialog picking paper from the PDF size. Task 009 said nothing auto-picked before, and the user disagrees. Check every path and say which one fired:\n- crates/ui-egui/src/print_ui.rs: PrintDraft defaults (~125-136: size Fit, auto_rotate true, orientation Auto); match_page (~152); open_print (~288-330, gated on self.match_paper_to_page); draft reuse via `..keep`; line ~857 `d.match_page(source)` call site, which may be unconditional.\n- crates/print/src/lib.rs: Settings default (~232, orientation Auto, paper PAPERS[0]); layout() Orientation::Auto (~295), Fit (~337), Multiple auto_rotate (~346-407).\n- crates/print/src/spool.rs: whether the Windows DEVMODE/paper selection picks a paper from page size.\n- crates/ui-egui/src/lib.rs: field at ~513, default false at ~921, prefs JSON write ~1924 and read ~2022. A stale persisted `true` in the saved prefs file is a suspect. Check the file's location and whether it is read before or after defaults.\n- Preferences checkbox: crates/ui-egui/src/js_ui.rs ~384 (verify that this is the Preferences screen and that it persists).\n- Verify what the dist 0.2.6 build contained (dist/ and git tags/branch feature/0.2.6).\n- Automation default auto_rotate true (crates/automation/src/printing.rs:73) is a separate path. Mention it, do not change it unless it feeds the dialog.\n\nDELIVERABLES\n(1) Default: no paper chosen from the PDF size. Paper = A4 (or the printer default), no auto-rotation unless the user picks it. Fix the defaults, the draft, and any stale-pref path.\n(2) A labelled checkbox \"Match paper to PDF page size\" (ru: already in ru.tsv line ~2170, reuse it) placed in the Print dialog next to the Paper selector, bound to the same `match_paper_to_page` field. Off by default. Keep the Preferences checkbox. Add any new UI string to ru.tsv (TAB-prefixed rows; check line endings with grep for \\r first), then run `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv` and rerun it after every edit (it updates ATTRIBUTION.toml).\n(3) Tests: default-off (ui-egui/tests/print.rs ~348 already has an assertion, extend it to the draft and open_print) and the checkbox toggling the field (kittest, crates/ui-egui/tests/print.rs). Print crate tests in crates/print/src/tests.rs if defaults change there.\nWrite reports/012.md: what auto-picked before, with file and line, and what was changed. Include the status line and revision history per docs progress-docs conventions if you touch docs/.\n\nCONSTRAINTS\n- No unwrap/expect/indexing on input-derived values in non-test code. No unsafe.\n- Use a separate CARGO_TARGET_DIR. Do not commit fonts or PDFs from Downloads.\n- Commit only when green, as \"012: ...\" (one task id).\n\nDONE WHEN\ncargo fmt --all --check, cargo clippy --workspace -- -D warnings, and cargo test --workspace all pass; the new tests fail on the old code and pass on the new; reports/012.md exists; the dialog checkbox works in a kittest test; ru.tsv rehashed.",
+      "commit": "195b19b0",
+      "branch": "auto/012",
+      "finished": "2026-10-20T12:14:31"
+    },
+    "013": {
+      "title": "Text box width handles: still unreliable after 011",
+      "status": "done",
+      "started": "2026-10-20T14:24:48",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.007076290000000001,
+          "turns": 6,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 2402,
+            "cache_read": 40839,
+            "cache_write": 25471
+          },
+          "at": "2026-10-20T14:25:03",
+          "usage_before": 80.0,
+          "usage_after": 80.0,
+          "usage_used_pct": 0.0
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "effort": "medium",
+          "cost_usd": 0.8503440000000001,
+          "turns": 36,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 60,
+            "output": 36085,
+            "cache_read": 1811824,
+            "cache_write": 76969
+          },
+          "at": "2026-10-20T14:40:27",
+          "usage_before": 80.0,
+          "usage_after": 81.0,
+          "usage_used_pct": 1.0
+        }
+      ],
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Goal: fix the text box width-handle bugs in Sintec.PDF (task 013). First reproduce each failure with tests, then fix. Report confirmed root causes. Features otherwise unchanged.\n\nStart: CLAUDE.md, the project notes (edit_text_ui, on_move_grip, Match/fonts notes). Never panic in non-test code (no unwrap/expect, no input-derived indexing, checked maths).\n\nKey code (crates/ui-egui/src/):\n- edit_text_ui.rs ~376-412: MIN_BOX_WIDTH, width_handles(b) (8px rects at left/right edges, height 24-40), MOVE_GRIP/MOVE_GRIP_SLOP, move_handle, handle_at, on_move_grip (returns true for grip/width handle so object_ui doesn't start a marquee).\n- edit_text_ui.rs ~417-435: edge_at / grab_at. Edges are grabbed only when `upright` (rotation % 180 == 0), so 90/270 pages get no width handles. Editing boxes have inside=0.\n- edit_text_ui.rs ~669-740: page_input; ~697 `upright` again; ~702 grip drawing; ~716 width handle drawing loop; ~731-732 Grip::Left/Right drag rect with MIN_BOX_WIDTH clamp. ~801 hover filter uses xf.rect expanded by grip.\n- object_ui.rs ~149 page_input: runs before edit_text_ui::page_input and turns a press on empty page into a marquee unless on_move_grip is true.\n- text_panel.rs (WIDTH 300, show() at ~59, placement at ~71 over the right edge of the viewport): the panel takes the press over the right width handle. Check layer order and whether it covers the handle.\n- panels.rs: the caller that orders the panel.\n- Tests: crates/ui-egui/tests/ (egui_kittest). Use app.fonts.installed_override = Some(standard_faces()) for text-editing tests. Use the real window size where the panel is present, zooms of 100%, ~150%, ~50%, rotated pages (90/270), and a box near the right page border.\n\nCheck each of these:\n1. Right handle under the Format text panel: does the panel take the press first? Fix by hit order or by placing the panel so it never covers the handle.\n2. 90/270 pages: make width handles work (the drag direction must follow the rotated axis via xf).\n3. Drag maths: width = rect width + preview delta, clamped at MIN_BOX_WIDTH, correct at zoom != 100% and during page scroll. Text must reflow, and the EditTextBlock width must persist after commit, undo/redo, save and reopen.\n4. Press order: any new grab zone outside the box must be included in on_move_grip.\n5. An auto-width single-line box: does a handle drag turn it into a fixed-width paragraph box? Decide whether this is intended and document it.\n\nDone when: new regression tests pass, and these are green: cargo fmt --all --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p pdfcraft-ui-egui. Update ru.tsv only if you add UI strings (then run python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv). Commit as \"013: text box width handles\" only on green. Do not push.",
+      "commit": "9d1833e0",
+      "branch": "auto/013",
+      "finished": "2026-10-20T14:44:28"
+    },
+    "014": {
+      "title": "Text box width drag snaps back (table PDFs)",
+      "status": "done",
+      "started": "2026-10-21T10:01:09",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.0074541699999999995,
+          "turns": 7,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 2410,
+            "cache_read": 41617,
+            "cache_write": 27187
+          },
+          "at": "2026-10-21T10:01:25",
+          "usage_before": 83.0,
+          "usage_after": 83.0,
+          "usage_used_pct": 0.0
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "effort": "medium",
+          "cost_usd": 0.6234840000000001,
+          "turns": 32,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 40,
+            "output": 18156,
+            "cache_read": 1293747,
+            "cache_write": 78036
+          },
+          "at": "2026-10-21T10:19:29",
+          "usage_before": 83.0,
+          "usage_after": 84.0,
+          "usage_used_pct": 1.0
+        }
+      ],
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Goal: in Edit PDF, a left/right width-handle drag on a paragraph box must stay visible after release. Today edit_text_ui.rs (~L791-801, the `resizing` branch of the drag-release code) sends EditTextBlock with style.width = new width, but the block is then re-read with rect = text extent, so the box snaps back. Widening does nothing on single-line/left-aligned text because crates/edit/src/text_regions.rs (~L244-247, draft = block.editor_text when text == block.text) keeps hard row breaks, so rows never merge. Narrowing rewraps multi-word cells but single-word cells can't narrow.\n\nDecide and implement a design. Suggested direction (you may refine): keep the user-set width per paragraph (UI side or a field on the edit state), keyed by page+block, dropped when the document changes or the paragraph's text is edited. Make the rewrap path use it (text_regions.rs: `natural` ~L373-377, `width` ~L378). Widening must produce a visible wider paragraph even when the text is a single line. Narrowing below the longest word must clamp to the longest word's width, and the box must show that clamped width, not an unexpected one. Do NOT merge separate table rows/cells into one paragraph. Default text-editing behaviour must not change.\n\nConstraints (CLAUDE.md): no unwrap/expect/indexing with input-derived positions in non-test code; checked arithmetic on PDF-derived numbers; no unsafe; Layering: crates below ui-egui must not depend on egui. Test-only fixtures: do NOT copy C:\\Users\\kochurin.a\\Downloads\\МаляковАА.pdf into the repo (it may hold credentials); build a synthetic PDF with the same shape (table-like rows, 'Доступ к сети Московского офиса', 'имя входа (login)', a single-word cell). Use app.fonts.installed_override = Some(standard_faces()) in UI tests (otherwise the click opens font substitution). Handle-drag tests need wrapped multi-row text; Courier with 12 pt word steps works; DocView::set_zoom to change zoom; text_panel_rect() for the floating panel. Don't break the on_move_grip / handle_at hit logic (edit_text_ui.rs ~L417-440) or earlier handle tests.\n\nIf any new UI string is added: add a row to crates/ui-egui/src/i18n/ru.tsv (leading TAB, empty context column), check line endings first (some lines may be LF, others CRLF; use byte-level edits), then run `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`.\n\nDone when: regression tests cover (1) widen a single-line box; it stays wide after release; (2) narrow a multi-word cell; it stays narrow and rewrapped; (3) single-word cell clamps to its minimum width; (4) the Russian cells above from the synthetic fixture. `cargo fmt --all --check`, `cargo clippy --workspace -- -D warnings` and `cargo test --workspace` are green. Report what changed and the design decision.",
+      "commit": "eb885d24",
+      "branch": "auto/014",
+      "finished": "2026-10-21T10:23:46"
+    },
+    "015": {
+      "title": "Text box frame must match the real wrap boundary",
+      "status": "done",
+      "started": "2026-10-21T10:40:59",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.00610545,
+          "turns": 7,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 2166,
+            "cache_read": 49885,
+            "cache_write": 20624
+          },
+          "at": "2026-10-21T10:41:21",
+          "usage_before": 84.0,
+          "usage_after": 83.0,
+          "usage_used_pct": 0.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 6.050948900000002,
+          "turns": 91,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 150,
+            "output": 96673,
+            "cache_read": 11442202,
+            "cache_write": 228513
+          },
+          "at": "2026-10-21T11:09:37",
+          "usage_before": 83.0,
+          "usage_after": 86.0,
+          "usage_used_pct": 3.0
+        }
+      ],
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Task 015: make Edit PDF text box frames show the width the text really wraps at, and make a width drag set a width the engine really uses.\n\nProblem: after a width-handle drag, the UI keeps a UI-only width (DocView.kept_width, KeptWidth) and widens block.rect in keep_width (crates/ui-egui/src/edit_text_ui.rs:372-407). The engine ignores it: block.rect is only the ink extent (crates/edit/src/text.rs TextBlock ~line 360), and rewrite_block_with_limit (text.rs ~1976-1983) picks width from style.width, else the block extent clamped to one em, or to the page margin for a single line. Hard row breaks are kept (crates/edit/src/text_regions.rs ~244-247, rewrite_styled_block ~235; width logic ~378 and ~641-642).\n\nGoal:\n1. Expose the effective wrap width from the engine, as a TextBlock field or a helper next to text_blocks, using the same rules as rewrite_block_with_limit. Cover single-line, multi-line paragraph, table cell, single-word cell and rotated pages.\n2. Draw the frame's left/right edges (top/bottom when the page is quarter-turned, see width_is_vertical) from that width, in canvas.rs and DocView::shown_text_boxes (canvas.rs ~583).\n3. A width drag must set a width the engine uses on the next rewrap, e.g. via BlockStyle.width. If a UI-only width can't be made real, clamp or drop it so the frame never lies.\n4. Keep 014 behaviour: no snap-back after drag, narrowing rewraps, clamp to longest word, no merging of table rows or cells.\n\nConstraints (CLAUDE.md, AGENTS.md):\n- Never panic: no unwrap/expect/indexing with input-derived positions. Use checked/saturating math, guard NaN/inf.\n- Layering: nothing below L7 depends on egui.\n- Fidelity: don't silently repair data. Record limits.\n- Clean-room, synthetic fixtures only. Do not use C:\\Users\\kochurin.a\\Downloads\\МаляковАА.pdf.\n- Notes: tests need app.fonts.installed_override = Some(standard_faces()). Frame grab zones outside the box must be added to on_move_grip (edit_text_ui.rs ~477). Handle tests need wrapped multi-row text (a Courier fixture with 12 pt word steps works). Use DocView::set_zoom and text_panel_rect. Use shown_text_boxes in tests, not doc.text_blocks.\n- Check for \\r before editing any file; the tree line endings vary.\n\nDone when:\n- New tests in crates/ui-egui/tests/ (egui_kittest) and crates/edit tests compare frame edges with the actual wrapped line extents after edit, for: a multi-word cell, a single-word cell, a 2-row heading+value block, and a 4+ line soft-wrapped paragraph.\n- Widening then typing wraps at the frame's right edge. Narrowing then typing wraps at the frame.\n- Existing 011/013/014 handle tests pass, or are updated with a stated reason.\n- cargo fmt --all --check, cargo clippy --workspace -- -D warnings, cargo test --workspace are green.\n- Report the design and limitations. PDFs do not store wrap widths, so the wrap width is a derived value.",
+      "commit": "41477a6a",
+      "branch": "auto/015",
+      "finished": "2026-10-21T11:14:41"
+    },
+    "016": {
+      "title": "Upstream sync 1/4: merge PdfCraft v0.8.0 into our branch",
+      "status": "done",
+      "started": "2026-10-21T11:15:00",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.00463558,
+          "turns": 4,
+          "error": false,
+          "tokens": {
+            "input": 4,
+            "output": 2713,
+            "cache_read": 26428,
+            "cache_write": 12960
+          },
+          "at": "2026-10-21T11:15:17",
+          "usage_before": 87.0,
+          "usage_after": 87.0,
+          "usage_used_pct": 0.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 6.753674499999999,
+          "turns": 121,
+          "error": true,
+          "attempt": 1,
+          "tokens": {
+            "input": 240,
+            "output": 52735,
+            "cache_read": 18693728,
+            "cache_write": 244862
+          },
+          "at": "2026-10-21T11:38:21",
+          "usage_before": 87.0,
+          "usage_after": 91.0,
+          "usage_used_pct": 4.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 8.0534267,
+          "turns": 18,
+          "error": true,
+          "attempt": 2,
+          "tokens": {
+            "input": 32,
+            "output": 9167,
+            "cache_read": 4404301,
+            "cache_write": 29428
+          },
+          "at": "2026-10-21T11:46:53",
+          "usage_before": 92.0,
+          "usage_after": 99.0,
+          "usage_used_pct": 7.0
+        }
+      ],
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Task 016 (upstream sync 1/4). In the worktree at C:\\Users\\kochurin.a\\sintec-pdf\\.claude\\worktrees\\sintec-pdf, run `git merge v0.8.0` (keep history, no squash, no rebase). The tag is already fetched. Merge-base is 7163ba3d. First check `git status` and whether a merge is already in progress (MERGE_HEAD).\n\nResolve every conflict and commit with a message starting \"016:\" and ending with the attribution line.\n\nKeep our side for:\n- Branding, the version (0.2.7 in Cargo.toml and Cargo.lock, not upstream's numbers), our release and update URLs, zz_SIGNING.md, the setup.exe launcher, and ATTRIBUTION required notices.\n- The removal of upstream's Linux, FreeBSD, web and ARM CI and packaging jobs.\n- Deleted non-en/ru language .tsv files. Resolve \"deleted by us\" conflicts as deleted.\n\nTake upstream's structure where it touched the same code, then re-apply our behaviour on top:\n- Floating text panel (text_panel.rs, panels.rs).\n- Text box move grip, width handles and kept-width/frame logic (edit_text_ui.rs, canvas.rs; see `on_move_grip`, `MOVE_GRIP`, `handle_at`, `DocView.kept_width`).\n- Tab tear-off and cross-process tab drag (tear_off.rs, tab_transfer.rs, doc_windows.rs, docking.rs; `hand_off_what`, `Peer::start_as`).\n- Bundled substitute fonts (004) and glyph-width font identification (006: `Match::Fingerprint`, and `FontFile`/`Wanted` now need `widths`).\n- Scanner (scan_ui.rs, tests/scan.rs with mock data; `page.scan` stays in PICKERS).\n- Excel/Word/PPT/HTML/RTF table export.\n- Print: paper auto-fit off by default (print_ui.rs; `PrintDraft::match_page`, A4 default).\n- Stability fixes (008).\n\nWork on the Rust files: no `unwrap`, `expect` or panics in non-test code, and no `unsafe`.\n\nStrings: take upstream's new and changed English source strings into the en handling (i18n/mod.rs, catalog.rs). Add Russian for new strings in crates/ui-egui/src/i18n/ru.tsv. Each row starts with a TAB and has an empty context column. Check line endings first with a byte-level check, because the file is mixed LF/CRLF, and insert rows at the byte level so the CRLF lines survive. Then run `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`, which updates the sha256 in ATTRIBUTION.toml. Run the script with `-I`.\n\nGates, all must be green:\n- `cargo fmt --all --check`\n- `cargo clippy --workspace --all-targets -- -D warnings`\n- `cargo test --workspace`. UI tests use egui_kittest. Tests that need an installed-font set must set `app.fonts.installed_override = Some(standard_faces())`.\n- `cargo xtask layers` (gate in xtask/src/gates.rs).\n\nThen run `cargo run -p pdfcraft` briefly to confirm the app starts.\n\nReport:\n- Conflicts per file and how each was resolved.\n- Which of our features needed re-application.\n- Anything dropped, with the reason.\n- Anything failing or ignored, with the reason.\n\nDon't push.",
+      "last_failure": "gents\\debug\\deps\\pdfcraft_compare-fb0cbc37140ea1cc.exe)\n     Running unittests src\\lib.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\pdfcraft_content-6ce685efffa27481.exe)\n     Running unittests src\\lib.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\pdfcraft_cos-f264a4f9d498b081.exe)\n     Running tests\\bounded_writer.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\bounded_writer-c57c19323d3a3427.exe)\n     Running tests\\corpus.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\corpus-4341b41a2f924794.exe)\n     Running tests\\encryption.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\encryption-30bde013ae31bb06.exe)\n     Running tests\\shared_streams.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\shared_streams-3c21447c623ed370.exe)\n     Running tests\\writer.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\writer-e096daf75e30c437.exe)\n     Running unittests src\\lib.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\pdfcraft_create-723ff193be61d028.exe)\n     Running unittests src\\lib.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\pdfcraft_crypt-c8897d1ade88e642.exe)\n     Running unittests src\\lib.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\pdfcraft_edit-5b3fd6c7692bba61.exe)\n     Running unittests src\\lib.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\pdfcraft_engine-891ed0bbfda2c09a.exe)\nerror: test failed, to rerun pass `-p pdfcraft-engine --lib`",
+      "commit": "8a176f9d",
+      "branch": "auto/016",
+      "finished": "2026-10-21T11:53:12"
+    },
+    "017": {
+      "title": "Upstream sync 2/4: merge PdfCraft v0.9.0 (after 0.8.0)",
+      "status": "blocked",
+      "started": "2026-10-21T14:24:08",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0,
+          "turns": 1,
+          "error": true,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "at": "2026-10-21T11:53:43",
+          "usage_before": 100.0,
+          "usage_after": 100.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0,
+          "turns": 1,
+          "error": true,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "at": "2026-10-21T11:54:13",
+          "usage_before": 100.0,
+          "usage_after": 100.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.00636634,
+          "turns": 6,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 2448,
+            "cache_read": 36564,
+            "cache_write": 21840
+          },
+          "at": "2026-10-21T14:24:30",
+          "usage_before": 91.0,
+          "usage_after": 91.0,
+          "usage_used_pct": 0.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 7.2584783999999996,
+          "turns": 121,
+          "error": true,
+          "attempt": 1,
+          "tokens": {
+            "input": 240,
+            "output": 55947,
+            "cache_read": 18830208,
+            "cache_write": 296524
+          },
+          "at": "2026-10-21T14:35:26",
+          "usage_before": 91.0,
+          "usage_after": 93.0,
+          "usage_used_pct": 2.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 9.0444446,
+          "turns": 24,
+          "error": false,
+          "attempt": 2,
+          "tokens": {
+            "input": 46,
+            "output": 8277,
+            "cache_read": 7129451,
+            "cache_write": 24294
+          },
+          "at": "2026-10-21T14:44:11",
+          "usage_before": 93.0,
+          "usage_after": 94.0,
+          "usage_used_pct": 1.0
+        }
+      ],
+      "last_failure": "ce-386a3ff4e8371496.exe)\n     Running tests\\winit_macos_title_bar_drag.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\winit_macos_title_bar_drag-40982f1a73d5b39d.exe)\n     Running tests\\winit_wayland_scroll.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\winit_wayland_scroll-fde08c6f073adfd8.exe)\n     Running tests\\winit_wayland_text_input.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\winit_wayland_text_input-10543d61c9bb0578.exe)\n     Running tests\\winit_windows_hidden_maximized.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\winit_windows_hidden_maximized-83814c203b749ae2.exe)\n     Running tests\\winit_windows_ime_cursor.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\winit_windows_ime_cursor-689b7d7b327ff2af.exe)\n     Running tests\\winit_x11_dpi.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\winit_x11_dpi-e84d937e12f1354a.exe)\n     Running tests\\winit_x11_ime_focus.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\winit_x11_ime_focus-d6cfbcf80edefdf8.exe)\n     Running unittests src\\lib.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\pdfcraft_a11y-ec267bde91db670e.exe)\n     Running unittests src\\lib.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\pdfcraft_annot-d6967b20df86f928.exe)\n     Running unittests src\\lib.rs (C:/Users/kochurin.a/sintec-pdf/target-agents\\debug\\deps\\pdfcraft_audit-12947c7d91bab40e.exe)\nerror: test failed, to rerun pass `-p pdfcraft-audit --lib`",
+      "crashes": 2,
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Task 017: merge upstream PdfCraft v0.9.0 into the current branch (already contains v0.8.0 from task 016). Run a real `git merge v0.9.0`, resolve every conflict, and commit the merge. Do not use bare `git stash`; use a WIP commit if you need to set work aside. Use a separate CARGO_TARGET_DIR.\n\nRead first: CLAUDE.md, AGENTS.md (§1 assets, §4 never-crash), plan/STATUS.md if present, and task 016's merge commit as the reference pattern.\n\nHot spots: crates/edit/src/text.rs, text_regions.rs; crates/ui-egui/src/edit_text_ui.rs (grip logic: MOVE_GRIP, MOVE_GRIP_SLOP, move_handle ~L528, handle_at ~L534, on_move_grip ~L541, page_input ~L814), canvas.rs, panels.rs, chrome.rs, lib.rs, print_ui.rs, fill_sign.rs, dialogs.rs, files.rs; tests/editing.rs, tests/fonts.rs, tests/print.rs; engine/src/lib.rs.\n\nConstraints:\n- Keep Sintec branding, version 0.2.7, our URLs/CI/packaging, setup.exe, signing.\n- English and Russian UI only. Do not restore deleted language .tsv files.\n- New strings need Russian entries in crates/ui-egui/src/i18n/ru.tsv: a leading TAB and an empty context column. Check line endings first. Earlier notes say the file was LF in one task and mixed in another, and the current file has no CR bytes, so verify. Edit at byte level, then run `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`.\n- Prefer upstream's mechanism for text reflow, line breaks and box growth. Re-express our width-handle and frame behaviour on top of it. Invariant: frame edges equal the real wrap boundary.\n- Keep our features: floating text panel; move grip, width handles and frame logic (003/011/013/014/015); tab tear-off and cross-process tab drag (005/010), including \"torn-off window quits when its last document is closed\"; bundled fonts (004); glyph-width identification (006); scanner; table export; print paper option (009/012); stability (008); signing; setup.exe.\n- Each new grab zone outside a text box must be exempted in object_ui::page_input via on_move_grip. Tests that edit text need app.fonts.installed_override = Some(standard_faces()).\n- Never-panic rules apply to any new non-test code: no unwrap/expect/indexing with input-derived positions.\n- Drop an upstream feature only if it conflicts with a kept feature, and record why.\n\nDone when: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace` and the layers gate are green. The merge is committed. The app starts (`cargo run -p pdfcraft -- <file.pdf>`, brief launch check).\n\nReport: conflicts per file with the resolution taken, our features re-applied, upstream features intentionally not taken with reasons, and leftovers."
+    },
+    "020": {
+      "title": "CI: make UI tests independent of the machine (macOS and Windows runners red)",
+      "status": "done",
+      "started": "2026-10-21T16:11:10",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.00786895,
+          "turns": 8,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 3194,
+            "cache_read": 42855,
+            "cache_write": 26905
+          },
+          "at": "2026-10-21T15:59:02",
+          "usage_before": 95.0,
+          "usage_after": 96.0,
+          "usage_used_pct": 1.0
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.00417671,
+          "turns": 7,
+          "error": false,
+          "tokens": {
+            "input": 6,
+            "output": 2655,
+            "cache_read": 62951,
+            "cache_write": 8784
+          },
+          "at": "2026-10-21T16:11:28",
+          "usage_before": 96.0,
+          "usage_after": 96.0,
+          "usage_used_pct": 0.0
+        },
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "effort": "medium",
+          "cost_usd": 0.11819299999999999,
+          "turns": 6,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 12,
+            "output": 1845,
+            "cache_read": 167275,
+            "cache_write": 20646
+          },
+          "at": "2026-10-21T16:16:50",
+          "usage_before": 96.0,
+          "usage_after": 96.0,
+          "usage_used_pct": 0.0
+        }
+      ],
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Task 020 (PdfCraft, Rust, repo at the current worktree). Make ui-egui tests independent of installed fonts and of the machine. Do not change app behaviour; only tests change.\n\nFiles and hints:\n- crates/ui-egui/tests/content.rs:9 `harness()`: add `app.fonts.installed_override = Some(standard_faces())`.\n- The helper `standard_faces()` is duplicated in editing.rs:40, text_box_frames.rs:60, text_box_grip.rs:32, text_box_width.rs:32. Move it into one shared module, e.g. tests/support/mod.rs, included with `#[path]` or `mod`. Read its doc comment first. Every harness/app constructor in the failing files must set the override: editing.rs:59, content.rs, object_selection.rs:49-57, control.rs:37-45 (control_quit test around line 1280), forms.rs:6 and 153 (saved_value does not click text, so probably leave it), ocr.rs, ui.rs:20. Use `grep installed_override` across tests to find the rest.\n- forms.rs:153-158: `scratch()` already uses temp_dir with pid. Check whether saved.pdf is written, and fix the path or the NotFound (`Os NotFound`) error. Look for the same pattern in signing.rs, trust_signer.rs and create.rs:58 (`/tmp/photo.png` is only a fake name, so probably fine).\n- ui.rs:355-374 is `#[cfg(target_os = \"macos\")]` and checks title-bar labels against a 28 pt band and a 62 pt traffic-light inset. It was green on main 0.2.5, so bisect with `git log -- crates/ui-egui/src/chrome.rs crates/ui-egui/tests/ui.rs` and find what changed the label rects or the integrated_titlebar setup. Fix the test if its expectation is stale. If the app behaviour is wrong, report it and do not change the app.\n- tests/ui_group/updates.rs:233 `skip_this_version_is_remembered` is flaky on Windows. Look for a missing settle/run_steps before `get_by_label(\"Skip this version\")`.\n- Verification experiment (not committed): add a test-only env-var read (e.g. `PDFCRAFT_TEST_NO_FONTS`) in the test harnesses, or temporarily patch every `PdfCraftApp::new()` in tests, to force `installed_override = Some(Vec::new())`. Run the whole ui-egui suite with it and fix the tests that depend on installed fonts. Remove the experiment before committing.\n\nConstraints: CRLF working tree (core.autocrlf). Use `newline=''`-safe edits. No unwrap in tests is not required, but keep changes minimal. ru.tsv and ATTRIBUTION.toml are not involved.\n\nDone when: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass on Windows. The forced-empty-fonts run passes the previously failing tests. Commit on the current task branch with a message `M-task-020: ...` (one task id per commit, end with the attribution line). Do not push.\n\nReport: each test you changed, its fix, the root cause, and anything you could not verify without macOS (the cfg(macos) tests: ui.rs:367, and the macOS-only content/editing/object_selection/ocr failures that only reproduce there).",
+      "commit": "0f329fa6",
+      "branch": "auto/020",
+      "finished": "2026-10-21T16:18:24"
+    },
+    "021": {
+      "title": "Upstream sync 2a/4: merge PdfCraft v0.9.0 - core crates and compile (UI hunks deferred)",
+      "status": "done",
+      "started": "2026-10-22T18:43:05",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.005600020000000001,
+          "turns": 4,
+          "error": false,
+          "tokens": {
+            "input": 4,
+            "output": 3414,
+            "cache_read": 32832,
+            "cache_write": 15781
+          },
+          "at": "2026-10-22T18:08:29",
+          "usage_before": 3.0,
+          "usage_after": 3.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.00232262,
+          "turns": 3,
+          "error": false,
+          "tokens": {
+            "input": 4,
+            "output": 2041,
+            "cache_read": 44492,
+            "cache_write": 2266
+          },
+          "at": "2026-10-22T18:09:24",
+          "usage_before": 3.0,
+          "usage_after": 3.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.00361744,
+          "turns": 5,
+          "error": false,
+          "tokens": {
+            "input": 4,
+            "output": 2621,
+            "cache_read": 39854,
+            "cache_write": 7522
+          },
+          "at": "2026-10-22T18:22:00",
+          "usage_before": 14.0,
+          "usage_after": 14.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.00284292,
+          "turns": 4,
+          "error": false,
+          "tokens": {
+            "input": 4,
+            "output": 2185,
+            "cache_read": 44492,
+            "cache_write": 4490
+          },
+          "at": "2026-10-22T18:24:44",
+          "usage_before": 17.0,
+          "usage_after": 17.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 5.620414299999999,
+          "turns": 121,
+          "error": true,
+          "attempt": 1,
+          "tokens": {
+            "input": 240,
+            "output": 47715,
+            "cache_read": 15215285,
+            "cache_write": 202720
+          },
+          "at": "2026-10-22T18:40:54",
+          "usage_before": 17.0,
+          "usage_after": 29.0,
+          "usage_used_pct": 12.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 6.0366753,
+          "turns": 6,
+          "error": false,
+          "attempt": 2,
+          "tokens": {
+            "input": 12,
+            "output": 5008,
+            "cache_read": 1331985,
+            "cache_write": 6207
+          },
+          "at": "2026-10-22T18:42:19",
+          "usage_before": 29.0,
+          "usage_after": 29.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.00524622,
+          "turns": 4,
+          "error": false,
+          "tokens": {
+            "input": 4,
+            "output": 2148,
+            "cache_read": 32852,
+            "cache_write": 17166
+          },
+          "at": "2026-10-22T18:43:18",
+          "usage_before": 29.0,
+          "usage_after": 31.0,
+          "usage_used_pct": 2.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 1.9530279,
+          "turns": 56,
+          "error": true,
+          "attempt": 1,
+          "tokens": {
+            "input": 108,
+            "output": 16324,
+            "cache_read": 4194596,
+            "cache_write": 98357
+          },
+          "at": "2026-10-22T19:23:19",
+          "usage_before": 31.0,
+          "usage_after": 41.0,
+          "usage_used_pct": 10.0
+        }
+      ],
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Task 021 (upstream sync 2a/4): merge PdfCraft v0.9.0 into the current branch (the 0.8.0 + 0.2.7 merge state from task 016; verify with `git status` and `git log -1`). Work in this worktree only. Do not use bare `git stash`. Use a separate CARGO_TARGET_DIR (for example `target-021`), run builds with `timeout` and `-j 2`.\n\nSteps:\n1. `git merge v0.9.0` (verify the tag exists). Commit the merge only after the workspace compiles and tests pass.\n2. Outside crates/ui-egui, resolve every conflict by reading both sides. Engine, edit (including text.rs and text_regions.rs), cos, render, forms, content, fonts, automation, xtask, vendor/*, deny.toml, Cargo.toml/Cargo.lock and workflows. Keep Sintec branding, version 0.2.7 (do not take upstream's 0.9.0 number), our URLs, CI, packaging, setup.exe and signing. UI is English and Russian only. Do not restore deleted language .tsv files. Delete any new language file upstream added. Read the auto-merged hunks in files you touched too.\n3. Inside crates/ui-egui (src and tests): for each conflicted file take OUR side, then change only what is needed for the workspace to compile against the new lower-level APIs. Do not port upstream UI features. Our features must keep working: text panel, move grip, width handles and frame logic (003/011/013/014/015), tab tear-off and cross-process drag (005/010), bundled fonts (004), glyph-width ID (006), scanner, table export, print paper option (009/012). Tests that edit text need `app.fonts.installed_override = Some(standard_faces())` (tests/support/mod.rs, included with `#[path = \"support/mod.rs\"] mod support;`).\n4. For every upstream ui-egui hunk you did NOT take, record it per file, using `git diff v0.8.0 v0.9.0 -- <file>` summaries. These go in the report so tasks 2b/2c can port them.\n5. Non-test code: no unwrap/expect/panic, no indexing on input-derived positions, checked arithmetic, no unsafe.\n6. If a test fails only because a deferred UI hunk is missing, mark it `#[ignore = \"0.9.0 sync 2b/2c\"]` with a comment and list it in the report. Do not ignore anything else.\n\nNote: `ru.tsv` mixes LF and CRLF line endings near the end. Use byte-level edits. Editing it changes the sha256 in ATTRIBUTION.toml; rerun `zz_rehash.py` after each edit.\n\nDone when: the merge is committed; `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` are clean; `cargo test --workspace` is green (or only the ignored tests above fail, which should not happen); `cargo xtask layers` and `cargo xtask assets` pass.\n\nReport: conflicts per file and how each was resolved, deferred hunks per ui-egui file, ignored tests with reasons. Keep the report under 600 words.",
+      "last_failure": "$ cargo clippy -p engine -p edit -p cos -p render -p forms -p content -p fonts -p automation -p xtask -p ui-egui --all-targets -- -D warnings\nerror: package ID specification `automation` did not match any packages\n...\nerror: package ID specification `automation` did not match any packages",
+      "crashes": 3,
+      "commit": "ee9321f3",
+      "branch": "auto/021",
+      "finished": "2026-10-22T19:24:36"
+    },
+    "022": {
+      "title": "Upstream sync 2b/4: port v0.9.0 text-editing UI (edit_text_ui, canvas, panels) on top of our features",
+      "status": "done",
+      "started": "2026-10-22T19:38:41",
+      "runs": [
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.00553279,
+          "turns": 7,
+          "error": false,
+          "tokens": {
+            "input": 8,
+            "output": 2575,
+            "cache_read": 82259,
+            "cache_write": 15163
+          },
+          "at": "2026-10-22T19:25:02",
+          "usage_before": 41.0,
+          "usage_after": 41.0,
+          "usage_used_pct": null
+        },
+        {
+          "tier": "router",
+          "model": "haiku",
+          "effort": null,
+          "cost_usd": 0.00353417,
+          "turns": 7,
+          "error": false,
+          "tokens": {
+            "input": 8,
+            "output": 2653,
+            "cache_read": 93417,
+            "cache_write": 4417
+          },
+          "at": "2026-10-22T19:26:05",
+          "usage_before": 41.0,
+          "usage_after": 42.0,
+          "usage_used_pct": 1.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 5.2176466,
+          "turns": 97,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 190,
+            "output": 55470,
+            "cache_read": 12751525,
+            "cache_write": 194610
+          },
+          "at": "2026-10-22T20:00:51",
+          "usage_before": 51.0,
+          "usage_after": 57.0,
+          "usage_used_pct": 6.0
+        }
+      ],
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Part 2 of 4 of the v0.9.0 merge. Task 021 merged v0.9.0 but kept OUR side in crates/ui-egui and listed the deferred upstream hunks in its report (reports/021.md). Now port the deferred upstream changes for the text-editing UI: crates/ui-egui/src/edit_text_ui.rs, canvas.rs, panels.rs, text_panel.rs (ours), object_ui.rs, and the matching tests (tests/editing.rs, fonts.rs, text_box_*.rs, viewer.rs). Upstream features to take: keep line breaks in paragraphs, grow text boxes / edit existing text, CJK rewrap, justify, commit paragraph on click, move by frame, middle-click closes a tab (tabs part belongs to 2c if in chrome.rs/tab files). Get each from `git diff v0.8.0 v0.9.0 -- <file>` and `git show v0.9.0:<file>`.\nWhere upstream now covers something we did differently (keeping row line breaks, growing text boxes) prefer upstream's mechanism and re-express our width-handle/frame behaviour through it. Invariants that must hold: frame edges equal the real wrap boundary (task 015); no snap-back of width drag (014); move grip reliable (003/011/013) and every grab zone outside a text box is exempted in object_ui::page_input via on_move_grip; floating text panel (002) keeps working with installed/not-installed fonts, bundled fonts (004), glyph-width ID (006). Tests that edit text need app.fonts.installed_override = Some(standard_faces()). Remove the `// 0.9.0 sync 2b` #[ignore] markers you can now satisfy.\nNew strings need Russian entries in crates/ui-egui/src/i18n/ru.tsv (leading TAB, empty context column; check line endings first; byte-level edits; then `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`).\nDone when fmt, clippy --workspace --all-targets -D warnings, cargo test --workspace are green. Report: what was ported, what upstream behaviour was intentionally not taken and why, leftovers for 2c.",
+      "last_failure": "worker exited unexpectedly (code 1)",
+      "crashes": 2,
+      "commit": "2cc7f54c",
+      "branch": "auto/022",
+      "finished": "2026-10-22T20:01:33"
+    },
+    "023": {
+      "title": "Upstream sync 2c/4: port v0.9.0 print, forms, files, chrome and dialogs UI; ru translations; app starts",
+      "status": "done",
+      "started": "2026-10-22T20:01:33",
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Part 3 of 4 of the v0.9.0 merge. Tasks 021/022 merged v0.9.0 and ported the text-editing UI; reports/021.md lists the deferred upstream hunks for the REST of crates/ui-egui. Port them now: print_ui.rs (4x6/A6, Label layout, print as image, grayscale previews, printer-list wait), fill_sign.rs / forms UI, dialogs.rs, files.rs (save asks before overwriting), chrome.rs, lib.rs, tab files (middle-click closes a tab; macOS tab-drag change), commands, and their tests (tests/print.rs, forms.rs, ui.rs, ...). Get each from `git diff v0.8.0 v0.9.0 -- <file>`.\nKeep ours: print paper auto-fit is an OPTION OFF by default with a visible switch, A4 default (009/012) - upstream's new print options must coexist; tab tear-off, cross-process drag and 'torn-off window quits when its last document closes' (005/010) must not break; title-bar 'Check updates' button 28pt band on macOS; update checks point at Sintec's releases; scanner flow; table export; signing; setup.exe. English+Russian only.\nRussian: list every new English UI string from v0.9.0 that has no ru entry and add them to crates/ui-egui/src/i18n/ru.tsv (leading TAB, empty context, check line endings, byte-level edits, then `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`).\nRemove all remaining `// 0.9.0 sync` #[ignore] markers (or justify each in the report). The app must start: `cargo run -p pdfcraft -- <some test pdf>` brief launch check.\nDone when fmt, clippy --workspace --all-targets -D warnings, cargo test --workspace and the layers gate are green. Report: ported items, features intentionally not taken (why), leftovers.",
+      "runs": [
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 5.4853570000000005,
+          "turns": 121,
+          "error": true,
+          "attempt": 1,
+          "tokens": {
+            "input": 240,
+            "output": 49888,
+            "cache_read": 14593590,
+            "cache_write": 195954
+          },
+          "at": "2026-10-22T20:29:58",
+          "usage_before": 57.0,
+          "usage_after": 65.0,
+          "usage_used_pct": 8.0
+        }
+      ],
+      "commit": "8e00e537",
+      "branch": "auto/023",
+      "finished": "2026-10-22T20:31:15"
+    },
+    "018": {
+      "title": "Upstream sync 3/4: regression check of our features on the 0.9.0 base",
+      "status": "done",
+      "started": "2026-10-22T20:31:17",
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "After the v0.8.0 and v0.9.0 merges (tasks 016, 017), verify every Sintec-only feature still works and fix regressions, with tests where none exist. Checklist, each item: find the existing test (or write a new one), run it, fix the code if it fails:\n1. Floating text panel (002): opens on text edit, shows installed/not installed fonts and the font list; bundled substitute fonts (004) used when a font is missing; glyph-width identification (006).\n2. Text box: move grip, width handles, no snap-back, frame = real wrap boundary (003/011/013/014/015); table-like synthetic PDF (do NOT copy C:\\Users\\kochurin.a\\Downloads\\МаляковАА.pdf into the repo). Also check it against upstream's new 'keep line breaks' and 'grow text box' behaviour so they do not fight each other.\n3. Tabs: reorder, tear off into a separate process window, drag into another window's strip across processes, drag back, window quits when its last document closes (005/010); upstream's middle-click close and macOS tab-drag change must not break these.\n4. Scanner flow (tests use mock data; real scanner never started in tests; page.scan in PICKERS) and the 'Scan another page' dialog.\n5. Export to Excel/Word/PowerPoint/HTML/RTF with ruled tables as grids; Pages panel Export to.\n6. Print: paper auto-fit is an option OFF by default with a visible switch (009/012), A4 default; upstream's new 4x6/A6/Label/print-as-image options present and not conflicting.\n7. Only English and Russian UI; Ukrainian/Kazakh systems get Russian; no untranslated (English) strings left in Russian mode for new upstream UI: list missing ru keys and add them (ru.tsv rules: leading TAB, empty context, byte-level edits on mixed line endings, then `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`).\n8. Update checks and installer/updater point at Sintec's releases, not upstream's.\nDone when: fmt, clippy --workspace --all-targets -D warnings, cargo test --workspace green; report with a per-item table (ok / fixed / limitation).",
+      "runs": [
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 5.574864899999999,
+          "turns": 121,
+          "error": true,
+          "attempt": 1,
+          "tokens": {
+            "input": 240,
+            "output": 51358,
+            "cache_read": 14653550,
+            "cache_write": 201967
+          },
+          "at": "2026-10-22T20:45:05",
+          "usage_before": 65.0,
+          "usage_after": 72.0,
+          "usage_used_pct": 7.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 8.389538100000001,
+          "turns": 52,
+          "error": false,
+          "attempt": 2,
+          "tokens": {
+            "input": 86,
+            "output": 19150,
+            "cache_read": 10456526,
+            "cache_write": 42503
+          },
+          "at": "2026-10-22T21:02:52",
+          "usage_before": 72.0,
+          "usage_after": 76.0,
+          "usage_used_pct": 4.0
+        }
+      ],
+      "last_failure": "pdf\\agent-worktrees\\018\\crates\\ui-egui\\src\\i18n\\mod.rs:963:\n     fn russian_calendar_contexts_are_translated() {\n         let ru = RU();\n         assert_eq!([\"Su\", \"Mo\", \"Tu\", \"We\", \"Th\", \"Fr\", \"Sa\"].map(|d| tr_ctx(ru, \"calendar weekday\", d)), [\"Вс\", \"Пн\", \"Вт\", \"Ср\", \"Чт\", \"Пт\", \"Сб\"]);\n\u001b[31m-        assert_eq!(fmt(tr(ru, \"{month} {day}, {y}\"), &[(\"month\", tr_ctx(ru, \"calendar date\", \"March\")), (\"day\", \"9\"), (\"y\", \"2026\")]), \"9 марта 2026\");\n\u001b[0m\u001b[32m+        assert_eq!(\n\u001b[0m\u001b[32m+            fmt(tr(ru, \"{month} {day}, {y}\"), &[(\"month\", tr_ctx(ru, \"calendar date\", \"March\")), (\"day\", \"9\"), (\"y\", \"2026\")]),\n\u001b[0m\u001b[32m+            \"9 марта 2026\"\n\u001b[0m\u001b[32m+        );\n\u001b[0m         assert_eq!(tr_ctx(ru, \"certificate\", \"SHA-256 digest\"), \"Хеш SHA-256\");\n     }\n \nDiff in \\\\?\\C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\018\\crates\\ui-egui\\tests\\scan.rs:96:\n fn page_scan_is_a_registered_pages_command() {\n     let command = pdfcraft_engine::commands::command(\"page.scan\").expect(\"registered\");\n     assert_eq!(command.label, \"Scan into document…\");\n\u001b[31m-    let pickers = include_str!(\"commands.rs\").split(\"const PICKERS: &[&str] = &[\").nth(1).and_then(|s| s.split(\"];\").next()).expect(\"the sweep's PICKERS\");\n\u001b[0m\u001b[32m+    let pickers =\n\u001b[0m\u001b[32m+        include_str!(\"commands.rs\").split(\"const PICKERS: &[&str] = &[\").nth(1).and_then(|s| s.split(\"];\").next()).expect(\"the sweep's PICKERS\");\n\u001b[0m     assert!(pickers.contains(\"\\\"page.scan\\\"\"), \"page.scan stays in the sweep's PICKERS\");\n }\n ",
+      "commit": "68f02a2c",
+      "branch": "auto/018",
+      "finished": "2026-10-22T21:03:43"
+    },
+    "019": {
+      "title": "Upstream sync 4/4: package check and release notes for the 0.9.0 base",
+      "status": "done",
+      "started": "2026-10-22T21:03:49",
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "After tasks 016-018: make sure packaging and docs are consistent on the new base. (a) Bump the version to 0.3.0 everywhere (the user decided the post-sync release is 0.3.0; use `cargo xtask version set 0.3.0`) (Cargo.toml, Cargo.lock, packaging/windows/*, installer, docs, parity/acrobat-features.toml and ROADMAP.md only where they state our version). (b) packaging/windows/package.ps1 still works with the new workspace (dry run of the build steps that do not need signing secrets: `cargo build --release -p pdfcraft -p pdfcraft-setup` etc. as the script does; do not sign; do not publish anything). (c) Update docs/releasing.md, README.md and ROADMAP.md: state that the code is synced with upstream PdfCraft v0.9.0, list what we carry on top (our features), and add a short 'upstream sync procedure' (fetch tags, merge by tag, which files conflict habitually and the rules: version, branding, en+ru only, ru.tsv rehash). Keep ATTRIBUTION notices. (d) Put a changelog entry for 0.2.7 listing user-visible changes in this release (text panel, handles, tabs, bundled fonts, print option, upstream 0.8.0/0.9.0 features). Done when fmt/clippy/test green and the report lists the files changed. No push, no release, no tag.",
+      "runs": [
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "effort": "medium",
+          "cost_usd": 0.36968479999999987,
+          "turns": 16,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 32,
+            "output": 6765,
+            "cache_read": 719286,
+            "cache_write": 57449
+          },
+          "at": "2026-10-22T21:25:14",
+          "usage_before": 76.0,
+          "usage_after": 77.0,
+          "usage_used_pct": 1.0
+        }
+      ],
+      "commit": "818267c3",
+      "branch": "auto/019",
+      "finished": "2026-10-22T21:25:36"
+    },
+    "024": {
+      "title": "PDF compression: effective algorithms + Strong/Medium/Light menu with estimated output sizes",
+      "status": "done",
+      "started": "2026-10-22T21:25:48",
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Runs AFTER the PdfCraft v0.9.0 sync (tasks 021-023, 018, 019), on the new base. Goal: make PDF size reduction really effective and let the user choose.\n1. Study what exists: crates/optimize (+ crates/engine/src/optimizer.rs, \"optimize.reduce\" -> reduce_file_size in ui-egui, Dialog::Optimize \"optimize.advanced\", automation tools). Measure on synthetic and real-like PDFs (scanned pages, photo-heavy, text-heavy, many duplicate fonts/images, uncompressed streams): what is already done (flate recompress, object streams, dedupe, unused-object removal, image downsample/JPEG recompress, font subsetting, metadata strip) and where the bytes go.\n2. Implement the missing effective techniques, each with tests: recompress images (downsample to a target DPI by quality level; re-encode JPEG at a quality level; convert lossless flate photos to JPEG; 1-bit scans keep CCITT/JBIG2-like or flate with predictor), better flate (max level / zopfli-style only if a pure-Rust dep is acceptable under deny.toml and AGENTS.md - otherwise use the best level of the existing crate), object streams + xref streams, dedupe identical streams and images, subset/drop unused fonts, remove unused resources, thumbnails, metadata, embedded files only when the level allows. Never change page appearance beyond the level's documented image downsampling; never lose text, forms, signatures-need-warning, bookmarks or links at Light/Medium.\n3. Three presets: Light (lossless only: structure/stream recompression, dedupe, cleanup), Medium (images to ~150 dpi, JPEG ~75), Strong (images to ~100 dpi, JPEG ~55, strip extras). Put the preset table in one place and in docs.\n4. UI: the \"Reduce file size\" command opens a small dialog (English + Russian strings; add to ru.tsv with a leading TAB and empty context, check line endings, byte-level edits, then `python zz_rehash.py crates/ui-egui/src/i18n/ru.tsv`) with a radio choice Strong / Medium / Light. Next to each choice show the ESTIMATED resulting file size (and % saved) BEFORE the user picks. Estimation must be cheap and honest: compute it from the document (sum of image bytes at the new dpi/quality estimated by a sampled trial-encode of a few images or a size model, plus the non-image bytes after lossless recompression) on a worker thread without freezing the UI, show 'calculating...' meanwhile, and label values as approximate (~). Cancel leaves the file untouched; the real result after applying is shown in a toast (before/after).\n5. Keep the Advanced optimize dialog working; automation/CLI tool gets a `level` parameter (light|medium|strong) with the same presets.\nConstraints: Sintec branding, en+ru only, never-panic rules for new non-test code (AGENTS.md §4), no unwrap on input-derived values, large files must not block the UI. Done when fmt, clippy --workspace --all-targets -D warnings, cargo test --workspace are green, with tests for each preset's size ordering (strong < medium < light < original on a fixture with images) and for the estimator being within a stated tolerance of the real result. Report: techniques added, measured savings per fixture and level, estimator accuracy, limitations.",
+      "runs": [
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 10.098663500000004,
+          "turns": 127,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 238,
+            "output": 145092,
+            "cache_read": 24389058,
+            "cache_write": 289710
+          },
+          "at": "2026-10-22T22:27:28",
+          "usage_before": 77.0,
+          "usage_after": 87.0,
+          "usage_used_pct": 10.0
+        }
+      ],
+      "commit": "bf28308f",
+      "branch": "auto/024",
+      "finished": "2026-10-22T22:27:57"
+    },
+    "025": {
+      "title": "Fix 5 failing tests after the 0.9.0 sync + 024 (audit, ui-egui)",
+      "status": "done",
+      "started": "2026-10-22T22:54:26",
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "`cargo test --workspace --no-fail-fast` on feature/0.2.6 (bf28308f, v0.9.0 merge + our features + 024) has exactly 5 failing tests; everything else is green:\n1. pdfcraft-audit lib: tests::faux_redaction_over_a_short_value_after_a_long_label_is_found, tests::faux_redaction_over_a_partial_value_after_a_long_label_is_found, tests::faux_redaction_over_a_partial_value_after_a_long_label_on_a_rotated_page_is_found. crates/audit is byte-identical to upstream v0.9.0, so the cause is in a dependency we changed (crates/edit text.rs / text_regions.rs, content, fonts). Example: covered_text comes back \"123 456 789\" instead of \"Social insurance number: 123 456 789\" (the label's words are not counted as covered / words grouped differently). Find the regression in OUR changes versus `git diff v0.9.0 HEAD -- crates/edit crates/content crates/fonts crates/engine`, fix it there without breaking our features (text panel, width handles, wrap logic, bundled fonts), keep upstream audit tests unchanged.\n2. pdfcraft-ui-egui --test content: text_tool_single_click_retypes_added_text_without_another_item.\n3. pdfcraft-ui-egui --test ui_group: theme::preferences_theme_cards_and_use_system_setting_stay_in_sync.\nFor 2 and 3 first decide whether the test or the code is stale after the UI port (tasks 022/023); fix the real bug, or update the test only when the new behaviour is correct. Tests that edit text need `app.fonts.installed_override = Some(standard_faces())` (tests/support/mod.rs). No ignoring tests. Scope builds/tests to the crates touched (-j 2, timeout), then fmt + clippy -D warnings, and finally run the three failing test targets. Do not touch the version (0.3.0). Report under 300 words.",
+      "runs": [
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 3.1915251999999996,
+          "turns": 78,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 144,
+            "output": 35697,
+            "cache_read": 7151286,
+            "cache_write": 130808
+          },
+          "at": "2026-10-22T23:27:34",
+          "usage_before": 6.0,
+          "usage_after": 6.0,
+          "usage_used_pct": 0.0
+        }
+      ],
+      "commit": "7f63fccd",
+      "branch": "auto/025",
+      "finished": "2026-10-22T23:28:01"
+    },
+    "026": {
+      "title": "Compression: quality-targeted, near-lossless presets (Light/Medium must differ, Strong must not wreck images)",
+      "status": "done",
+      "started": "2026-10-23T09:23:14",
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "User feedback on 024 (Reduce file size): Light and Medium give the same result, Strong damages image quality a lot. Goal: the MAXIMUM size reduction with MINIMUM visible loss. Research and implement better algorithms.\n\nWhere: crates/optimize (images.rs, lib.rs), crates/engine/src/optimizer.rs (Level::settings, table in module doc), docs/file-size-levels.md, ui dialog optimize_ui.rs, estimator (must stay within tolerance), tests crates/engine/tests/reduce_levels.rs.\n\n1. First find WHY Light == Medium on real files (suspects: Medium only touches images above 200 ppi and JPEGs only if saving >=10%; real files are often already <=200 ppi or already JPEG at low quality, so nothing happens). Test with real PDFs in C:\\Users\\kochurin.a\\Downloads (read-only, do NOT commit them, no private data in fixtures) and with synthetic fixtures at 96/150/200/300 ppi. Report sizes per level before/after.\n2. Evaluate and implement what fits (pure Rust, deny.toml/AGENTS.md rules; justify any new dependency):\n   - Lossless JPEG transcode for JPEG images we do not resample: optimized Huffman tables + progressive scans (jpegtran/mozjpeg-style), typically -5..-15% with zero loss. Candidate crates: jpeg-encoder (progressive, optimized huffman) or own coefficient-level recoding; keep only if pixel-identical decode.\n   - Quality-targeted re-encode instead of a fixed quality: per image binary-search the JPEG quality so that a perceptual metric (SSIM/MS-SSIM or a simple butteraugli-like proxy implemented locally) stays >= a per-level threshold (e.g. Medium ~0.985, Strong ~0.97), never going below a floor quality (Strong floor ~65, not 55). Re-encode only when it is smaller than the original by a margin.\n   - Chroma subsampling choice (4:2:0 for photos, 4:4:4 for images with sharp coloured edges/text/line-art); detect text/line-art/screenshots (few colours, hard edges) and keep them lossless (Flate+predictor, or palette/indexed reduction when exact) instead of JPEG.\n   - Resampling: Lanczos3/area-average for downsampling, only when effective ppi is above the target by a margin (Medium target ~150 when >=220; Strong ~110 when >=150), never upsample, keep mask/SMask alignment, do not resample images with ImageMask or tiny images.\n   - Stop re-encoding when the result would be larger or SSIM too low; keep the original stream.\n   - Dedupe identical images/streams, drop unused resources, font subsetting if feasible (otherwise list as not done).\n   - Zopfli-style deflate only if a pure-Rust crate passes deny.toml; otherwise skip.\n3. Redefine the presets so they are DIFFERENT and honest: Light = lossless only (structure, dedupe, lossless JPEG transcode, flate best); Medium = quality-targeted, visually lossless; Strong = bigger reduction but with the SSIM floor, still no obvious artifacts. One table in optimizer.rs + docs/file-size-levels.md + dialog text (en+ru, ru.tsv rules as in task 024, run zz_rehash.py).\n4. Tests: fixtures with photo / scan / screenshot / text-on-image; assert size ordering strong < medium < light < original on each where possible, SSIM floor respected per level (compute SSIM of rendered or decoded image vs original in the test), lossless transcode is pixel-identical, estimator within tolerance.\nConstraints: never-panic rules for new non-test code, no unwrap on input-derived values, large files must not freeze the UI, Sintec branding. Done when fmt, clippy -D warnings and cargo test for touched crates are green. Report: why Light==Medium, techniques added, measured size and SSIM per fixture and per level, limitations.",
+      "runs": [
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 9.772798100000001,
+          "turns": 99,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 188,
+            "output": 174679,
+            "cache_read": 19189880,
+            "cache_write": 305008
+          },
+          "at": "2026-10-23T10:16:44",
+          "usage_before": 6.0,
+          "usage_after": 18.0,
+          "usage_used_pct": 12.0
+        }
+      ],
+      "commit": "4b6efea3",
+      "branch": "auto/026",
+      "finished": "2026-10-23T10:17:24"
+    },
+    "027": {
+      "title": "Text editing: exact font match (family, weight, style, size) and no foreign glyph fallback",
+      "status": "done",
+      "started": "2026-10-23T10:19:46",
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "User feedback: when editing text the used font still differs from the original, and for letters missing from the embedded subset the editor just inserts glyphs of its own font. Weight and style (bold/italic) and size are not detected and applied automatically.\nRepro file: C:\\Users\\kochurin.a\\Downloads\\МаляковАА.pdf (read-only; do NOT commit it or copy private content into fixtures). Add characters to the bold heading \"Доступ к сети Московского офиса\" - the new characters look wrong (different weight/shape) next to the old ones.\n\nWhere to look: crates/ui-egui/src/font_substitute.rs, text_panel.rs, edit_text_ui.rs, the engine text-edit/font code, task 004 (bundled substitute fonts) and 006 (identify fonts by glyph widths) work, v0.9.0 text-editing UI ported in 022.\n\nGoals:\n1. Detect for each text run: family guess, weight (regular/bold/semibold from FontDescriptor Flags/StemV/FontWeight/ForceBold, the BaseFont name suffix like -Bold/Bold/Black, and glyph-width/stem analysis for anonymised subset fonts), italic/oblique (ItalicAngle, Flags, name), size (Tf size times text matrix scale, so effective size), fill colour; show them in the text panel and apply them automatically on the new text.\n2. Missing glyphs: when the embedded subset lacks a character, choose the substitute by the detected family+weight+style (bundled metric-compatible fonts, Arial->Liberation Sans/Arimo, Times->Tinos etc., a Bold/Italic variant when needed; synthesize bold by stroke/embolden only if no bold face exists), scale it so x-height/cap-height and advance widths match the original, and keep the original font for the glyphs it has. Prefer re-using the embedded font for existing glyphs; for the whole edited run prefer one consistent substitute rather than mixing when mixing looks worse (decide by test on the repro file and report).\n3. Make the choice explainable: tooltip/status in the text panel \"installed / substitute: X (bold)\" so the user can override family/weight/style manually.\n4. Tests: unit tests for weight/style detection (name suffixes, flags, widths), for fallback selection (bold heading -> bold substitute), and a regression test with a synthetic PDF with a bold subset font where an added Cyrillic letter must come out bold with matching height. Verify on the real repro file by rendering before/after and compare visually (save PNGs to a temp dir, describe in the report).\nConstraints: never-panic rules, en+ru strings (ru.tsv rules as in task 024 incl. zz_rehash.py), Sintec branding. Done when fmt, clippy -D warnings and cargo test for touched crates are green. Report what is detected, how, and what is still imperfect.",
+      "runs": [
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 8.4752739,
+          "turns": 121,
+          "error": true,
+          "attempt": 1,
+          "tokens": {
+            "input": 240,
+            "output": 102905,
+            "cache_read": 21359610,
+            "cache_write": 267994
+          },
+          "at": "2026-10-23T10:59:32",
+          "usage_before": 19.0,
+          "usage_after": 30.0,
+          "usage_used_pct": 11.0
+        }
+      ],
+      "commit": "0cf4ee91",
+      "branch": "auto/027",
+      "finished": "2026-10-23T11:02:06"
+    },
+    "029": {
+      "title": "Tab drag ghost must follow the pointer outside the window (floating overlay window)",
+      "status": "done",
+      "started": "2026-10-23T11:21:52",
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Today (crates/ui-egui/src/drag_ghost.rs) the translucent ghost of a dragged tab/pages is an egui Area drawn inside each window only when the pointer falls inside that window (Ghost.screen in screen points, doc_windows.rs:140, :259). The moment the pointer leaves the window the ghost disappears, so the user has no visual cue when dragging a tab out to another window or to the desktop (tear-off).\nGoal: while a tab (or pages) drag is under way, the ghost keeps following the pointer everywhere on the screen, also outside any Sintec window.\nApproach (check feasibility first, report if another is better): a small borderless, always-on-top, transparent, non-focusable, mouse-passthrough egui viewport (ViewportBuilder: with_decorations(false), with_transparent(true), with_always_on_top(), with_taskbar(false), with_mouse_passthrough(true), with_active(false)) created on drag start / when the pointer leaves the source window, moved with ViewportCommand::OuterPosition to Ghost.screen + OFFSET each frame (pointer position outside the window needs a global source: winit gives cursor position only while captured; use the captured drag events, and on Windows GetCursorPos via the existing platform crate if needed, behind cfg), closed on drag end/cancel/escape. Inside windows keep the current in-window ghost (do not draw twice: when the overlay is shown, suppress the in-window Area). Must work on Windows first; macOS and Linux may fall back to the current behaviour via cfg, without breaking compile.\nConstraints: no flicker or focus steal (the overlay must not take focus or drop the drag), must not interfere with the cross-process tab drop (task 010 / tear_off.rs), never-panic rules, large pointer jumps fine, no leak of the overlay if the app loses the drag (cleanup test). Add unit tests for the ghost position/lifecycle logic (pure functions), and describe a manual check. Done when fmt, clippy -D warnings, cargo test -p pdfcraft-ui-egui are green.",
+      "runs": [
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "effort": "medium",
+          "cost_usd": 0.4187755000000001,
+          "turns": 26,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 36,
+            "output": 14454,
+            "cache_read": 925125,
+            "cache_write": 45341
+          },
+          "at": "2026-10-23T11:43:39",
+          "usage_before": 31.0,
+          "usage_after": 32.0,
+          "usage_used_pct": 1.0
+        }
+      ],
+      "tool_stats": {
+        "total": 25,
+        "by_tool": {
+          "Read": 4,
+          "Grep": 2,
+          "Bash": 7,
+          "Edit": 7,
+          "Monitor": 5
+        },
+        "mcp": {}
+      },
+      "runs_stats": [
+        {
+          "total": 25,
+          "by_tool": {
+            "Read": 4,
+            "Grep": 2,
+            "Bash": 7,
+            "Edit": 7,
+            "Monitor": 5
+          },
+          "mcp": {},
+          "turns": 26,
+          "cost_usd": 0.4187755000000001,
+          "duration_ms": 1293307,
+          "tier": "standard",
+          "attempt": 1
+        }
+      ],
+      "commit": "d9d574cd",
+      "branch": "auto/029",
+      "finished": "2026-10-23T11:44:21"
+    },
+    "028": {
+      "title": "Linux port: CI + release jobs (AppImage/deb), Linux-specific code paths of our features",
+      "status": "done",
+      "started": "2026-10-23T11:59:45",
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Goal: Sintec.PDF 0.3.0 builds, tests and ships for Linux x86_64 (and aarch64 if the runner is cheap) next to Windows and macOS. Upstream PdfCraft has Linux/AppImage/deb/rpm/Flatpak packaging; our fork removed those workflows (see docs/releasing.md header), packaging scripts are kept in packaging/linux as reference.\n1. Audit: build the workspace for x86_64-unknown-linux-gnu (use `cargo check --target ...` if a cross target is installable on this Windows box, otherwise read the code) and list everything that is Windows/macOS-only in OUR additions: tab tear-off as separate process (tear_off.rs, doc_windows.rs, drag_pointer.rs), scanner (scan_ui.rs, Windows WIA/TWAIN? choose SANE on Linux or hide the command with a clear message), print path (crates/print uses CUPS on non-Windows - verify our 009/012 print options and paper-fit setting work there), bundled fonts, update checks, MSI-only things, file_watch, desktop_theme, staging. For each: works / needs cfg / needs a Linux implementation.\n2. Add `.github/workflows` jobs: ci.yml `linux` job (ubuntu-latest: apt deps for egui/winit/wayland/x11/xkbcommon/fontconfig/CUPS headers, fmt, clippy -D warnings, cargo test --workspace headless via xvfb where needed) and release.yml `linux` job producing `sintec-pdf-<version>-linux-x86_64.AppImage` + `.deb` (+ tar.gz of CLI), included in the draft release and SHA256SUMS.txt. Reuse packaging/linux scripts, rebranded to Sintec.PDF (icons, desktop file, MIME type application/pdf, app id). Update docs/releasing.md and README platform list.\n3. Fix compile/test failures on Linux that you can find by reading; guard Windows-only code with cfg. Do NOT change Windows/macOS behaviour.\n4. Report: what is done, what could not be verified without a Linux runner (CI will tell), and what remains for a first Linux release (e.g. SANE scanning, Wayland tear-off).\nConstraints: pure additive for other platforms; never-panic rules; Sintec branding; en+ru only. Done when fmt, clippy and tests are green locally for the host and the workflow YAML is valid (actionlint if available).",
+      "runs": [
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 8.077603000000002,
+          "turns": 83,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 132,
+            "output": 39877,
+            "cache_read": 7675957,
+            "cache_write": 138071
+          },
+          "at": "2026-10-23T12:56:54",
+          "usage_before": 38.0,
+          "usage_after": 48.0,
+          "usage_used_pct": 10.0
+        }
+      ],
+      "tool_stats": {
+        "total": 175,
+        "by_tool": {
+          "PowerShell": 40,
+          "Read": 44,
+          "Agent": 1,
+          "Bash": 21,
+          "Grep": 42,
+          "Edit": 23,
+          "Glob": 3,
+          "ToolSearch": 1
+        },
+        "mcp": {}
+      },
+      "runs_stats": [
+        {
+          "total": 175,
+          "by_tool": {
+            "PowerShell": 40,
+            "Read": 44,
+            "Agent": 1,
+            "Bash": 21,
+            "Grep": 42,
+            "Edit": 23,
+            "Glob": 3,
+            "ToolSearch": 1
+          },
+          "mcp": {},
+          "turns": 83,
+          "cost_usd": 8.077603000000002,
+          "duration_ms": 3415714,
+          "tier": "hard",
+          "attempt": 1
+        }
+      ],
+      "commit": "ca7ab362",
+      "branch": "auto/028",
+      "finished": "2026-10-23T12:57:28"
+    },
+    "030": {
+      "title": "Fix 2 failing UI tests: tools_panel_side_preference and use_system_title_bar (Preferences clicks have no effect)",
+      "status": "done",
+      "started": "2026-10-23T12:57:28",
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "`cargo test -p pdfcraft-ui-egui --test ui` fails 2 of 51 on feature/0.2.6 (also at 4b6efea3 before task 027, so not caused by it):\n- tools_panel_side_preference_moves_and_persists (tests/ui.rs:52): after clicking \"Right\" in Preferences, `docking.tools_on_right()` is still false.\n- use_system_title_bar_swaps_the_header_bar_for_the_window_frame (tests/ui.rs:993): after clicking the \"Use system title bar\" checkbox `system_title_bar` stays false.\nBoth click a control in the Preferences dialog (Dialog::Preferences / set_option(\"dialog\",\"preferences\")) and the click has no effect. First decide whether it is a real app bug (Preferences controls not reacting after the v0.9.0 sync / our dialog changes - then fix the app and check by hand logic) or a test problem (control moved/scrolled, label changed, harness window size, machine settings such as system language/theme or a saved preference file leaking in - task 020 made tests machine-independent, verify these two are too). Find when it started with git bisect on crates/ui-egui between 8e00e537 (023) and HEAD if needed. Fix the cause, not the assertions. Done when the whole `cargo test -p pdfcraft-ui-egui` is green, plus fmt and clippy -D warnings. Report the cause.",
+      "runs": [
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "effort": "medium",
+          "cost_usd": 0.36490249999999996,
+          "turns": 32,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 60,
+            "output": 8235,
+            "cache_read": 1271348,
+            "cache_write": 38763
+          },
+          "at": "2026-10-23T13:23:12",
+          "usage_before": 48.0,
+          "usage_after": 48.0,
+          "usage_used_pct": 0.0
+        }
+      ],
+      "tool_stats": {
+        "total": 31,
+        "by_tool": {
+          "Bash": 24,
+          "Read": 4,
+          "Grep": 1,
+          "TaskStop": 1,
+          "Edit": 1
+        },
+        "mcp": {}
+      },
+      "runs_stats": [
+        {
+          "total": 31,
+          "by_tool": {
+            "Bash": 24,
+            "Read": 4,
+            "Grep": 1,
+            "TaskStop": 1,
+            "Edit": 1
+          },
+          "mcp": {},
+          "turns": 32,
+          "cost_usd": 0.36490249999999996,
+          "duration_ms": 1541572,
+          "tier": "standard",
+          "attempt": 1
+        }
+      ],
+      "commit": "3afad8ab",
+      "branch": "auto/030",
+      "finished": "2026-10-23T13:23:44"
+    },
+    "031": {
+      "title": "Tab moved to another window: the source window must close, not stay on the start page",
+      "status": "done",
+      "started": "2026-10-23T13:47:58",
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Regression (seen again in build 0.3.0, after tasks 010/029): when a tab is dragged into another window's tab strip, it joins the target, but the source window does NOT close; it stays open showing the empty start (title) page. Expected: if the moved tab was the last one in the source window, that window (or process, for tear-off windows) closes by itself; if other tabs remain, it simply keeps them.\nWhere: crates/ui-egui/src/tear_off.rs, doc_windows.rs (cross-process hand-off and the same-process path), possibly the ghost overlay from 029 keeping a viewport/drag state alive.\nDo: reproduce with a test (same-process and cross-process hand-off paths), find why the close is skipped, fix, add regression tests that assert the source window closes after its last tab left and survives with remaining tabs. Cover the abort cases (drop refused, target gone: tab must come back, window must NOT close then). Never-panic rules. Done when fmt, clippy -D warnings and cargo test -p pdfcraft-ui-egui are green; describe a manual check in the report.",
+      "runs": [
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 2.2422725000000003,
+          "turns": 46,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 76,
+            "output": 32815,
+            "cache_read": 3383406,
+            "cache_write": 113596
+          },
+          "at": "2026-10-23T13:54:21",
+          "usage_before": 49.0,
+          "usage_after": 11.0,
+          "usage_used_pct": 0.0
+        }
+      ],
+      "tool_stats": {
+        "total": 45,
+        "by_tool": {
+          "Bash": 28,
+          "Read": 7,
+          "Edit": 9,
+          "ToolSearch": 1
+        },
+        "mcp": {}
+      },
+      "runs_stats": [
+        {
+          "total": 45,
+          "by_tool": {
+            "Bash": 28,
+            "Read": 7,
+            "Edit": 9,
+            "ToolSearch": 1
+          },
+          "mcp": {},
+          "turns": 46,
+          "cost_usd": 2.2422725000000003,
+          "duration_ms": 368973,
+          "tier": "hard",
+          "attempt": 1
+        }
+      ],
+      "commit": "1d550083",
+      "branch": "auto/031",
+      "finished": "2026-10-23T13:56:18"
+    },
+    "032": {
+      "title": "Print dialog: orientation default must be Automatic, not Portrait",
+      "status": "done",
+      "started": "2026-10-23T13:56:26",
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Bug in build 0.3.0: the print dialog opens with Portrait orientation selected; the default must be Automatic (auto portrait/landscape by page shape). Where: crates/ui-egui/src/print_ui.rs and the print settings/state/default + persisted Preferences (a saved old value 'portrait' from earlier versions must not pin it: if the stored value was never chosen explicitly by the user, treat as Automatic; check how settings are stored and migrate sensibly). Note the paper-size auto-fit switch stays OFF by default (tasks 009/012) - do not change that. Add tests: default orientation is Automatic; a landscape page prints landscape by default; explicit user choice still persists. Done when fmt, clippy -D warnings, cargo test -p pdfcraft-ui-egui (and the crate with print logic) are green.",
+      "runs": [
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "effort": "medium",
+          "cost_usd": 0.1439606,
+          "turns": 11,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 14,
+            "output": 2843,
+            "cache_read": 216325,
+            "cache_write": 23417
+          },
+          "at": "2026-10-23T14:03:44",
+          "usage_before": 11.0,
+          "usage_after": 11.0,
+          "usage_used_pct": 0.0
+        }
+      ],
+      "tool_stats": {
+        "total": 10,
+        "by_tool": {
+          "Grep": 6,
+          "Read": 1,
+          "Edit": 2,
+          "Bash": 1
+        },
+        "mcp": {}
+      },
+      "runs_stats": [
+        {
+          "total": 10,
+          "by_tool": {
+            "Grep": 6,
+            "Read": 1,
+            "Edit": 2,
+            "Bash": 1
+          },
+          "mcp": {},
+          "turns": 11,
+          "cost_usd": 0.1439606,
+          "duration_ms": 431867,
+          "tier": "standard",
+          "attempt": 1
+        }
+      ],
+      "commit": "5748442c",
+      "branch": "auto/032",
+      "finished": "2026-10-23T14:04:15"
+    },
+    "033": {
+      "title": "Text edit field: preview of a substituted font differs from the final result and the original",
+      "status": "done",
+      "started": "2026-10-23T14:04:15",
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Still wrong after task 027 (build 0.3.0): when the original font is replaced by a substitute (not embedded / not installed), the text shown in the in-place edit field (preview while typing) looks different from (a) the final rendering after the edit is committed and (b) the original font. Expected: the preview uses exactly the same font face, weight, style, size, letter/word widths and line wrapping as the committed result, and the substitute is the closest metric-compatible match to the original (glyph widths, see tasks 004/006/027).\nWhere: crates/ui-egui (edit_text_ui, canvas, text_panel, fonts/text_fonts), the engine side that renders the committed text. Find the divergence: probably the egui editor uses a different font family/fallback chain than the engine's final render. Make both go through one font-resolution function. Add tests that the resolved face for a given (original font name, flags) is identical for preview and commit, and a metric test on widths. Use the PDFs available in the repo test fixtures; if a table-like PDF with Cyrillic text is available, use it. Never use fonts from Adobe or installed system fonts for embedding (AGENTS.md). Done when fmt, clippy -D warnings and cargo test (touched crates) are green; describe a manual check.",
+      "runs": [
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 7.173899700000002,
+          "turns": 120,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 192,
+            "output": 95288,
+            "cache_read": 16810990,
+            "cache_write": 238118
+          },
+          "at": "2026-10-23T15:09:44",
+          "usage_before": 11.0,
+          "usage_after": 11.0,
+          "usage_used_pct": 0.0
+        }
+      ],
+      "tool_stats": {
+        "total": 119,
+        "by_tool": {
+          "Bash": 70,
+          "Read": 18,
+          "Edit": 28,
+          "ToolSearch": 1,
+          "Grep": 2
+        },
+        "mcp": {}
+      },
+      "runs_stats": [
+        {
+          "total": 119,
+          "by_tool": {
+            "Bash": 70,
+            "Read": 18,
+            "Edit": 28,
+            "ToolSearch": 1,
+            "Grep": 2
+          },
+          "mcp": {},
+          "turns": 120,
+          "cost_usd": 7.173899700000002,
+          "duration_ms": 3925869,
+          "tier": "hard",
+          "attempt": 1
+        }
+      ],
+      "commit": "ce2c370d",
+      "branch": "auto/033",
+      "finished": "2026-10-23T15:10:20"
+    },
+    "034": {
+      "title": "Edit PDF: separate fields get merged into one text block (e.g. 'Доступ к сети Московского офиса' and 'Пользователь')",
+      "status": "done",
+      "started": "2026-10-23T15:10:20",
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "Bug in build 0.3.0: in the user's PDF АнисимовИГ.pdf (a form/table; the file is not in the repo - the user has it, so work from fixtures and synthetic PDFs), some separate fields, e.g. 'Доступ к сети Московского офиса' and 'Пользователь', are joined into ONE editable text block in Edit PDF. Each visually separate label/cell must be its own block.\nWhere: text block grouping/segmentation in the engine and ui-egui (look at line/paragraph merging in the text extraction used by Edit PDF; tasks 014/015 touched the wrap boundary and the 0.9.0 sync tasks 022 ported the upstream grouping). Find which heuristic merges them (likely a horizontal-gap or baseline tolerance too loose, or same-line merge across columns/table cells, large gaps, different fonts/size, a ruling line or cell border between them). Fix: do not merge text runs across a large horizontal gap (relative to font size), across different cells/columns, or across vector lines/borders; keep normal paragraphs and wrapped lines merged. Build a synthetic test PDF (two labels on one baseline with a wide gap, and a table-cell layout) and regression tests asserting separate blocks, plus tests that ordinary multi-line paragraphs still merge. Check for regression of tasks 014/015. Done when fmt, clippy -D warnings and cargo test (touched crates) are green.",
+      "runs": [
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 2.6716492,
+          "turns": 47,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 76,
+            "output": 40688,
+            "cache_read": 3861129,
+            "cache_write": 135639
+          },
+          "at": "2026-10-23T15:20:44",
+          "usage_before": 11.0,
+          "usage_after": 13.0,
+          "usage_used_pct": 2.0
+        }
+      ],
+      "tool_stats": {
+        "total": 46,
+        "by_tool": {
+          "Bash": 29,
+          "Grep": 3,
+          "Read": 1,
+          "Edit": 11,
+          "Write": 1,
+          "ToolSearch": 1
+        },
+        "mcp": {}
+      },
+      "runs_stats": [
+        {
+          "total": 46,
+          "by_tool": {
+            "Bash": 29,
+            "Grep": 3,
+            "Read": 1,
+            "Edit": 11,
+            "Write": 1,
+            "ToolSearch": 1
+          },
+          "mcp": {},
+          "turns": 47,
+          "cost_usd": 2.6716492,
+          "duration_ms": 611319,
+          "tier": "hard",
+          "attempt": 1
+        }
+      ],
+      "commit": "5f09e907",
+      "branch": "auto/034",
+      "finished": "2026-10-23T15:21:18"
+    },
+    "035": {
+      "title": "Flaky ui-egui tests on Windows: d3d10warp.dll access violation when wgpu tests run in parallel",
+      "status": "done",
+      "started": "2026-10-23T15:59:32",
+      "tier": "standard",
+      "why": "set in the task file",
+      "brief": "Finding: `cargo test -p pdfcraft-ui-egui --test content` (and probably other egui_kittest+wgpu test binaries) crashes about 1 run in 6 on Windows with STATUS_ACCESS_VIOLATION (0xc0000005); Windows Application log (event 1000) names the faulting module d3d10warp.dll (Windows WARP software rasterizer, driven by wgpu). Each crashing test passes alone (15/15) and with --test-threads=1 (14/14): it is a race when several tests create/use a wgpu D3D device in parallel threads. Not our code (unsafe_code is forbidden), but it makes cargo test and CI red at random and stops `cargo test --workspace` at the first crashed binary.\nGoal: make this deterministic without hiding real failures. Options, pick the least invasive and verify: (a) a shared test helper that serialises creation/use of the kittest wgpu harness behind one global Mutex (poison-tolerant) used by all ui-egui test binaries; (b) a harness config that renders without wgpu where the test needs no pixels (egui_kittest without wgpu for logic tests, wgpu only for snapshot tests); (c) per-crate test-threads limit through .cargo/config.toml - last resort, as it slows all tests and does not cover CI. Check .github workflows too (the CI runner for Windows must benefit as well).\nDone when: `cargo test -p pdfcraft-ui-egui` passes 10 times in a row on this Windows machine with default threads (script it, report counts), fmt and clippy -D warnings are green, and the report states which option was used and the before/after crash rate.",
+      "runs": [
+        {
+          "tier": "standard",
+          "model": "sonnet",
+          "effort": "medium",
+          "cost_usd": 0.2333195,
+          "turns": 16,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 32,
+            "output": 5888,
+            "cache_read": 602444,
+            "cache_write": 28467
+          },
+          "at": "2026-10-23T16:11:46",
+          "usage_before": 15.0,
+          "usage_after": 15.0,
+          "usage_used_pct": 0.0
+        }
+      ],
+      "tool_stats": {
+        "total": 15,
+        "by_tool": {
+          "Bash": 14,
+          "Monitor": 1
+        },
+        "mcp": {}
+      },
+      "runs_stats": [
+        {
+          "total": 15,
+          "by_tool": {
+            "Bash": 14,
+            "Monitor": 1
+          },
+          "mcp": {},
+          "turns": 16,
+          "cost_usd": 0.2333195,
+          "duration_ms": 729840,
+          "tier": "standard",
+          "attempt": 1
+        }
+      ],
+      "commit": "edabce60",
+      "branch": "auto/035",
+      "finished": "2026-10-23T16:12:31"
+    },
+    "036": {
+      "title": "CI red on main after 0.3.0: Linux tab_transfer test, macOS editing tests, cargo-deny advisories",
+      "status": "done",
+      "started": "2026-10-23T17:43:00",
+      "tier": "hard",
+      "why": "set in the task file",
+      "brief": "CI run on main (a87ad5f6, release v0.3.0 already published) has 3 red jobs; Windows is green. Fix all three; do not touch the version or release.\n1) Linux x86_64 job, `cargo test -p pdfcraft-ui-egui --lib`: `tab_transfer::tests::transport::a_peer_publishes_its_strips_and_withdraws_them_when_dropped` panics at crates/ui-egui/src/tab_transfer.rs:997:31 with message \"published\" (likely a timing/race or a Linux-specific path in the strip-publishing transport, task 010/028). Find the cause, make it deterministic (no sleeps-as-sync), keep the behaviour.\n2) macOS aarch64 job, `cargo test -p pdfcraft-ui-egui --test editing`: 3 failures - `image_pixels_follow_the_frame_while_a_corner_is_dragged` (editing.rs:4355 assert views[0].image_selection.is_some()), `switching_straight_to_another_box_applies_the_open_paragraph` (editing.rs:2613 \"the top box opens for typing\"), `text_tool_mixed_style_row_grows_in_the_editor_and_saved_pdf` (editing.rs:2726 \"the draft is painted\"). They pass on Windows. Probably machine-dependent: fonts/layout/hit-test positions differ on macOS runners (see task 020 for the earlier fix of the same kind: make UI tests independent of the machine). Make the tests robust (bundled fonts, explicit geometry), without weakening what they check. Run them as far as you can on Windows; reason about macOS differences explicitly in the report.\n3) `cargo deny` advisories job fails: RUSTSEC-2026-0383 (crate ctutils, fix: >=0.4.4, try `cargo update -p ctutils`) and RUSTSEC-2026-0385 (webpki-root-certs, fix >=1.0.10, `cargo update -p webpki-root-certs`). Update just those (minimal Cargo.lock change), check `cargo deny check` if the tool is available, otherwise explain. Rebuild and run the tests of the affected crates.\nDone when fmt, clippy -D warnings, cargo test (touched crates; Windows) are green and the report lists what each fix is. Note logs of the failed CI jobs: gh api repos/sintec-llc/sintec.pdf/actions/jobs/<id>/logs (ids 120453279793 Linux, 120453280245 macOS aarch64, 120453279894 deny) needs the sintec-llc token; the facts above are already extracted.",
+      "runs": [
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 1.7140154000000003,
+          "turns": 40,
+          "error": false,
+          "attempt": 1,
+          "tokens": {
+            "input": 78,
+            "output": 20561,
+            "cache_read": 2910674,
+            "cache_write": 90003
+          },
+          "at": "2026-10-23T17:47:42",
+          "usage_before": 35.0,
+          "usage_after": 36.0,
+          "usage_used_pct": 1.0
+        },
+        {
+          "tier": "hard",
+          "model": "opus",
+          "effort": "high",
+          "cost_usd": 1.8705042,
+          "turns": 5,
+          "error": false,
+          "attempt": 2,
+          "tokens": {
+            "input": 10,
+            "output": 1272,
+            "cache_read": 540884,
+            "cache_write": 2854
+          },
+          "at": "2026-10-23T17:48:58",
+          "usage_before": 36.0,
+          "usage_after": 38.0,
+          "usage_used_pct": 2.0
+        }
+      ],
+      "tool_stats": {
+        "total": 43,
+        "by_tool": {
+          "Bash": 38,
+          "Read": 2,
+          "ToolSearch": 1,
+          "Monitor": 2
+        },
+        "mcp": {}
+      },
+      "runs_stats": [
+        {
+          "total": 39,
+          "by_tool": {
+            "Bash": 35,
+            "Read": 2,
+            "ToolSearch": 1,
+            "Monitor": 1
+          },
+          "mcp": {},
+          "turns": 40,
+          "cost_usd": 1.7140154000000003,
+          "duration_ms": 267125,
+          "tier": "hard",
+          "attempt": 1
+        },
+        {
+          "total": 4,
+          "by_tool": {
+            "Bash": 3,
+            "Monitor": 1
+          },
+          "mcp": {},
+          "turns": 5,
+          "cost_usd": 1.8705042,
+          "duration_ms": 72012,
+          "tier": "hard",
+          "attempt": 2
+        }
+      ],
+      "last_failure": "$ cargo fmt --all --check\nDiff in \\\\?\\C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\036\\crates\\ui-egui\\src\\tab_transfer.rs:624:\n                     }\n                 }\n             };\n\u001b[31m-            Ok(Self { pid, port, token, registry, inbox, published, stopped, stop: Some(stop), beat: Some(beat), peers: Vec::new(), peers_read: None })\n\u001b[0m\u001b[32m+            Ok(Self {\n\u001b[0m\u001b[32m+                pid,\n\u001b[0m\u001b[32m+                port,\n\u001b[0m\u001b[32m+                token,\n\u001b[0m\u001b[32m+                registry,\n\u001b[0m\u001b[32m+                inbox,\n\u001b[0m\u001b[32m+                published,\n...\nDiff in \\\\?\\C:\\Users\\kochurin.a\\sintec-pdf\\agent-worktrees\\036\\crates\\ui-egui\\src\\tab_transfer.rs:624:\n                     }\n                 }\n             };\n\u001b[31m-            Ok(Self { pid, port, token, registry, inbox, published, stopped, stop: Some(stop), beat: Some(beat), peers: Vec::new(), peers_read: None })\n\u001b[0m\u001b[32m+            Ok(Self {\n\u001b[0m\u001b[32m+                pid,\n\u001b[0m\u001b[32m+                port,\n\u001b[0m\u001b[32m+                token,\n\u001b[0m\u001b[32m+                registry,\n\u001b[0m\u001b[32m+                inbox,\n\u001b[0m\u001b[32m+                published,\n\u001b[0m\u001b[32m+                stopped,\n\u001b[0m\u001b[32m+                stop: Some(stop),\n\u001b[0m\u001b[32m+                beat: Some(beat),\n\u001b[0m\u001b[32m+                peers: Vec::new(),\n\u001b[0m\u001b[32m+                peers_read: None,\n\u001b[0m\u001b[32m+            })\n\u001b[0m         }\n \n         pub fn pid(&self) -> u32 {",
+      "commit": "b5bdc666",
+      "branch": "auto/036",
+      "finished": "2026-10-23T17:49:44"
+    }
+  },
+  "spent_usd": 163.6977,
+  "rate_limits": {
+    "seven_day": {
+      "utilization": null,
+      "status": "rejected",
+      "resets_at": 1792116000,
+      "seen": "2026-10-14T17:26:11"
+    }
+  },
+  "tokens": {
+    "input": 4740,
+    "output": 1668037,
+    "cache_read": 295766045,
+    "cache_write": 5613763
+  },
+  "budget_base": 160.1132
+}
