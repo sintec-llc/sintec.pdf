@@ -2289,7 +2289,7 @@ fn replace_split_selection_keeps_the_unchecked_page() {
         app.set_option("language", "en").unwrap();
         app.open_bytes("original.pdf", None, sized(3, 200, 300, "Original")).unwrap();
         app.views[0].select_pages(selected);
-        app.start_replace("other.pdf".into(), sized(5, 400, 500, "Replacement"));
+        app.start_replace("other.pdf".into(), sized(5, 240, 320, "Replacement"));
         if edited {
             app.replace_draft.as_mut().unwrap().range_edited = true;
         }
@@ -2307,7 +2307,7 @@ fn replace_split_selection_keeps_the_unchecked_page() {
     egui_kittest::kittest::Queryable::get_by_label(&split, "OK").click();
     split.run_steps(3);
     assert_eq!(texts_of(split.state(), 0), ["Replacement 1", "Original 2", "Replacement 2"]);
-    assert_eq!(sizes(split.state()), [(400, 500), (200, 300), (400, 500)]);
+    assert_eq!(sizes(split.state()), [(240, 320), (200, 300), (240, 320)]);
     assert_eq!(split.state().session.get(split.state().views[0].id).unwrap().can_undo(), Some("Replace pages"));
     split.state_mut().undo();
     split.run_steps(2);
@@ -2323,7 +2323,7 @@ fn replace_split_selection_keeps_the_unchecked_page() {
     egui_kittest::kittest::Queryable::get_by_label(&adjacent, "OK").click();
     adjacent.run_steps(3);
     assert_eq!(texts_of(adjacent.state(), 0), ["Original 1", "Replacement 1", "Replacement 2"]);
-    assert_eq!(sizes(adjacent.state()), [(200, 300), (400, 500), (400, 500)]);
+    assert_eq!(sizes(adjacent.state()), [(200, 300), (240, 320), (240, 320)]);
 }
 
 #[test]
@@ -2590,6 +2590,7 @@ fn switching_straight_to_another_box_applies_the_open_paragraph() {
     let bytes = source_font_fixture_with_text("BT /F1 24 Tf 20 220 Td (Top) Tj ET BT /F2 24 Tf 20 120 Td (Bottom) Tj ET");
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         app.open_bytes("boxes.pdf", None, bytes).expect("opens");
         app
@@ -2696,6 +2697,7 @@ fn text_tool_mixed_style_row_grows_in_the_editor_and_saved_pdf() {
     let bytes = source_font_fixture_with_text("BT /F1 12 Tf 20 220 Td (Small ) Tj /F2 12 Tf (row) Tj ET");
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         app.open_bytes("mixed-row.pdf", None, bytes).unwrap();
         app
@@ -4335,6 +4337,7 @@ fn cropped_image_corner_resize_keeps_opposite_corner_and_scales_crop() {
 fn image_pixels_follow_the_frame_while_a_corner_is_dragged() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
+        app.fonts.installed_override = Some(standard_faces());
         app.set_option("language", "en").unwrap();
         app.open_bytes("clipped.pdf", None, clipped_artwork_with_labels_drawn(true)).unwrap();
         app

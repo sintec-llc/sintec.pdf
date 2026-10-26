@@ -530,7 +530,13 @@ mod transport {
     struct Published {
         strips: Vec<Strip>,
         dirty: bool,
+        /// How many times `strips` changed, and the count the heartbeat last wrote out.
+        changes: u64,
+        written: u64,
     }
+
+    /// [`Published`], and the signal the heartbeat gives after each write.
+    type Shown = Arc<(Mutex<Published>, Condvar)>;
 
     /// This process's end: its registry file, its listener and the documents handed to it.
     pub struct Peer {
@@ -539,10 +545,12 @@ mod transport {
         token: String,
         registry: Registry,
         inbox: Inbox,
-        published: Arc<Mutex<Published>>,
+        published: Shown,
         stopped: Arc<AtomicBool>,
         /// Dropped to stop the heartbeat at once.
-        _stop: mpsc::Sender<()>,
+        stop: Option<mpsc::Sender<()>>,
+        /// The heartbeat, joined on drop so its last write can't outlive the withdrawal.
+        beat: Option<std::thread::JoinHandle<()>>,
         peers: Vec<Entry>,
         peers_read: Option<Instant>,
     }
@@ -577,25 +585,29 @@ mod transport {
                     }
                 })?;
             }
-            let published = Arc::new(Mutex::new(Published { strips: Vec::new(), dirty: true }));
+            let published: Shown = Arc::new((Mutex::new(Published { dirty: true, ..Published::default() }), Condvar::new()));
             let (stop, stop_rx) = mpsc::channel::<()>();
-            {
+            let beat = {
                 let (registry, token, published) = (registry.clone(), token.clone(), Arc::clone(&published));
                 let beat = move || {
                     let mut last = None::<Instant>;
                     loop {
+                        let (lock, written) = &*published;
                         let strips = {
-                            let mut p = published.lock().unwrap_or_else(PoisonError::into_inner);
+                            let mut p = lock.lock().unwrap_or_else(PoisonError::into_inner);
                             let due = p.dirty || last.is_none_or(|t: Instant| t.elapsed() >= HEARTBEAT);
                             p.dirty = false;
-                            due.then(|| p.strips.clone())
+                            due.then(|| (p.strips.clone(), p.changes))
                         };
-                        if let Some(strips) = strips {
+                        if let Some((strips, changes)) = strips {
                             let entry = Entry { pid, port, token: token.clone(), updated: now_secs(), strips };
                             if let Err(e) = registry.publish(&entry) {
                                 log::debug!("tab strips not published: {e}");
                             }
                             last = Some(Instant::now());
+                            let mut p = lock.lock().unwrap_or_else(PoisonError::into_inner);
+                            p.written = changes;
+                            written.notify_all();
                         }
                         match stop_rx.recv_timeout(std::time::Duration::from_millis(200)) {
                             Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -604,12 +616,27 @@ mod transport {
                     }
                     registry.withdraw(pid);
                 };
-                if let Err(e) = std::thread::Builder::new().name("tab-strips".into()).spawn(beat) {
-                    stopped.store(true, Ordering::Relaxed);
-                    return Err(e);
+                match std::thread::Builder::new().name("tab-strips".into()).spawn(beat) {
+                    Ok(beat) => beat,
+                    Err(e) => {
+                        stopped.store(true, Ordering::Relaxed);
+                        return Err(e);
+                    }
                 }
-            }
-            Ok(Self { pid, port, token, registry, inbox, published, stopped, _stop: stop, peers: Vec::new(), peers_read: None })
+            };
+            Ok(Self {
+                pid,
+                port,
+                token,
+                registry,
+                inbox,
+                published,
+                stopped,
+                stop: Some(stop),
+                beat: Some(beat),
+                peers: Vec::new(),
+                peers_read: None,
+            })
         }
 
         pub fn pid(&self) -> u32 {
@@ -631,11 +658,22 @@ mod transport {
 
         /// This frame's strips (written by the heartbeat thread when they change).
         pub fn publish(&self, strips: Vec<Strip>) {
-            let mut p = self.published.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut p = self.published.0.lock().unwrap_or_else(PoisonError::into_inner);
             if p.strips != strips {
                 p.strips = strips;
                 p.dirty = true;
+                p.changes = p.changes.wrapping_add(1);
             }
+        }
+
+        /// Wait (at most `timeout`) until the heartbeat has written the strips last given to
+        /// [`Self::publish`]; whether it has.
+        #[doc(hidden)]
+        pub fn wait_written(&self, timeout: std::time::Duration) -> bool {
+            let (lock, written) = &*self.published;
+            let guard = lock.lock().unwrap_or_else(PoisonError::into_inner);
+            let (guard, _) = written.wait_timeout_while(guard, timeout, |p| p.written != p.changes).unwrap_or_else(PoisonError::into_inner);
+            guard.written == guard.changes
         }
 
         /// The other processes' strips, read at most every [`PEERS_REFRESH`].
@@ -651,6 +689,12 @@ mod transport {
     impl Drop for Peer {
         fn drop(&mut self) {
             self.stopped.store(true, Ordering::Relaxed);
+            // Disconnecting the channel ends the heartbeat's wait at once; it withdraws as it
+            // ends. Joined first, so a write it was making can't bring the file back afterwards.
+            drop(self.stop.take());
+            if let Some(beat) = self.beat.take() {
+                let _ = beat.join();
+            }
             self.registry.withdraw(self.pid);
             // Wake the listener so it sees the flag and ends.
             let _ = TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], self.port)), std::time::Duration::from_millis(200));
@@ -983,22 +1027,19 @@ mod tests {
         fn a_peer_publishes_its_strips_and_withdraws_them_when_dropped() {
             let dir = scratch("peer");
             let reg = Registry::new(&dir);
-            let peer = Peer::start_as(reg.clone(), u32::MAX - 7, || {}).unwrap();
+            // A pid that is running: Linux lists only those (`alive`), so a made-up one would
+            // never be found there.
+            let pid = std::process::id();
+            let peer = Peer::start_as(reg.clone(), pid, || {}).unwrap();
             let strip = Strip::new(0, rect(0.0, 0.0, 500.0, 40.0), [rect(5.0, 5.0, 100.0, 35.0)]);
             peer.publish(vec![strip.clone()]);
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-            let found = loop {
-                let e = reg.peers(1, now_secs()).into_iter().find(|e| e.pid == u32::MAX - 7 && e.strips == [strip.clone()]);
-                if e.is_some() || std::time::Instant::now() > deadline {
-                    break e;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(20));
-            };
-            let found = found.expect("published");
-            assert_eq!((found.port, found.token.as_str()), (peer.port(), peer.token()));
+            assert!(peer.wait_written(std::time::Duration::from_secs(10)), "the heartbeat writes the new strips");
+            let found = reg.peers(1, now_secs()).into_iter().find(|e| e.pid == pid).expect("published");
+            assert_eq!((found.port, found.token.as_str(), found.strips), (peer.port(), peer.token(), vec![strip]));
+            // Dropping waits for the heartbeat: the file is gone when it returns.
             drop(peer);
-            std::thread::sleep(std::time::Duration::from_millis(300));
-            assert!(reg.peers(1, now_secs()).iter().all(|e| e.pid != u32::MAX - 7), "withdrawn");
+            assert!(reg.peers(1, now_secs()).iter().all(|e| e.pid != pid), "withdrawn");
+            assert!(!dir.join(format!("{pid}.json")).exists() && !dir.join(format!("{pid}.tmp")).exists());
             let _ = std::fs::remove_dir_all(&dir);
         }
 
