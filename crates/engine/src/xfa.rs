@@ -69,6 +69,8 @@ struct Clock {
 
 impl Clock {
     fn start(budget_ms: u64) -> Self {
+        #[cfg(test)]
+        let budget_ms = test_budget::get().unwrap_or(budget_ms);
         Clock {
             #[cfg(not(target_arch = "wasm32"))]
             started: std::time::Instant::now(),
@@ -85,6 +87,30 @@ impl Clock {
         {
             let _ = self.budget_ms;
             false
+        }
+    }
+}
+
+/// Test-only override of the event budget, per thread, so a test of the amount of work done
+/// does not depend on how fast the machine is. The real budgets are untouched.
+#[cfg(test)]
+pub(crate) mod test_budget {
+    use std::cell::Cell;
+    thread_local!(static BUDGET_MS: Cell<Option<u64>> = const { Cell::new(None) });
+
+    pub fn get() -> Option<u64> {
+        BUDGET_MS.with(Cell::get)
+    }
+
+    /// Hold the budget at `ms` on this thread until the guard drops.
+    pub struct Guard;
+    pub fn set(ms: u64) -> Guard {
+        BUDGET_MS.with(|b| b.set(Some(ms)));
+        Guard
+    }
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            BUDGET_MS.with(|b| b.set(None));
         }
     }
 }

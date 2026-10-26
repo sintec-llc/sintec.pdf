@@ -120,6 +120,8 @@ PdfCraft opens files from strangers, and people trust it with their work. A malf
 
 Follow `CLAUDE.md`. It covers quality gates, layering, commit rules and how to run and look at the app.
 
+Moving the project (queue, reports, notes) to another AgentDesk: `docs/agentdesk-transfer.md`.
+
 ## Contributor credits (About window)
 
 - About ▸ Contributors/Models are compiled into the binary from `contributors/contributors.json`
