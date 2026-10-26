@@ -39,12 +39,19 @@ fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, P
 }
 
 fn settle(h: &mut Harness<'static, PdfCraftApp>) {
-    for _ in 0..200 {
+    // Wait on the condition (no render in flight, on several frames running), not on a count of
+    // frames: a slow runner takes as long as it takes, up to a generous deadline.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let mut idle_frames = 0;
+    while idle_frames < 3 {
+        assert!(std::time::Instant::now() < deadline, "the page raster never arrived");
         h.run_steps(2);
-        if !h.state().render_pending() {
-            break;
+        if h.state().render_pending() {
+            idle_frames = 0;
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        } else {
+            idle_frames += 1;
         }
-        std::thread::sleep(std::time::Duration::from_millis(5));
     }
 }
 

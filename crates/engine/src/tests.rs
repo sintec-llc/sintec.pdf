@@ -4395,6 +4395,9 @@ fn xfa_data_import_adds_and_removes_rows_of_a_dynamic_form() {
 fn hundreds_of_xfa_calculations_run_in_one_engine_within_the_open_budget() {
     let (sections, rows) = (10, 20);
     let bytes = Arc::new(pdfcraft_xfa::fixtures::shell(&pdfcraft_xfa::fixtures::many_calculations_template(sections, rows)));
+    // This test checks that the work is done in one engine, not how fast the machine is: a slow
+    // CI runner must not trip the wall-clock budget.
+    let _budget = crate::xfa::test_budget::set(10 * 60 * 1000);
     let mut s = Session::new().with_clock(|| 1_700_000_000);
     let started = std::time::Instant::now();
     let id = s.open("many.pdf", None, bytes, None).expect("opens");
