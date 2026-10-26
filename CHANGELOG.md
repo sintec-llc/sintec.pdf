@@ -3,6 +3,16 @@
 User-visible changes in Sintec.PDF, newest first. Our versions are independent of upstream
 PdfCraft's; each entry says which upstream version the code is based on.
 
+## 0.3.1 — based on upstream PdfCraft v0.9.0
+
+A maintenance release; no feature changes.
+
+### Fixed
+- **Tab tear-off:** a window that closes now reliably removes its tab-strip entry, so other windows
+  no longer see a stale peer to drop tabs onto.
+- **Security:** `crypto-bigint` updated to 0.7.10 (RUSTSEC-2026-0387).
+- **Tests and CI:** the Linux, macOS and cargo-deny checks that were red after 0.3.0 are green again.
+
 ## 0.3.0 — based on upstream PdfCraft v0.9.0
 
 This release was developed as 0.2.7; the user decided the post-sync release is 0.3.0, so the

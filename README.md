@@ -15,7 +15,7 @@
 Sintec.PDF is maintained by Sintec LLC and based on the open-source
 [PdfCraft](https://github.com/storytold/pdfcraft) by the ArtCraft team.
 
-**Current release: 0.3.0, synced with upstream PdfCraft v0.9.0.** On top of upstream we carry:
+**Current release: 0.3.1, synced with upstream PdfCraft v0.9.0.** On top of upstream we carry:
 Russian interface and 46-language OCR, English and Russian only; our Windows printing path and
 print defaults (match paper size, labels); tab tear-off and drag; text-box grips and the floating
 text panel with font substitution; bundled fonts; scanner; table-aware export (Excel, Word,
