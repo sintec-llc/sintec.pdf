@@ -22,7 +22,7 @@ pub fn replace(manifest: &str, new: &str) -> Result<String, String> {
     validate(new)?;
     let old = read(manifest)?;
     let (idx, _) = find_line(manifest)?;
-    let (old_pin, new_pin) = (format!("version = \"{old}\""), format!("version = \"{new}\""));
+    let new_pin = format!("version = \"{new}\"");
     let mut out = String::with_capacity(manifest.len() + 8);
     let mut in_deps = false;
     for (i, line) in manifest.split_inclusive('\n').enumerate() {
@@ -39,13 +39,44 @@ pub fn replace(manifest: &str, new: &str) -> Result<String, String> {
                 ""
             };
             out.push_str(&format!("version = \"{new}\"{eol}"));
-        } else if in_deps && line.contains("path = \"") && line.contains(&old_pin) {
-            out.push_str(&line.replace(&old_pin, &new_pin));
+        } else if in_deps
+            && line.contains("path = \"")
+            && let Some(pin) = pin_of(line)
+            && (pin == old || caret_allows(pin, &old))
+        {
+            out.push_str(&line.replacen(&format!("version = \"{pin}\""), &new_pin, 1));
         } else {
             out.push_str(line);
         }
     }
     Ok(out)
+}
+
+/// The `version = "…"` requirement of a dependency line, if it has one.
+fn pin_of(line: &str) -> Option<&str> {
+    let rest = line.get(line.find("version = \"")? + "version = \"".len()..)?;
+    rest.get(..rest.find('"')?)
+}
+
+/// Whether the plain requirement `pin` (`0.3.0`, Cargo's default caret) accepts `version`: a
+/// workspace crate pinned at `0.3.0` was satisfied by a `0.3.1` workspace, so it moves with it.
+/// Pins with an operator or a pre-release tag (a vendored crate's own `=0.1.0-alpha.2`) and pins
+/// the version doesn't satisfy are someone else's and stay.
+fn caret_allows(pin: &str, version: &str) -> bool {
+    let parts = |v: &str| -> Option<[u64; 3]> {
+        if validate(v).is_err() || v.contains('-') {
+            return None;
+        }
+        let mut it = v.split('.').map(|n| n.parse::<u64>().ok());
+        Some([it.next()??, it.next()??, it.next()??])
+    };
+    let (Some(p), Some(v)) = (parts(pin), parts(version)) else { return false };
+    let compatible = match p {
+        [0, 0, _] => v[..] == p[..],
+        [0, minor, _] => v[0] == 0 && v[1] == minor,
+        [major, _, _] => v[0] == major,
+    };
+    compatible && v >= p
 }
 
 /// Semver without build metadata: `MAJOR.MINOR.PATCH` plus an optional `-pre.release` tag.
@@ -152,6 +183,22 @@ mod tests {
         assert!(out.contains("own = { path = \"crates/own\", version = \"0.2.0\" }"), "{out}");
         assert!(out.contains("dep = { version = \"0.1.0\" }"), "a registry dependency keeps its version");
         assert!(out.contains("other = { path = \"crates/other\", version = \"0.2\" }"));
+    }
+
+    /// A patch release leaves the crates' pins behind (`0.3.0` under a `0.3.1` workspace, which
+    /// Cargo accepts); the next minor must still move them, or `cargo update` rejects `^0.3.0`.
+    #[test]
+    fn moves_pins_an_earlier_patch_left_behind() {
+        let manifest = "[workspace.package]\nversion = \"0.3.1\"\n\n[workspace.dependencies]\n\
+                        own = { path = \"crates/own\", version = \"0.3.0\" }\n\
+                        vendored = { path = \"vendor/v\", version = \"=0.1.0-alpha.2\" }\n\
+                        older = { path = \"vendor/o\", version = \"0.2.0\" }\n";
+        let out = replace(manifest, "0.4.0").unwrap();
+        assert!(out.contains("own = { path = \"crates/own\", version = \"0.4.0\" }"), "{out}");
+        assert!(out.contains("version = \"=0.1.0-alpha.2\""), "a vendored crate's own pin stays: {out}");
+        assert!(out.contains("older = { path = \"vendor/o\", version = \"0.2.0\" }"), "{out}");
+        assert!(caret_allows("1.2.0", "1.9.3") && !caret_allows("1.2.0", "2.0.0") && !caret_allows("0.0.1", "0.0.2"));
+        assert!(!caret_allows("0.3.2", "0.3.1"), "a newer pin than the workspace isn't ours to move");
     }
 
     #[test]

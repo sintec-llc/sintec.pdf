@@ -716,12 +716,24 @@ fn writing_the_control_file_looks_up_the_users_sid_once() {
 }
 
 /// X11 startup notification and docks match a window to its launcher by `StartupWMClass`,
-/// so it has to be the class the window carries: the app id, on Wayland and X11 alike.
+/// so it has to be the class the window carries: the app id, on Wayland and X11 alike. The
+/// entry, its icon and the AppStream id all carry the same id (Sintec.PDF's own, task 028).
 #[test]
 fn the_desktop_entry_names_the_window_class() {
-    let entry = include_str!("../../../packaging/linux/ai.storyteller.pdfcraft.desktop");
-    let class = entry.lines().find_map(|line| line.strip_prefix("StartupWMClass="));
-    assert_eq!(class, Some(super::APP_ID));
+    const LINUX_APP_ID: &str = "io.github.sintec_llc.sintec_pdf";
+    #[cfg(not(any(windows, target_os = "macos")))]
+    assert_eq!(super::APP_ID, LINUX_APP_ID);
+    let entry = include_str!("../../../packaging/linux/io.github.sintec_llc.sintec_pdf.desktop");
+    let field = |key: &str| entry.lines().find_map(|line| line.strip_prefix(key)).map(str::to_owned);
+    assert_eq!(field("StartupWMClass=").as_deref(), Some(LINUX_APP_ID));
+    assert_eq!(field("Icon=").as_deref(), Some(LINUX_APP_ID));
+    assert_eq!(field("Name=").as_deref(), Some("Sintec.PDF"));
+    // The packages install the app as `sintec-pdf` (packaging/linux/package.sh).
+    assert_eq!(field("Exec=").as_deref(), Some("sintec-pdf %U"));
+    let metainfo = include_str!("../../../packaging/linux/io.github.sintec_llc.sintec_pdf.metainfo.xml.in");
+    assert!(metainfo.contains(&format!("<id>{LINUX_APP_ID}</id>")));
+    assert!(metainfo.contains(&format!("<launchable type=\"desktop-id\">{LINUX_APP_ID}.desktop</launchable>")));
+    assert!(metainfo.contains("<binary>sintec-pdf</binary>") && metainfo.contains("<mediatype>application/pdf</mediatype>"));
 }
 
 /// Both flatpak manifests build with the craft-i18n commit `craft-i18n.rev` pins: CI and

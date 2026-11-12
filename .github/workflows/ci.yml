@@ -54,6 +54,10 @@ jobs:
       - name: Assets (licences and attribution)
         run: cargo xtask assets
 
+      # LICENSES.toml: every licence document our assets and bundled data need, by hash.
+      - name: Licence documents
+        run: cargo xtask license-check
+
   macos:
     name: test + DMG (macOS ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
@@ -143,6 +147,10 @@ jobs:
 
       - name: Assets (licences and attribution)
         run: cargo xtask assets
+
+      # LICENSES.toml: every licence document our assets and bundled data need, by hash.
+      - name: Licence documents
+        run: cargo xtask license-check
 
       # The AppImage, .deb and CLI tarball, unsigned, to try before a release.
       - name: Packaging tools

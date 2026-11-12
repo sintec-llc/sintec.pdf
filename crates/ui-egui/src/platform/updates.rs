@@ -9,8 +9,8 @@ use craft_update::{CheckResultDialog, CheckResultResponse};
 
 use crate::PdfCraftApp;
 
-/// Where every PdfCraft release is listed.
-pub const RELEASES_PAGE: &str = "https://github.com/storytold/pdfcraft/releases";
+/// Where every Sintec.PDF release is listed (the same page `UPDATE_APP` checks).
+pub const RELEASES_PAGE: &str = "https://github.com/sintec-llc/sintec.pdf/releases";
 
 /// Stands in for the network in tests.
 #[cfg(not(target_arch = "wasm32"))]
@@ -323,7 +323,7 @@ mod tests {
         app.updates.updater.offer(craft_update::Release {
             tag: "v99.0.0".into(),
             version: craft_update::parse_version("99.0.0"),
-            name: "PdfCraft 99.0.0".into(),
+            name: "Sintec.PDF 99.0.0".into(),
             html_url: "https://github.com/storytold/pdfcraft/releases/tag/v99.0.0".into(),
             ..Default::default()
         });
@@ -332,6 +332,43 @@ mod tests {
         assert!(!app.updates.open, "the result dialog closes");
         assert!(app.updates.updater.prompt_open(), "the prompt stays");
         assert!(app.close_request.is_none(), "the prompt carries the restart");
+    }
+
+    /// Sintec.PDF updates only from its own releases, never upstream PdfCraft's
+    /// (`storytold/pdfcraft`), and the release page it links is the same one.
+    #[test]
+    fn updates_come_from_sintec_releases_only() {
+        let app = &crate::UPDATE_APP;
+        assert_eq!(app.repo, "sintec-llc/sintec.pdf");
+        assert_eq!(app.name, "Sintec.PDF");
+        assert_eq!(app.releases_url(), RELEASES_PAGE);
+        assert!(app.former_ids.is_empty() && app.former_names.is_empty(), "no upstream names: {app:?}");
+        for text in [app.repo, app.id, app.name, app.developer] {
+            for upstream in ["storytold", "pdfcraft", "PdfCraft", "ArtCraft"] {
+                assert!(!text.contains(upstream), "{text}");
+            }
+        }
+    }
+
+    /// The installers packaging/ builds (`sintec-pdf-<version>-windows-<arch>.msi`, the macOS disk
+    /// images, the portable zip) are the assets the updater picks; upstream's are not, and neither
+    /// is the setup program, which only wraps the MSI.
+    #[test]
+    fn the_updater_reads_our_release_asset_names() {
+        use craft_update::platform::parse_asset_name;
+        let stems: Vec<&str> = crate::UPDATE_APP.stems().collect();
+        for (name, token) in [
+            ("sintec-pdf-0.4.0-windows-x64.msi", "windows-x64"),
+            ("sintec-pdf-0.4.0-windows-x64-portable.zip", "windows-x64"),
+            ("sintec-pdf-0.4.0-macos-aarch64.dmg", "macos-aarch64"),
+            ("sintec-pdf-0.4.0-macos-x86_64.dmg", "macos-x86_64"),
+        ] {
+            let parsed = parse_asset_name(name, &stems).unwrap_or_else(|| panic!("{name} is not read as a release asset"));
+            assert_eq!((parsed.version.as_str(), parsed.token.as_str()), ("0.4.0", token), "{name}");
+        }
+        for other in ["pdfcraft-0.21.1-windows-x64.msi", "printcraft-0.2.0-windows-x64.msi", "sintec-pdf-0.4.0-windows-x64-setup.exe"] {
+            assert!(parse_asset_name(other, &stems).is_none(), "{other} must not be installed");
+        }
     }
 
     #[test]

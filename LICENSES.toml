@@ -16,7 +16,7 @@ sha256 = "cd7032ea33b71427f188e34ffb4aee9d6868a57fd196037c5c8b2be03a2a0352"
 [[document]]
 source = "NOTICE"
 destination = "NOTICE"
-sha256 = "a7620386409bc691c7e223917db186ec447362f655fd81a1196d9853dcac1330"
+sha256 = "01daadd603629e00ecdd41c9b5a7e76e6e9d815d54c07cfb2853b451c4011c1b"
 
 [[document]]
 source = "vendor/edit-session/LICENSE-MIT"
@@ -33,12 +33,12 @@ sha256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
 [[document]]
 source = "assets/app-icon/LICENSE-document.txt"
 destination = "assets/app-icon/LICENSE-document.txt"
-sha256 = "64a3137e3d5cc41e5b78d2ad8dd9ddddd6588283f9f7b3128aa6a8a50852fb9a"
+sha256 = "406391333d8c932f98d92d9779c0bc50320e9d18ac613e1b90d42c410330aa66"
 
 [[document]]
 source = "assets/app-icon/LICENSE.txt"
 destination = "assets/app-icon/LICENSE.txt"
-sha256 = "b768acafe6cbad8247eedf86b5b5381feefcd4ee0f8c7808b86811bc687cf37b"
+sha256 = "86ef18fa6966f4a1f2e6f42a4b8a0b944ff67b4edced87a5928a1cd9a19c9ff2"
 
 [[document]]
 source = "assets/fonts/OFL-DancingScript.txt"
@@ -56,14 +56,15 @@ destination = "assets/fonts/OFL-JetBrainsMono.txt"
 sha256 = "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697"
 
 [[document]]
+source = "assets/fonts/OFL-MarckScript.txt"
+licences = ["OFL-1.1"]
+destination = "assets/fonts/OFL-MarckScript.txt"
+sha256 = "f22a2beea88d631a620b15683fd03e79f13ad3297ad97fa5e42283c0b1a3a038"
+
+[[document]]
 source = "assets/icons/LICENSE-lucide.txt"
 destination = "assets/icons/LICENSE-lucide.txt"
 sha256 = "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57"
-
-[[document]]
-source = "docs/brand/LICENSE-brand.txt"
-destination = "docs/brand/LICENSE-brand.txt"
-sha256 = "0f33f48e7a96cd359d4e4e5b11424b13cebeb59cc70c77928186695e4173585c"
 
 [[document]]
 source = "licenses/CMap-LICENSE.txt"
@@ -147,6 +148,12 @@ source = "vendor/vello_common/LICENSE-MIT"
 licences = ["MIT"]
 destination = "vendor/vello_common/LICENSE-MIT"
 sha256 = "adf157330f722fe7cfd5964a2a6974eff851b718228c6735724a11706e6f4dec"
+
+[[bundled]]
+crate = "hayro-cmap"
+path = "assets/cmaps.brotli"
+licence = "BSD-3-Clause"
+documents = ["licenses/CMap-LICENSE.txt"]
 
 [[bundled]]
 crate = "epaint_default_fonts"

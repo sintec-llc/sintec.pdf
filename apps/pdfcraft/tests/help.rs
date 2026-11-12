@@ -26,8 +26,8 @@ fn help_prints_usage_and_exits() {
         let out = run(&[flag], Stdio::piped());
         assert!(out.status.success(), "{flag}: {:?} {}", out.status, String::from_utf8_lossy(&out.stderr));
         let stdout = String::from_utf8_lossy(&out.stdout);
-        assert!(stdout.starts_with("Usage: pdfcraft [options] [files…]"), "{flag}: {stdout}");
-        assert!(stdout.contains("pdfcraft-cli"), "{flag}: points scripts to the CLI: {stdout}");
+        assert!(stdout.starts_with("Usage: sintec-pdf [options] [files…]"), "{flag}: {stdout}");
+        assert!(stdout.contains("sintec-pdf-cli"), "{flag}: points scripts to the CLI: {stdout}");
     }
     // Wherever it is on the command line, and with files named.
     let out = run(&["missing.pdf", "--help"], Stdio::piped());

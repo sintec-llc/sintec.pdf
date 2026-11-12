@@ -3,6 +3,35 @@
 User-visible changes in Sintec.PDF, newest first. Our versions are independent of upstream
 PdfCraft's; each entry says which upstream version the code is based on.
 
+## 0.4.0 — based on upstream PdfCraft v0.21.1 (main `d749fd806`, one commit after the tag)
+
+This release moves the base from upstream v0.9.0 to v0.21.1 and carries our features onto it.
+
+### Upstream (v0.10 – v0.21.1)
+- Everything upstream PdfCraft added since v0.9.0, among it printing with the printer's colour
+  profile, black-and-white images compressed with CCITT Group 4 or JBIG2, and the reorganised
+  interface.
+
+### Ours, carried onto the new base
+- **Updates** come only from our releases (`github.com/sintec-llc/sintec.pdf`) through the shared
+  updater: the installer is checked against the release's `SHA256SUMS.txt` and the Windows MSI is
+  installed with Windows Installer (`msiexec`, with a log), never through PowerShell. The update
+  prompt names Sintec.PDF and Sintec LLC.
+- **Settings, crash recovery and the clipboard folder** stay under `Sintec.PDF` (on Windows
+  `%APPDATA%\Sintec.PDF` and `%LOCALAPPDATA%\Sintec.PDF`), so unsaved work and preferences from
+  0.3.x are found after the update.
+- **Text editing** (font substitution, the floating text panel, text frames and grips),
+  **compression levels** (Strong / Medium / Light on top of upstream's optimizer), **Excel and Word
+  export**, **Convert to PDF** from Office, **tabs between windows** and **printing** (A4 by
+  default, automatic orientation) work as in 0.3.1.
+- **Interface languages:** English and Russian; the translations live in this repository.
+- **Installers:** the Windows installer says "Edit with Sintec.PDF" in the PDF right-click menu
+  (it said "Edit with PdfCraft"); `--help` names `sintec-pdf` and `sintec-pdf-cli`.
+
+### Not yet carried onto the new base
+- **Close in white** (permanent white masking) and **dragging pages between documents** (Move
+  here / Copy here, Extract and save as…) from 0.3.1 are not in this code yet.
+
 ## 0.3.1 — based on upstream PdfCraft v0.9.0
 
 A maintenance release; no feature changes.

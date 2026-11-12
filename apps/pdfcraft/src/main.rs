@@ -50,7 +50,14 @@ mod text_scale;
 #[path = "windows_manifest.rs"]
 mod windows_manifest;
 
-/// Freedesktop app id: the `.desktop` file name and the hicolor icon name.
+/// Freedesktop app id: the `.desktop` file name, the hicolor icon name and the Wayland app id /
+/// X11 `WM_CLASS` (packaging/linux/package.sh installs both under it). Sintec.PDF's own on Linux
+/// and the BSDs, so it never shares a launcher entry with an upstream PdfCraft (task 028).
+#[cfg(not(any(windows, target_os = "macos")))]
+const APP_ID: &str = "io.github.sintec_llc.sintec_pdf";
+/// Windows and macOS have no use for the freedesktop id, but eframe also falls back to it for its
+/// storage folder, so it stays the upstream one there.
+#[cfg(any(windows, target_os = "macos"))]
 const APP_ID: &str = "ai.storyteller.pdfcraft";
 
 /// The app icon (assets/app-icon/README.md). macOS gets the version on Apple's icon grid, with a
@@ -63,22 +70,22 @@ const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256
 /// What `-h` / `--help` prints (#4076): a hint, not the full option list (that is this file's
 /// doc comment and the README). Scripts want `pdfcraft-cli`, which never opens a window.
 const USAGE: &str = "\
-Usage: pdfcraft [options] [files…]
+Usage: sintec-pdf [options] [files…]
 
-Opens the files in the PdfCraft desktop app.
+Opens the files in the Sintec.PDF desktop app.
 
 Options:
   --two-paged                 open command-line PDFs in noncontinuous two-page view
-  --new-window                open a window of its own instead of passing the files to a running PdfCraft
+  --new-window                open a window of its own instead of passing the files to a running Sintec.PDF
   --create-images [images…]   put the images in one PDF and ask for the page DPI
-  --combine files…            add the files to the Combine files tab, of a running PdfCraft if there is one
+  --combine files…            add the files to the Combine files tab, of a running Sintec.PDF if there is one
   --control <file>            enable the UI control channel (pdfcraft-cli ui --control <file> …)
   --page N, --zoom 150, --layout continuous, --theme dark, …
                               view settings applied once the files are open
   -h, --help                  print this and exit
   --version                   print the version and exit
 
-To inspect, convert or edit PDFs from a script, use pdfcraft-cli (pdfcraft-cli --help).";
+To inspect, convert or edit PDFs from a script, use sintec-pdf-cli (sintec-pdf-cli --help).";
 
 /// Print `text` for `--help` and `--version`. `println!` would panic on a full or closed
 /// standard output; this exits normally instead.
@@ -95,7 +102,7 @@ const LEGACY_STORAGE_KEY: &str = "printcraft";
 /// it is `PdfCraftData` beside the executable (#157). XDG desktops use the configuration base;
 /// other platforms retain eframe's PdfCraft folder. Logs and recovery stay in the data folder.
 fn settings_dir() -> Option<std::path::PathBuf> {
-    let legacy = eframe::storage_dir("PdfCraft");
+    let legacy = eframe::storage_dir("Sintec.PDF");
     match settings::directory(
         cfg!(all(unix, not(target_os = "macos"))),
         pdfcraft_ui_egui::portable::data_dir(),
@@ -119,11 +126,11 @@ fn migrate_legacy_folders() {
     if pdfcraft_ui_egui::portable::data_dir().is_some() {
         return;
     }
-    let mut moves = vec![(eframe::storage_dir("PrintCraft"), eframe::storage_dir("PdfCraft"))];
+    let mut moves = vec![(eframe::storage_dir("PrintCraft"), eframe::storage_dir("Sintec.PDF"))];
     // Recovery lives in the settings folder except on Windows, where it is under %LOCALAPPDATA%.
     if cfg!(windows) {
         let local = std::env::var_os("LOCALAPPDATA").filter(|v| !v.is_empty()).map(std::path::PathBuf::from);
-        moves.push((local.as_ref().map(|d| d.join("PrintCraft")), local.map(|d| d.join("PdfCraft"))));
+        moves.push((local.as_ref().map(|d| d.join("PrintCraft")), local.map(|d| d.join("Sintec.PDF"))));
     }
     for (old, new) in moves {
         let (Some(old), Some(new)) = (old, new) else { continue };
@@ -243,10 +250,10 @@ fn main() -> eframe::Result {
     // no file behind) and after the PrintCraft migration (which a fresh folder would block).
     // Records logged until now are written to it first.
     if let (Some(logger), Some(dir)) =
-        (logger, pdfcraft_ui_egui::portable::data_dir().map(std::path::Path::to_path_buf).or_else(|| eframe::storage_dir("PdfCraft")))
+        (logger, pdfcraft_ui_egui::portable::data_dir().map(std::path::Path::to_path_buf).or_else(|| eframe::storage_dir("Sintec.PDF")))
     {
         match logger.attach_dir(&dir.join("logs")) {
-            Ok(path) => log::info!("PdfCraft {}, log file {}", pdfcraft_engine::build_info::version(), path.display()),
+            Ok(path) => log::info!("Sintec.PDF {}, log file {}", pdfcraft_engine::build_info::version(), path.display()),
             // Standard error only by now (`attach_dir` gave up on the file); unlike `eprintln!`, never panics.
             Err(e) => log::warn!("no log file: {e}"),
         }
@@ -275,7 +282,7 @@ fn main() -> eframe::Result {
     let started = Rc::new(Cell::new(false));
     let first = if choice == RendererChoice::Gl { eframe::Renderer::Glow } else { eframe::Renderer::Wgpu };
     let result = eframe::run_native(
-        "PdfCraft",
+        "Sintec.PDF",
         with_placement(native_options(launch.integrated, launch.window_controls.is_some(), first), window),
         app_creator(
             launch.clone(),
@@ -293,7 +300,7 @@ fn main() -> eframe::Result {
             // usually still works there, so that's better than quitting.
             log::error!("the GPU renderer (wgpu) didn't start: {e}. Starting with OpenGL instead; set PDFCRAFT_RENDERER=gl to skip wgpu.");
             eframe::run_native(
-                "PdfCraft",
+                "Sintec.PDF",
                 with_placement(native_options(launch.integrated, launch.window_controls.is_some(), eframe::Renderer::Glow), window),
                 app_creator(
                     launch,
@@ -353,7 +360,7 @@ fn with_placement(mut native: eframe::NativeOptions, window: WindowPlacement) ->
 /// The window and renderer settings for one run.
 fn native_options(integrated: bool, app_frame: bool, renderer: eframe::Renderer) -> eframe::NativeOptions {
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("PdfCraft")
+        .with_title("Sintec.PDF")
         .with_inner_size([1440.0, 920.0])
         .with_min_inner_size(pdfcraft_ui_egui::MIN_WINDOW_SIZE)
         .with_drag_and_drop(true)
@@ -599,7 +606,7 @@ fn app_creator<'a>(
 /// `unsafe` calls.
 fn notify_software_renderer(app: &mut PdfCraftApp, device_type: eframe::wgpu::DeviceType) {
     if device_type == eframe::wgpu::DeviceType::Cpu {
-        app.notify_tr("PdfCraft is drawing without a graphics processor, so it may be slow. Updating the graphics driver may help.");
+        app.notify_tr("Sintec.PDF is drawing without a graphics processor, so it may be slow. Updating the graphics driver may help.");
     }
 }
 

@@ -10,12 +10,19 @@
 #![recursion_limit = "256"]
 
 /// PdfCraft as craft-update knows it, with its 128 px icon and accent colour: the update
-/// prompt shows both, and an AppImage's menu entry gets the icon.
+/// prompt shows both, and an AppImage's menu entry gets the icon. The prompt names the app and
+/// its developer, so those are Sintec.PDF's (the ArtCraft name stays out, AGENTS.md §1.2).
 #[cfg(not(target_arch = "wasm32"))]
 pub const UPDATE_APP: craft_update::app::App = craft_update::app::App {
+    name: "Sintec.PDF",
+    developer: "Sintec LLC",
     icon_png: Some(include_bytes!("../../../assets/app-icon/hicolor/128x128/apps/ai.storyteller.pdfcraft.png")),
     accent: Some([0xb7, 0x02, 0x28]),
-    ..craft_update::suite::PDFCRAFT
+    // Sintec.PDF's own releases, never upstream PdfCraft's: craft-update downloads only from
+    // `sintec-llc/sintec.pdf`, reads its assets as `sintec-pdf-<version>-<os>-<arch>.<ext>`
+    // (packaging/), checks them against the release's SHA256SUMS.txt, and installs the Windows
+    // MSI with Windows Installer itself, never through PowerShell (`platform::updates`).
+    ..craft_update::app::App::new("sintec-pdf", "Sintec.PDF", "Reading, organizing and protecting PDFs", "sintec-llc/sintec.pdf")
 };
 
 use crate::control::Host as _;
