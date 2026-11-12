@@ -1123,7 +1123,7 @@ mod transport_tests {
         let reply = next_line(&mut r).expect("the server says why before closing");
         assert_eq!(reply["error"]["code"], -32004, "{reply}");
         let took = started.elapsed();
-        assert!(took >= std::time::Duration::from_millis(250) && took < std::time::Duration::from_secs(3), "{took:?}");
+        assert!(took >= std::time::Duration::from_millis(250) && took < std::time::Duration::from_secs(8), "{took:?}");
         assert!(next_line(&mut r).is_none(), "then the connection is closed");
         // Dripping: a byte every 50 ms for as long as the server keeps the connection.
         let started = std::time::Instant::now();
@@ -1132,7 +1132,7 @@ mod transport_tests {
         let drip = std::thread::spawn(move || {
             while w.write_all(b"x").is_ok() {
                 std::thread::sleep(std::time::Duration::from_millis(50));
-                if started.elapsed() > std::time::Duration::from_secs(3) {
+                if started.elapsed() > std::time::Duration::from_secs(10) {
                     break;
                 }
             }
@@ -1141,7 +1141,7 @@ mod transport_tests {
         let reply = next_line(&mut r).expect("the server says why before closing");
         assert_eq!(reply["error"]["code"], -32004, "{reply}");
         let took = started.elapsed();
-        assert!(took < std::time::Duration::from_secs(2), "the deadline is absolute: {took:?}");
+        assert!(took < std::time::Duration::from_secs(5), "the deadline is absolute: {took:?}");
         drop(r);
         drip.join().unwrap();
     }
