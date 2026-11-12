@@ -10,6 +10,12 @@ pub(super) struct Arguments {
     /// `--combine`: the files go to the Combine files tab.
     pub combine: bool,
     pub new_window: bool,
+    /// Started for a tab torn off another window (`pdfcraft_ui_egui::tear_off`).
+    pub torn_off: bool,
+    /// `--window-pos X,Y`: where that tab was let go.
+    pub window_pos: Option<egui::Pos2>,
+    /// `--recover-key`: unsaved work a torn-off tab handed over, in the recovery folder.
+    pub recover_key: Option<String>,
     pub two_paged: bool,
     pub version: bool,
     pub help: bool,
@@ -17,7 +23,14 @@ pub(super) struct Arguments {
 
 impl Arguments {
     pub fn may_hand_off(&self) -> bool {
-        !self.new_window && !self.files.is_empty() && self.options.is_empty() && self.control_file.is_none() && !self.create_images && !self.two_paged
+        !self.new_window
+            && !self.torn_off
+            && self.recover_key.is_none()
+            && !self.files.is_empty()
+            && self.options.is_empty()
+            && self.control_file.is_none()
+            && !self.create_images
+            && !self.two_paged
     }
 
     pub fn parse(args: impl IntoIterator<Item = String>) -> Self {
@@ -39,6 +52,13 @@ impl Arguments {
                 // files tab, of the running PdfCraft when there is one.
                 "--combine" => parsed.combine = true,
                 "--new-window" => parsed.new_window = true,
+                "--torn-off" => parsed.torn_off = true,
+                "--window-pos" => match args.next().as_deref().map(pdfcraft_ui_egui::tear_off::parse_window_pos) {
+                    Some(Ok(p)) => parsed.window_pos = Some(p),
+                    Some(Err(e)) => log::warn!("--window-pos: {e}"),
+                    None => log::warn!("--window-pos needs X,Y"),
+                },
+                "--recover-key" => parsed.recover_key = args.next(),
                 "--two-paged" => parsed.two_paged = true,
                 flag if flag.starts_with("--two-paged=") => {
                     // It has no value: do not consume the following filename on malformed use.
@@ -245,5 +265,19 @@ mod repeated_file_tests {
         assert_eq!(app.views[0].layout, PageLayout::Single);
         assert!(app.view_defaults.continuous);
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn a_torn_off_tabs_arguments_keep_it_from_joining_a_running_instance() {
+        let parse_args = |a: &[&str]| Arguments::parse(a.iter().map(|s| s.to_string()));
+        let parsed = parse_args(&["--torn-off", "--window-pos", "380,283", "--page", "5", "/docs/a.pdf"]);
+        assert!(parsed.torn_off);
+        assert_eq!(parsed.window_pos, Some(egui::pos2(380.0, 283.0)));
+        assert_eq!(parsed.files, ["/docs/a.pdf"]);
+        assert!(!parsed.may_hand_off(), "its own window, not a tab of the running one");
+        let handed = parse_args(&["--recover-key", "1760000000-42-tear-3"]);
+        assert_eq!(handed.recover_key.as_deref(), Some("1760000000-42-tear-3"));
+        assert!(!parse_args(&["--window-pos", "x,1", "/docs/a.pdf"]).torn_off);
+        assert!(parse_args(&["--window-pos", "x,1", "/docs/a.pdf"]).window_pos.is_none(), "a bad position is ignored");
     }
 }

@@ -142,7 +142,7 @@ fn layout(area: Rect, split: Split) -> (Rect, Rect, Rect) {
 impl PdfCraftApp {
     /// The tabs shown in `place`, in their strip's order (indexes into `views`).
     pub fn tabs_in(&self, place: Place) -> Vec<usize> {
-        self.views.iter().enumerate().filter(|(_, v)| v.pane.place == place).map(|(i, _)| i).collect()
+        self.views.iter().enumerate().filter(|(_, v)| v.window == self.current_window && v.pane.place == place).map(|(i, _)| i).collect()
     }
 
     /// The tab `place` shows: the active tab when it is there, else the one active there last.
@@ -164,7 +164,7 @@ impl PdfCraftApp {
         self.views
             .iter()
             .enumerate()
-            .filter(|(_, v)| v.pane.place == place)
+            .filter(|(_, v)| v.window == self.current_window && v.pane.place == place)
             .max_by_key(|(i, v)| (v.pane.shown_seq, std::cmp::Reverse(*i)))
             .map(|(i, _)| i)
     }
@@ -217,7 +217,7 @@ impl PdfCraftApp {
             }
         }
         if split {
-            let has = |p: Place| self.views.iter().any(|v| v.pane.place == p);
+            let has = |p: Place| self.views.iter().any(|v| v.window == self.current_window && v.pane.place == p);
             if !has(Place::Main) || !has(Place::Second) {
                 self.unsplit();
             }
@@ -494,6 +494,10 @@ impl PdfCraftApp {
         add(main.and_then(|i| crate::compare_ui::side_by_side(self, i)).map(|(old, _)| old));
         if !self.full_screen && self.panes.split.is_some() {
             add(self.pane_front(Place::Second));
+        }
+        // What the windows of this process torn off the main one show.
+        for w in &self.doc_windows {
+            add(w.active.and_then(|d| self.views.iter().position(|v| v.id == d && v.window == w.id)));
         }
         shown
     }

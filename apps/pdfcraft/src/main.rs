@@ -234,7 +234,7 @@ fn main() -> eframe::Result {
     }
     startup.files = rejoin_split_paths(startup.files, |p| std::path::Path::new(p).is_file());
     let may_hand_off = startup.may_hand_off();
-    let startup::Arguments { files, options, control_file, create_images, combine, two_paged, .. } = startup;
+    let startup::Arguments { files, options, control_file, create_images, combine, two_paged, torn_off, window_pos, recover_key, .. } = startup;
     let integrated = cfg!(target_os = "macos");
     // GNOME on Wayland leaves the window frame to the app (src/decorations.rs).
     let window_controls = if cfg!(any(target_os = "macos", target_os = "windows")) { None } else { decorations::app_drawn() };
@@ -264,7 +264,9 @@ fn main() -> eframe::Result {
         single_instance::Claim::Alone => None,
     };
     let choice = renderer_choice(std::env::var("PDFCRAFT_RENDERER").ok().as_deref());
-    let launch = Launch { files, options, control_file, create_images, combine, integrated, window_controls, two_paged };
+    let launch =
+        Launch { files, options, control_file, create_images, combine, integrated, window_controls, two_paged, torn_off, window_pos, recover_key };
+    let window = WindowPlacement { torn_off, position: window_pos };
     // Finder, Open With and the Dock deliver files as Apple events, not arguments; catch the one
     // that launched us as well as later ones. Lives until the event loop returns.
     #[cfg(target_os = "macos")]
@@ -274,7 +276,7 @@ fn main() -> eframe::Result {
     let first = if choice == RendererChoice::Gl { eframe::Renderer::Glow } else { eframe::Renderer::Wgpu };
     let result = eframe::run_native(
         "PdfCraft",
-        native_options(launch.integrated, launch.window_controls.is_some(), first),
+        with_placement(native_options(launch.integrated, launch.window_controls.is_some(), first), window),
         app_creator(
             launch.clone(),
             Rc::clone(&started),
@@ -292,7 +294,7 @@ fn main() -> eframe::Result {
             log::error!("the GPU renderer (wgpu) didn't start: {e}. Starting with OpenGL instead; set PDFCRAFT_RENDERER=gl to skip wgpu.");
             eframe::run_native(
                 "PdfCraft",
-                native_options(launch.integrated, launch.window_controls.is_some(), eframe::Renderer::Glow),
+                with_placement(native_options(launch.integrated, launch.window_controls.is_some(), eframe::Renderer::Glow), window),
                 app_creator(
                     launch,
                     started,
@@ -329,6 +331,23 @@ fn renderer_choice(value: Option<&str>) -> RendererChoice {
 /// nobody, and it failed before the app was created (so while starting the renderer, not later).
 fn retry_with_gl(choice: RendererChoice, app_started: bool) -> bool {
     choice == RendererChoice::Auto && !app_started
+}
+
+/// Where the window goes: a torn-off tab's window opens where the tab was let go.
+#[derive(Clone, Copy, Debug, Default)]
+struct WindowPlacement {
+    torn_off: bool,
+    position: Option<egui::Pos2>,
+}
+
+/// `native` for a torn-off tab's window: where it was dropped, and not keeping its size and
+/// place for the main window's next start.
+fn with_placement(mut native: eframe::NativeOptions, window: WindowPlacement) -> eframe::NativeOptions {
+    if let Some(p) = window.position {
+        native.viewport = native.viewport.with_position(p);
+    }
+    native.persist_window = native.persist_window && !window.torn_off;
+    native
 }
 
 /// The window and renderer settings for one run.
@@ -385,6 +404,12 @@ struct Launch {
     /// The window buttons the app draws, when the desktop leaves the frame to it.
     window_controls: Option<pdfcraft_ui_egui::window_controls::Layout>,
     two_paged: bool,
+    /// Started for a tab torn off another window: no recovery offer, no reopened session.
+    torn_off: bool,
+    /// Where that tab was let go (screen points).
+    window_pos: Option<egui::Pos2>,
+    /// `--recover-key`: unsaved work a torn-off tab handed over, in the recovery folder.
+    recover_key: Option<String>,
 }
 
 /// Whether the window is a native Wayland one (not X11 or XWayland).
@@ -447,7 +472,8 @@ fn app_creator<'a>(
     instance: Option<&'a single_instance::Server>,
     #[cfg(target_os = "macos")] apple_events: &'a apple_events::AppleEvents,
 ) -> eframe::AppCreator<'a> {
-    let Launch { files, options, control_file, create_images, combine, integrated, window_controls, two_paged } = launch;
+    let Launch { files, options, control_file, create_images, combine, integrated, window_controls, two_paged, torn_off, window_pos, recover_key } =
+        launch;
     Box::new(move |cc| {
         started.set(true);
         let mut app = PdfCraftApp::new();
@@ -476,6 +502,20 @@ fn app_creator<'a>(
         app.set_startup_update_check(true);
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
         app.two_sided_source = Some(pdfcraft_ui_egui::system_two_sided());
+        // A tab torn off the tab strip opens in a process of its own.
+        app.window_spawner = Some(std::sync::Arc::new(pdfcraft_ui_egui::tear_off::spawn_self));
+        // And a tab dragged onto a window of another process joins it.
+        if let Some(dir) = pdfcraft_ui_egui::tab_transfer::Registry::default_dir() {
+            let ctx = cc.egui_ctx.clone();
+            match pdfcraft_ui_egui::tab_transfer::Peer::start(pdfcraft_ui_egui::tab_transfer::Registry::new(dir), move || ctx.request_repaint()) {
+                Ok(peer) => app.tab_peer = Some(peer),
+                Err(e) => log::warn!("tabs can't be dragged to or from other windows: {e}"),
+            }
+        }
+        // Saved window settings win over the builder's position: place it once it exists.
+        if let Some(p) = window_pos {
+            cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(p));
+        }
         app.os_key_store_ids = cfg!(any(target_os = "macos", target_os = "windows"));
         #[cfg(target_os = "macos")]
         {
@@ -495,9 +535,13 @@ fn app_creator<'a>(
             open_control_channel(file, pdfcraft_ui_egui::control::serve(client))?;
         }
         // Autosave unsaved changes; offer to recover documents a crashed session left behind.
+        // A torn-off tab's window leaves the offer to the window it came from, which still runs
+        // and owns its entries.
         if let Some(dir) = pdfcraft_ui_egui::RecoveryStore::default_dir() {
-            app.enable_recovery(pdfcraft_ui_egui::RecoveryStore::new(dir));
+            let store = pdfcraft_ui_egui::RecoveryStore::new(dir);
+            if torn_off { app.enable_recovery_without_offer(store) } else { app.enable_recovery(store) }
         }
+        app.quit_when_empty = torn_off;
         // The OCR Verify screen stores its per-language dictionary beside recovery data.
         app.ocr_verify.dictionary_dir = pdfcraft_ui_egui::default_dictionary_dir();
         if let Some(state) = &cc.wgpu_render_state {
@@ -529,9 +573,14 @@ fn app_creator<'a>(
             app.reopen_last_files(&[]);
             app.combine_paths(&files);
         } else {
+            if let Some(key) = &recover_key {
+                app.open_handed_off(key);
+            }
             // With the preference on, last session's files come back first; files named on
             // the command line open after them, in front (#442).
-            app.reopen_last_files(&files);
+            if !torn_off {
+                app.reopen_last_files(&files);
+            }
             startup::open_files(&mut app, &files, two_paged);
         }
         for (k, v) in options {

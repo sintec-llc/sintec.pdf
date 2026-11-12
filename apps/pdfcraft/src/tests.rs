@@ -768,3 +768,15 @@ fn start_up_and_the_panic_hook_never_use_eprintln() {
         offenders.join("\n")
     );
 }
+
+#[test]
+fn a_torn_off_tabs_window_opens_where_it_was_dropped_and_keeps_no_geometry() {
+    use super::{WindowPlacement, native_options, with_placement};
+    let main = with_placement(native_options(false, false, eframe::Renderer::Glow), WindowPlacement::default());
+    assert!(main.persist_window, "the main window keeps its size and place");
+    assert_eq!(main.viewport.position, None);
+    let placement = WindowPlacement { torn_off: true, position: Some(egui::pos2(380.0, 283.0)) };
+    let torn = with_placement(native_options(false, false, eframe::Renderer::Glow), placement);
+    assert!(!torn.persist_window, "a torn-off tab's window leaves the main window's saved geometry alone");
+    assert_eq!(torn.viewport.position, Some(egui::pos2(380.0, 283.0)));
+}

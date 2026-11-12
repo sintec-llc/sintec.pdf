@@ -36,7 +36,11 @@ macro_rules! tl_ctx {
 }
 pub mod canvas;
 mod chrome;
+mod doc_windows;
+pub mod drag_ghost;
 mod image_engine;
+pub mod tab_transfer;
+pub mod tear_off;
 pub use combine_grid::ThumbState as CombineThumb;
 pub use combine_ui::{Columns as CombineColumns, CombineView, Lock as CombineLock, SortKey};
 mod commands;
@@ -306,6 +310,38 @@ struct PendingDestination {
     doc: DocId,
     name: String,
     receiver: std::sync::mpsc::Receiver<Option<(usize, pdfcraft_render::DestView)>>,
+}
+
+/// Sintec.PDF: a window of this process showing some document tabs, torn off the main window
+/// where no process of its own can be started for them ([`tear_off`]). Closing it moves its tabs
+/// back to the main window.
+pub struct DocWindow {
+    pub id: u64,
+    /// Its shown tab.
+    pub active: Option<DocId>,
+    /// Where to open it (screen points), until it has been shown.
+    pub(crate) spawn_at: Option<egui::Pos2>,
+    /// The window's own split-view state (it is never split, but its strip and page area are
+    /// its own).
+    pub(crate) panes: panes::Panes,
+}
+
+/// Sintec.PDF: a document tab being dragged: to another place in its strip, onto another window's
+/// strip, or out of the strip into a new window.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TabDrag {
+    pub doc: DocId,
+    pub from_window: u64,
+}
+
+/// Where a window's tab strip and tabs were last drawn, in screen points: a drag started in one
+/// window ends there (the system hands it every pointer event), so drops onto another window
+/// are found from these.
+#[derive(Clone, Debug)]
+pub(crate) struct WindowGeometry {
+    pub window: u64,
+    pub strip: egui::Rect,
+    pub tabs: Vec<(DocId, egui::Rect)>,
 }
 
 pub struct PdfCraftApp {
@@ -786,6 +822,40 @@ pub struct PdfCraftApp {
     fonts_ready: bool,
     /// The CJK fallback order the installed fonts follow (see `theme::installed_font_definitions`).
     fonts_cjk: theme::CjkPreference,
+    /// Sintec.PDF: starts the process a torn-off tab moves to (the desktop app sets it; see
+    /// [`tear_off`]). Without one, a torn-off tab opens in a window of this process.
+    pub window_spawner: Option<tear_off::WindowSpawner>,
+    /// Sintec.PDF: this process's end of tab drags between processes (the desktop app starts
+    /// it; see [`tab_transfer`]). Without one, tabs only move between windows of this process.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub tab_peer: Option<tab_transfer::Peer>,
+    /// Torn-off windows (the main window is 0 and isn't listed).
+    pub doc_windows: Vec<DocWindow>,
+    pub(crate) next_window_id: u64,
+    /// The window being drawn now (0: the main window).
+    pub current_window: u64,
+    /// While a torn-off window is drawn: the main window's shown tab, to restore after.
+    pub(crate) saved_main_active: Option<Option<usize>>,
+    pub tab_drag: Option<TabDrag>,
+    /// What a tab drag shows under the pointer, in any window (`drag_ghost`).
+    pub(crate) drag_ghost: Option<drag_ghost::Ghost>,
+    /// A torn-off window drew the ghost this frame (so the overlay window is not needed).
+    pub(crate) ghost_painted: bool,
+    /// Last frame's and this frame's window layouts (see [`WindowGeometry`]).
+    pub(crate) window_geometry: Vec<WindowGeometry>,
+    pub(crate) window_geometry_next: Vec<WindowGeometry>,
+    /// This frame's tab strips in physical screen pixels, for other processes ([`tab_transfer`]).
+    pub(crate) tab_strips_next: Vec<tab_transfer::Strip>,
+    /// The window showing the open dialog or palette (they act on its document).
+    pub(crate) overlay_window: Option<u64>,
+    /// A torn-off tab's window: once it has shown a document and the last one is closed, the
+    /// window (and its process) closes too instead of sitting on the start page.
+    pub quit_when_empty: bool,
+    pub(crate) had_document: bool,
+    /// The main window's last tab went to a window of another process: this window closes (the
+    /// process quits) as soon as nothing holds it, instead of showing the start page
+    /// ([`Self::close_emptied_window`]).
+    pub(crate) moved_last_away: bool,
     /// The window title last sent to the platform.
     pub window_title: String,
     /// The web page's title last set: the window title, but always with the file's name.

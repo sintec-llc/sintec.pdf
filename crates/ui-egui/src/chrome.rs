@@ -118,6 +118,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 let mut close = None;
                 // The pointer's x while a tab is dragged, for scrolling at the strip's edges.
                 let mut drag_x = None;
+                let mut strip_tabs: Vec<(pdfcraft_engine::DocId, Rect)> = Vec::new();
                 ui.scope(|ui| {
                     ui.style_mut().always_scroll_the_only_direction = true;
                     let mut area = egui::ScrollArea::horizontal().id_salt("document_tabs").max_width(tabs_width).auto_shrink([true, true]);
@@ -157,6 +158,11 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                 if response.dragged() || response.drag_stopped() {
                                     dragged = Some((i, response.drag_stopped()));
                                 }
+                                // Sintec.PDF: a tab dragged out of the strip goes to a window.
+                                if response.drag_started_by(egui::PointerButton::Primary) {
+                                    app.tab_drag = Some(crate::TabDrag { doc: app.views[i].id, from_window: app.current_window });
+                                    app.active = Some(i);
+                                }
                                 if changed && app.active == Some(i) && !app.combine_showing() {
                                     response.scroll_to_me(Some(Align::Center));
                                 }
@@ -170,7 +176,10 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                     close = Some(i);
                                 }
                             }
-                            drag_x = tab_drag(app, ui, &slots, dragged, Place::Main, close.is_some() || action.is_some());
+                            let busy = close.is_some() || action.is_some();
+                            strip_tabs = slots.iter().filter_map(|(i, r)| app.views.get(*i).map(|v| (v.id, *r))).collect();
+                            let left = window_tab_drag(app, ui, &t);
+                            drag_x = tab_drag(app, ui, &slots, dragged.filter(|_| !left), Place::Main, busy);
                             if let Some(i) = close
                                 && let Some(view) = app.views.get(i)
                             {
@@ -230,6 +239,20 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         }
                     }
                 });
+                // Where this strip and its tabs are on the screen, for drags from other windows
+                // (in points) and other processes (in physical pixels).
+                let window = app.current_window;
+                let on_screen = crate::doc_windows::screen_offset(ui.ctx());
+                app.window_geometry_next.retain(|g| g.window != window);
+                app.window_geometry_next.push(crate::WindowGeometry {
+                    window,
+                    strip: full.translate(on_screen),
+                    tabs: strip_tabs.iter().map(|(d, r)| (*d, r.translate(on_screen))).collect(),
+                });
+                let ppp = ui.ctx().pixels_per_point();
+                let px = |r: Rect| crate::tab_transfer::to_screen_px(r, on_screen, ppp);
+                app.tab_strips_next.retain(|s| s.window != window);
+                app.tab_strips_next.push(crate::tab_transfer::Strip::new(window, px(full), strip_tabs.iter().map(|(_, r)| px(*r))));
                 if overflow && arrow(ui, "chevron-right", offset < max_offset - 0.5, tl!("Scroll tabs right")) {
                     scroll_to = Some((offset + TAB_MIN_WIDTH + gap).min(max_offset));
                 }
@@ -320,6 +343,92 @@ fn tab_menu(app: &PdfCraftApp, ui: &mut egui::Ui, index: usize, action: &mut Opt
     if ui.add_enabled(reveal, egui::Button::new(label)).clicked() {
         *action = Some(Action::Reveal(id));
         ui.close();
+    }
+}
+
+/// Sintec.PDF: a tab of this window's strip being dragged . While the button is
+/// held: the ghost under the pointer and, outside the strip, a label saying what letting go does.
+/// Let go outside the strip: into the window whose strip it is over (of this process, or of another
+/// one through [`crate::tab_transfer`]), or (pulled out of the strip) into a new window. Returns
+/// whether the drag left the strip and so isn't a move along it (on release the tab is handled).
+fn window_tab_drag(app: &mut PdfCraftApp, ui: &egui::Ui, t: &Tokens) -> bool {
+    let window = app.current_window;
+    let Some(drag) = app.tab_drag.filter(|d| d.from_window == window) else { return false };
+    let Some(strip) = app.panes.main_strip else { return false };
+    let (pointer, down) = ui.input(|i| (i.pointer.latest_pos(), i.pointer.primary_down()));
+    let Some(p) = pointer else {
+        if !down {
+            app.tab_drag = None;
+        }
+        return false;
+    };
+    let offset = crate::doc_windows::screen_offset(ui.ctx());
+    let screen = p + offset;
+    let in_strip = strip.expand2(vec2(0.0, 24.0)).contains(p);
+    let pulled_out = !strip.expand2(vec2(0.0, 48.0)).contains(p);
+    // A window's only tab stays: tearing it off would make the same window again. It goes to a
+    // process of its own when the app can start one; otherwise windows of this process need the
+    // platform's (not on the web, where they'd be drawn inside this one).
+    let can_tear = app.window_tab_count(window) > 1 && (app.window_spawner.is_some() || !ui.ctx().embed_viewports());
+    let other = app.window_geometry.iter().find(|g| g.window != window && g.strip.expand2(vec2(0.0, 24.0)).contains(screen)).cloned();
+    // A window of another process (outside this one, which is in front while it drags).
+    #[cfg(not(target_arch = "wasm32"))]
+    let foreign = if in_strip || other.is_some() || ui.ctx().content_rect().contains(p) {
+        None
+    } else {
+        let ppp = ui.ctx().pixels_per_point();
+        let at = (screen.to_vec2() * ppp).to_pos2();
+        app.tab_peer.as_mut().and_then(|peer| crate::tab_transfer::find_target(peer.peers(), at, 24.0 * ppp))
+    };
+    #[cfg(target_arch = "wasm32")]
+    let foreign: Option<crate::tab_transfer::Target> = None;
+    if down {
+        // The ghost: the tab under the pointer, with its page once it leaves the strip.
+        let page = app.views.iter().find(|v| v.id == drag.doc).map_or(0, |v| v.current);
+        let title = app.session.get(drag.doc).map(|d| d.display_name()).unwrap_or_default();
+        app.drag_ghost = Some(crate::drag_ghost::Ghost { screen, title, doc: drag.doc, page, pages: 0, preview: !in_strip });
+        if !in_strip {
+            let label = if other.is_some() || foreign.is_some() {
+                Some(tl!("Release to move it to that window"))
+            } else if pulled_out && can_tear {
+                Some(tl!("Release to open it in a new window"))
+            } else {
+                None
+            };
+            if let Some(label) = label {
+                let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("tab-drag")));
+                let galley = painter.layout_no_wrap(label.to_string(), theme::medium(12.5), t.accent_text);
+                let r = Rect::from_min_size(p + vec2(14.0, -16.0 - galley.size().y - 10.0), galley.size() + vec2(16.0, 10.0));
+                painter.rect_filled(r, CornerRadius::same(6), t.accent);
+                painter.galley(r.min + vec2(8.0, 5.0), galley, t.accent_text);
+            }
+        }
+        ui.ctx().request_repaint();
+        return other.is_some() || foreign.is_some() || (pulled_out && can_tear);
+    }
+    // The button came up: wherever the pointer is, the drag ends here.
+    app.tab_drag = None;
+    use crate::tab_transfer::TabDrop;
+    match crate::tab_transfer::decide(in_strip, other, foreign, pulled_out, can_tear) {
+        // Along the strip: the strip's own drag moves it, in or out of split view's panes.
+        TabDrop::Reorder => false,
+        TabDrop::ToWindow(g) => {
+            let before = crate::doc_windows::tab_gap(&g.tabs, screen.x);
+            app.drop_tab_on_window(drag.doc, g.window, before);
+            true
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        TabDrop::ToProcess(target) => {
+            app.send_tab(drag.doc, target);
+            true
+        }
+        #[cfg(target_arch = "wasm32")]
+        TabDrop::ToProcess(_) => true,
+        TabDrop::NewWindow => {
+            app.detach_tab(drag.doc, Some(screen));
+            true
+        }
+        TabDrop::Stay => true,
     }
 }
 

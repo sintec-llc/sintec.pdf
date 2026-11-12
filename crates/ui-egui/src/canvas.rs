@@ -480,6 +480,8 @@ pub(crate) fn snapshot_tab_name(title: &str, file_name: &str, snapshot: &Snapsho
 }
 
 pub struct DocView {
+    /// Sintec.PDF: the window showing this document's tab (0: the main window).
+    pub window: u64,
     /// Where the tab shows (split view's panes) and the key that tells two
     /// views of one document apart (`crate::panes`).
     pub(crate) pane: crate::panes::ViewPane,
@@ -1032,6 +1034,7 @@ impl DocView {
     /// any layout or zoom the PDF itself asks for.
     pub fn new(id: DocId, info: &DocInfo, defaults: ViewDefaults) -> Self {
         Self {
+            window: 0,
             pane: Default::default(),
             id,
             from_attachment: None,

@@ -297,6 +297,23 @@ impl PdfCraftApp {
             page_props_draft: None,
             field_table_draft: None,
             form_preview: false,
+            window_spawner: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            tab_peer: None,
+            doc_windows: Vec::new(),
+            next_window_id: 1,
+            current_window: 0,
+            saved_main_active: None,
+            tab_drag: None,
+            drag_ghost: None,
+            ghost_painted: false,
+            window_geometry: Vec::new(),
+            window_geometry_next: Vec::new(),
+            tab_strips_next: Vec::new(),
+            overlay_window: None,
+            quit_when_empty: false,
+            had_document: false,
+            moved_last_away: false,
             window_title: String::new(),
             page_title: String::new(),
             recovery: None,
@@ -597,6 +614,10 @@ impl PdfCraftApp {
         #[cfg(not(target_arch = "wasm32"))]
         self.window_state.repair(ctx);
         self.dialog_epoch();
+        self.close_when_last_document_gone(ctx);
+        // Documents other processes handed over.
+        #[cfg(not(target_arch = "wasm32"))]
+        self.take_handed_tabs();
         // Notices raised outside `ui` (opened files, OS events, the control channel) translate too.
         let lang = i18n::Lang::from_pref(&self.language);
         i18n::set_current(lang);
@@ -759,8 +780,10 @@ impl PdfCraftApp {
         // Scrolling and group-drag previews are transient: never resume after changing tabs,
         // opening a modal/palette, or returning to a window that lost focus.
         let blocked = self.modal_open() || self.palette_open || !ctx.input(|i| i.focused);
+        // (Each window's shown tab takes input, whichever window has the focus.)
+        let shown: Vec<bool> = (0..self.views.len()).map(|i| self.shown_anywhere(i)).collect();
         for (index, view) in self.views.iter_mut().enumerate() {
-            let shut = blocked || self.active != Some(index);
+            let shut = blocked || !shown.get(index).copied().unwrap_or(false);
             view.objects.set_input_blocked(shut);
             if shut {
                 view.auto_scroll.cancel();
@@ -834,6 +857,19 @@ impl PdfCraftApp {
             if !picks {
                 view.pending_pick = None;
             }
+        }
+        // Windows record where they drew their strips each frame; drops read last frame's.
+        self.window_geometry = std::mem::take(&mut self.window_geometry_next);
+        let strips = std::mem::take(&mut self.tab_strips_next);
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(peer) = &self.tab_peer {
+            peer.publish(strips);
+        }
+        #[cfg(target_arch = "wasm32")]
+        drop(strips);
+        self.current_window = 0;
+        if self.active.and_then(|i| self.views.get(i)).is_some_and(|v| v.window != 0) {
+            self.active = self.views.iter().position(|v| v.window == 0);
         }
         panes::frame(self);
         // Forms' scripts read Highlight fields as `app.runtimeHighlight`.
@@ -928,10 +964,28 @@ impl PdfCraftApp {
         {
             self.suggest_fonts(id, page);
         }
-        palette::show(self, &ctx);
-        dialogs::show(self, &ctx);
+        self.show_doc_windows(&ctx);
+        // The dialog or palette shows in the window it was opened from (it acts on its document).
+        let overlay = self.dialog.is_some() || self.palette_open;
+        if !overlay {
+            self.overlay_window = None;
+        } else if self.overlay_window.is_none() {
+            self.overlay_window = Some(0);
+        }
+        if self.overlay_window.is_none_or(|w| w == 0) {
+            palette::show(self, &ctx);
+            dialogs::show(self, &ctx);
+        }
         self.show_progress(&ctx);
         widgets::toast(self, &ctx);
+        let painted = drag_ghost::paint(self, &ctx) | std::mem::take(&mut self.ghost_painted);
+        drag_ghost::show_overlay(self, &ctx, painted);
+        if self.tab_drag.is_none() {
+            self.drag_ghost = None;
+        }
+        // A tab moved away this frame may have emptied this window: it closes now, as nothing
+        // else may ask for another frame (the pointer is over the window that took it).
+        self.close_when_last_document_gone(&ctx);
         self.finish_render_frame(&ctx);
         // Screenshots are issued only after a settled pass that really drew the window.
         if let Some(mut control) = self.control.take() {

@@ -14,6 +14,24 @@ impl PdfCraftApp {
     ///
     /// This is the seed of the UI control channel (M3.9): the same verbs become `ui.set` calls.
     pub fn set_option(&mut self, key: &str, value: &str) -> Result<(), String> {
+        // Sintec.PDF (automation): the shown tab in a window of its own (a process of its own
+        // when the app can start one); "back" returns every tab torn off into a window of this
+        // process to the main window.
+        if key == "tear-off" {
+            if value == "back" {
+                let ids: Vec<u64> = self.doc_windows.iter().map(|w| w.id).collect();
+                for id in ids {
+                    self.close_doc_window(id);
+                }
+                return Ok(());
+            }
+            let doc = self.active_ids().map(|(_, id)| id).ok_or("`tear-off` needs an open document")?;
+            if self.window_tab_count(0) < 2 {
+                return Err("`tear-off` needs another tab to stay in the main window".into());
+            }
+            self.detach_tab(doc, None);
+            return Ok(());
+        }
         let view = self.active.and_then(|i| self.views.get_mut(i));
         match (key, view) {
             ("hotbar-size", _) => {

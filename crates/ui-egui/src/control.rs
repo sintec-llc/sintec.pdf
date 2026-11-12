@@ -74,6 +74,8 @@ use requests::Handled;
 use requests::key_batches;
 use screenshot::{Geometry, MAX_IMAGE_BYTES, retried_reservation};
 #[cfg(not(target_arch = "wasm32"))]
+pub(crate) use transport::random_token;
+#[cfg(not(target_arch = "wasm32"))]
 pub use transport::{Endpoint, serve};
 
 pub type Reply = Result<Value, String>;
