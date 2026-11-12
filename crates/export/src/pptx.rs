@@ -81,14 +81,25 @@ fn pptx_table(shape_id: usize, t: &Table, x: i64, y: i64, content_w: i64) -> (St
         rows_xml.push_str(&format!("<a:tr h=\"{row_h}\">"));
         for c in row {
             let span = c.span.max(1);
-            let run = run_drawingml(&c.text, c.size, c.bold, c.italic, c.color);
-            if span > 1 {
-                rows_xml.push_str(&format!("<a:tc gridSpan=\"{span}\"><a:txBody><a:bodyPr/><a:lstStyle/><a:p>{run}</a:p></a:txBody>{TC_PR}</a:tc>"));
-                for _ in 1..span {
-                    rows_xml.push_str(&format!("<a:tc hMerge=\"1\"><a:txBody><a:bodyPr/><a:lstStyle/><a:p/></a:txBody>{TC_PR}</a:tc>"));
-                }
+            // One paragraph per line; the part of a cell spanning down from above is empty.
+            let paras: String = if c.continued {
+                "<a:p/>".to_string()
             } else {
-                rows_xml.push_str(&format!("<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p>{run}</a:p></a:txBody>{TC_PR}</a:tc>"));
+                c.text.split('\n').map(|line| format!("<a:p>{}</a:p>", run_drawingml(line, c.size, c.bold, c.italic, c.color))).collect()
+            };
+            let mut attrs = String::new();
+            if span > 1 {
+                attrs.push_str(&format!(" gridSpan=\"{span}\""));
+            }
+            if c.continued {
+                attrs.push_str(" vMerge=\"1\"");
+            } else if c.rowspan > 1 {
+                attrs.push_str(&format!(" rowSpan=\"{}\"", c.rowspan));
+            }
+            rows_xml.push_str(&format!("<a:tc{attrs}><a:txBody><a:bodyPr/><a:lstStyle/>{paras}</a:txBody>{TC_PR}</a:tc>"));
+            for _ in 1..span {
+                let v = if c.continued { " vMerge=\"1\"" } else { "" };
+                rows_xml.push_str(&format!("<a:tc hMerge=\"1\"{v}><a:txBody><a:bodyPr/><a:lstStyle/><a:p/></a:txBody>{TC_PR}</a:tc>"));
             }
         }
         let used: usize = row.iter().map(|c| c.span).sum();
@@ -128,7 +139,7 @@ pub fn pptx(pages: &[Page], title: &str) -> Vec<u8> {
     let body = crate::layout::body_size(pages);
 
     for p in pages {
-        let (tables, consumed) = crate::tables(&p.blocks, &p.rules);
+        let (tables, consumed) = crate::page_tables(p);
         let title_idx = p
             .blocks
             .iter()

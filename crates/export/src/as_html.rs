@@ -140,9 +140,12 @@ fn table_html(t: &Table, simple: bool) -> String {
     let mut s = String::from("<table>\n");
     for row in &t.rows {
         s.push_str("<tr>");
-        for c in row {
-            let body = wrap_inline(esc(&c.text), c.bold, c.italic);
-            let span = if c.span > 1 { format!(" colspan=\"{}\"", c.span) } else { String::new() };
+        for c in row.iter().filter(|c| !c.continued) {
+            let body = wrap_inline(esc(&c.text), c.bold, c.italic).replace('\n', "<br>");
+            let mut span = if c.span > 1 { format!(" colspan=\"{}\"", c.span) } else { String::new() };
+            if c.rowspan > 1 {
+                span.push_str(&format!(" rowspan=\"{}\"", c.rowspan));
+            }
             let style = style_color(c.color, simple);
             s.push_str(&format!("<td{span}{style}>{body}</td>"));
         }
@@ -213,6 +216,7 @@ mod tests {
             images: Vec::new(),
             background: None,
             rules: Vec::new(),
+            lines: Vec::new(),
         };
         let out = html(&[page], "Clean");
         assert!(out.contains("<p style=\"color:#008000\">Hello</p>"), "{out}");
@@ -241,10 +245,11 @@ mod tests {
             rect: [0.0, 0.0, 100.0, 20.0],
             cols: vec![0.0, 50.0],
             rows: vec![vec![
-                Cell { text: "\u{1}".into(), size: 11.0, bold: true, italic: true, color: [0.0; 3], span: 1 },
-                Cell { text: "Val".into(), size: 11.0, bold: true, italic: false, color: [0.0; 3], span: 1 },
+                Cell { text: "\u{1}".into(), size: 11.0, bold: true, italic: true, color: [0.0; 3], span: 1, rowspan: 1, continued: false },
+                Cell { text: "Val".into(), size: 11.0, bold: true, italic: false, color: [0.0; 3], span: 1, rowspan: 1, continued: false },
             ]],
             ruled: None,
+            row_edges: Vec::new(),
         };
         assert_eq!(table_html(&table, true), "<table>\n<tr><td></td><td><strong>Val</strong></td></tr>\n</table>\n");
     }

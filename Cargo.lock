@@ -4462,6 +4462,7 @@ dependencies = [
  "chrono",
  "craft-cms",
  "craft-docpath",
+ "flate2",
  "getrandom 0.4.3",
  "icu_properties",
  "idna",

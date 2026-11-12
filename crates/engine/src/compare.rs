@@ -157,6 +157,8 @@ impl Session {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OfficeFormat {
     Docx,
+    /// Sintec.PDF: one worksheet per page, tables as cells (`pdfcraft_export::xlsx`).
+    Xlsx,
     Pptx,
     Html,
     /// CSS-free HTML that preserves text and inline images but drops colours and layout styling.
@@ -169,6 +171,7 @@ impl OfficeFormat {
     pub fn extension(self) -> &'static str {
         match self {
             OfficeFormat::Docx => "docx",
+            OfficeFormat::Xlsx => "xlsx",
             OfficeFormat::Pptx => "pptx",
             OfficeFormat::Html => "html",
             OfficeFormat::HtmlSimple => "html",
@@ -180,6 +183,7 @@ impl OfficeFormat {
     pub fn from_extension(ext: &str) -> Option<OfficeFormat> {
         match ext.to_ascii_lowercase().as_str() {
             "docx" => Some(OfficeFormat::Docx),
+            "xlsx" => Some(OfficeFormat::Xlsx),
             "pptx" => Some(OfficeFormat::Pptx),
             "html" | "htm" => Some(OfficeFormat::Html),
             "rtf" => Some(OfficeFormat::Rtf),
@@ -245,6 +249,8 @@ impl crate::Document {
     ) -> (Vec<pdfcraft_export::Page>, Vec<usize>) {
         let Some(cos) = self.editor.as_ref().map(|e| &e.cos) else { return (Vec::new(), Vec::new()) };
         let mut truncated = Vec::new();
+        // Sintec.PDF: the renderer that reads a ruled page's words (made on first use).
+        let mut renderer: Option<pdfcraft_render::PageRenderer> = None;
         // Each image object is encoded once and shared by every place that draws it.
         let mut encoded: HashMap<ObjRef, PreparedImage> = HashMap::new();
         let mut image_bytes = image_budget;
@@ -314,29 +320,87 @@ impl crate::Document {
                 // The page colour (Edit a PDF ▸ Background, a producer's page fill) for formats that keep one.
                 let background = pdfcraft_edit::page_background(cos, i).ok().flatten();
                 // The ruled lines tell a drawn table from text that merely lines up (#5149).
-                let rules = pdfcraft_edit::page_rules(cos, i).unwrap_or_default().into_iter().map(visible_rect).collect();
-                pdfcraft_export::Page { width: info.width as f64, height: info.height as f64, blocks, images, background, rules }
+                let rules: Vec<[f64; 4]> = pdfcraft_edit::page_rules(cos, i).unwrap_or_default().into_iter().map(visible_rect).collect();
+                // Sintec.PDF: the page's words, for ruled tables (a text line runs on across a
+                // table's cells). Only pages that draw a grid's worth of lines get their words
+                // read, as that renders the page's text; a word takes the style of the text line
+                // it sits in.
+                let lines = if rules.len() >= 4 {
+                    let styled: Vec<pdfcraft_edit::TextLine> = pdfcraft_edit::text_lines(cos, i).unwrap_or_default();
+                    let r = renderer.get_or_insert_with(|| {
+                        let config = pdfcraft_render::RenderConfig { password: self.password.as_deref().map(Arc::from), ..Default::default() };
+                        pdfcraft_render::PageRenderer::new(self.bytes.clone(), config)
+                    });
+                    let res = r.render(pdfcraft_render::RenderRequest {
+                        page: i,
+                        kind: pdfcraft_render::RequestKind::Text,
+                        scale: 1.0,
+                        ..Default::default()
+                    });
+                    res.text
+                        .map(|t| crate::js::page_words(&t, info))
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(text, rect)| {
+                            let (cx, cy) = ((rect[0] + rect[2]) / 2.0, (rect[1] + rect[3]) / 2.0);
+                            // `text_lines` boxes are in user space, a word's in the displayed page.
+                            let line = styled.iter().find(|l| {
+                                let v = visible_rect(l.rect);
+                                cx >= v[0] && cx <= v[2] && cy >= v[1] && cy <= v[3]
+                            });
+                            let (bold, italic) = line.map_or((false, false), |l| {
+                                let (b, i) = weight_and_slant(&l.base_font);
+                                (l.bold || b, l.italic || i)
+                            });
+                            pdfcraft_export::Block {
+                                text,
+                                rect,
+                                size: line.map_or((rect[3] - rect[1]) * 0.8, |l| l.size) * unit,
+                                bold,
+                                italic,
+                                color: line.map_or([0.0; 3], |l| l.color),
+                                rotation: 0.0,
+                                space_around: [false; 2],
+                            }
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                pdfcraft_export::Page { width: info.width as f64, height: info.height as f64, blocks, images, background, rules, lines }
             })
             .collect();
         (pages, truncated)
     }
 
-    /// The document as a Word, PowerPoint, HTML or RTF file.
+    /// The document as a Word, Excel, PowerPoint, HTML or RTF file (Excel sheets named "Page 1"…).
     pub fn export_office(&self, format: OfficeFormat) -> Vec<u8> {
-        self.export_office_checked(format).bytes
+        self.export_office_named(format, "Page")
+    }
+
+    /// Sintec.PDF: [`Document::export_office`] with the word Excel sheets are named with
+    /// ("Страница 1"…).
+    pub fn export_office_named(&self, format: OfficeFormat, page_label: &str) -> Vec<u8> {
+        self.export_office_checked_named(format, page_label).bytes
     }
 
     /// [`Self::export_office`], and the pages whose text it had to leave out
     /// ([`OfficeExport::truncated_pages`]).
     pub fn export_office_checked(&self, format: OfficeFormat) -> OfficeExport {
-        // RTF and Markdown leave pictures out.
+        self.export_office_checked_named(format, "Page")
+    }
+
+    /// [`Self::export_office_checked`] with the word Excel sheets are named with.
+    pub fn export_office_checked_named(&self, format: OfficeFormat, page_label: &str) -> OfficeExport {
+        // RTF, Excel and Markdown leave pictures out.
         let (pages, truncated_pages) =
-            self.export_pages_checked(!matches!(format, OfficeFormat::Rtf | OfficeFormat::Markdown), MAX_EXPORT_IMAGE_BYTES);
+            self.export_pages_checked(!matches!(format, OfficeFormat::Rtf | OfficeFormat::Markdown | OfficeFormat::Xlsx), MAX_EXPORT_IMAGE_BYTES);
         let title = self.info.title.clone().unwrap_or_else(|| self.name.trim_end_matches(".pdf").to_string());
         // Word and HTML name the document's language (`/Lang`), so spelling is checked in it.
         let language = self.initial_view().language;
         let bytes = match format {
             OfficeFormat::Docx => pdfcraft_export::docx_with_language(&pages, &title, language.as_deref()),
+            OfficeFormat::Xlsx => pdfcraft_export::xlsx(&pages, &title, page_label),
             OfficeFormat::Pptx => pdfcraft_export::pptx(&pages, &title),
             OfficeFormat::Html => pdfcraft_export::html_with_language(&pages, &title, language.as_deref()).into_bytes(),
             OfficeFormat::HtmlSimple => pdfcraft_export::html_simple_with_language(&pages, &title, language.as_deref()).into_bytes(),

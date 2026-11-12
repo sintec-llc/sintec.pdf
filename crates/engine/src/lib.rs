@@ -40,6 +40,9 @@ pub mod links;
 pub mod model3d;
 mod object_clip;
 pub mod ocr;
+pub mod office;
+#[cfg(test)]
+mod office_export_tests;
 mod open;
 pub mod open_parameters;
 pub mod optimizer;
@@ -49,6 +52,7 @@ pub mod print_raster;
 pub mod printcheck;
 mod protection;
 mod rich_copy;
+pub mod scan;
 pub mod scan_clean;
 mod scan_colours;
 mod scan_fields;

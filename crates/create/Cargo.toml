@@ -17,7 +17,7 @@ pdfcraft-fonts = { workspace = true }
 pdfcraft-xfa = { workspace = true }
 png = "0.18"
 tiff = "0.11"
-image = { version = "0.25", default-features = false, features = ["bmp", "gif", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["bmp", "gif", "png", "jpeg"] }
 # Already in the graph through image; read directly for CMYK JPEG samples, which image converts to RGB.
 zune-jpeg = "0.5"
 thiserror = { workspace = true }
@@ -32,6 +32,6 @@ rustix = { version = "1", features = ["process"] }
 [dev-dependencies]
 # An independent CCITT decoder, to check Create PDF's Group 4 images.
 hayro-ccitt.workspace = true
-image = { version = "0.25", default-features = false, features = ["bmp", "gif", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["bmp", "gif", "png", "jpeg"] }
 hayro-syntax = { workspace = true }
 pdfcraft-filters = { workspace = true }

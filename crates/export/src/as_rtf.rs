@@ -11,6 +11,8 @@ fn rtf_text(s: &str) -> String {
                 o.push('\\');
                 o.push(c);
             }
+            // A line break inside a table cell (a cell of several lines).
+            '\n' => o.push_str("\\line "),
             c if (c as u32) < 128 => o.push(c),
             c => {
                 // \uN with a ? fallback; UTF-16 units as signed 16-bit numbers.
@@ -100,6 +102,14 @@ pub fn rtf(pages: &[Page]) -> String {
                     let mut column = 0;
                     for c in row {
                         column += c.span.max(1);
+                        if c.continued {
+                            s.push_str("\\clvmrg");
+                        } else if c.rowspan > 1 {
+                            s.push_str("\\clvmgf");
+                        }
+                        if t.ruled.is_some() {
+                            s.push_str("\\clbrdrt\\brdrs\\brdrw10\\clbrdrl\\brdrs\\brdrw10\\clbrdrb\\brdrs\\brdrw10\\clbrdrr\\brdrs\\brdrw10");
+                        }
                         if let Some(x) = cellx.get(column.min(cellx.len()).saturating_sub(1)) {
                             s.push_str(&format!("\\cellx{x}"));
                         }

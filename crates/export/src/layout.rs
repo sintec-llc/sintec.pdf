@@ -46,6 +46,9 @@ pub struct Page {
     /// The ruled lines the page draws (horizontal and vertical strokes, thin filled bars), each
     /// as its box [x0, y0, x1, y1] on the displayed page in points (y up).
     pub rules: Vec<[f64; 4]>,
+    /// Sintec.PDF: the page's text lines (finer than [`Page::blocks`]), which ruled tables place
+    /// into their cells.
+    pub lines: Vec<Block>,
 }
 
 /// One cell of a detected table. `span` is how many grid columns the cell covers (a header
@@ -59,6 +62,22 @@ pub struct Cell {
     /// Text fill colour as sRGB components in 0..=1.
     pub color: [f64; 3],
     pub span: usize,
+    /// Sintec.PDF: how many rows the cell covers (a ruled table's label spanning rows).
+    pub rowspan: usize,
+    /// Sintec.PDF: the part of a cell above that spans into this row: writers merge or skip it.
+    pub continued: bool,
+}
+
+impl Cell {
+    /// A one-grid-cell cell with this text and style.
+    pub fn new(text: impl Into<String>, size: f64, bold: bool, italic: bool, color: [f64; 3]) -> Cell {
+        Cell { text: text.into(), size, bold, italic, color, span: 1, rowspan: 1, continued: false }
+    }
+
+    /// An empty cell (a hole in the grid).
+    pub fn empty() -> Cell {
+        Cell::new("", 11.0, false, false, [0.0; 3])
+    }
 }
 
 /// A table detected from the page's text layout: rows of cells, and the left edge of each
@@ -72,6 +91,9 @@ pub struct Table {
     /// writers draw the inside borders; it holds which outer edges (top, left, bottom, right) the
     /// lines also draw, as only those get a border.
     pub ruled: Option<[bool; 4]>,
+    /// Sintec.PDF: for a table read from lines ([`crate::lattice`]), the top edge of each row and
+    /// the table's bottom (user space, y up, descending), so writers can size the rows.
+    pub row_edges: Vec<f64>,
 }
 
 /// What goes into the output, in order.
@@ -487,7 +509,16 @@ pub(crate) fn tables(blocks: &[Block], rules: &[[f64; 4]]) -> (Vec<Table>, Vec<b
                 let b = &blocks[bi];
                 let Some(slot) = edges.iter().position(|e| (*e - b.rect[0]).abs() <= COL_TOL) else { continue };
                 let span = edges[slot + 1..].iter().filter(|e| **e > b.rect[0] + COL_TOL && **e < b.rect[2] - COL_TOL).count() + 1;
-                let cell = Cell { text: b.text.trim().to_string(), size: b.size, bold: b.bold, italic: b.italic, color: b.color, span };
+                let cell = Cell {
+                    text: b.text.trim().to_string(),
+                    size: b.size,
+                    bold: b.bold,
+                    italic: b.italic,
+                    color: b.color,
+                    span,
+                    rowspan: 1,
+                    continued: false,
+                };
                 match slots.get_mut(slot) {
                     Some(Some((c, sources))) => {
                         c.text.push(' ');
@@ -516,7 +547,7 @@ pub(crate) fn tables(blocks: &[Block], rules: &[[f64; 4]]) -> (Vec<Table>, Vec<b
                     }
                     None => {
                         column += 1;
-                        materialized.push(Cell { text: String::new(), size: 11.0, bold: false, italic: false, color: [0.0; 3], span: 1 });
+                        materialized.push(Cell::empty());
                     }
                 }
             }
@@ -531,7 +562,7 @@ pub(crate) fn tables(blocks: &[Block], rules: &[[f64; 4]]) -> (Vec<Table>, Vec<b
             right,
             used.iter().map(|&i| blocks[i].rect[3]).fold(f64::MIN, f64::max),
         ];
-        out.push(Table { rect, cols: edges, rows: rows_out, ruled: frame });
+        out.push(Table { rect, cols: edges, rows: rows_out, ruled: frame, row_edges: Vec::new() });
     };
     // Runs of consecutive multi-column rows are tables. Rows on either side of a run that
     // hold a single cell wide enough to span two columns (a header band, a totals row) join
@@ -702,7 +733,7 @@ pub(crate) fn items(pages: &[Page]) -> Vec<Item<'_>> {
         if i > 0 {
             out.push(Item::PageBreak);
         }
-        let (tables, consumed) = tables(&p.blocks, &p.rules);
+        let (tables, consumed) = page_tables(p);
         // A paragraph sits where its first run does: its other runs follow along its line and the
         // lines it wraps onto.
         let mut parts: Vec<([f64; 4], f64, Item)> = flowing_paragraphs(&p.blocks, &consumed, body)
@@ -719,4 +750,32 @@ pub(crate) fn items(pages: &[Page]) -> Vec<Item<'_>> {
         out.extend(reading_order(p, parts));
     }
     out
+}
+
+/// Sintec.PDF: a page's tables. Tables drawn with lines ([`crate::lattice`]) come first; the
+/// blocks they cover leave the flow, and tables found from text alignment ([`tables`]) are read
+/// from the rest. Returns the tables and, per block, whether a table consumed it.
+pub(crate) fn page_tables(p: &Page) -> (Vec<Table>, Vec<bool>) {
+    let ruled = crate::lattice::ruled_tables(p);
+    let inside = |b: &Block| {
+        let (cx, cy) = ((b.rect[0] + b.rect[2]) / 2.0, (b.rect[1] + b.rect[3]) / 2.0);
+        ruled.iter().any(|t| cx > t.rect[0] && cx < t.rect[2] && cy > t.rect[1] && cy < t.rect[3])
+    };
+    let mut consumed: Vec<bool> = p.blocks.iter().map(inside).collect();
+    if ruled.is_empty() {
+        return tables(&p.blocks, &p.rules);
+    }
+    let rest: Vec<usize> = (0..p.blocks.len()).filter(|&i| !consumed.get(i).copied().unwrap_or(true)).collect();
+    let rest_blocks: Vec<Block> = rest.iter().filter_map(|&i| p.blocks.get(i).cloned()).collect();
+    let (aligned, used) = tables(&rest_blocks, &p.rules);
+    for (k, &i) in rest.iter().enumerate() {
+        if used.get(k).copied().unwrap_or(false)
+            && let Some(c) = consumed.get_mut(i)
+        {
+            *c = true;
+        }
+    }
+    let mut all = ruled;
+    all.extend(aligned);
+    (all, consumed)
 }

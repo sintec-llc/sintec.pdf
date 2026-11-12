@@ -54,16 +54,44 @@ pub(crate) fn docx_table(t: &Table) -> String {
         s.push_str(&format!("<w:gridCol w:w=\"{w}\"/>"));
     }
     s.push_str("</w:tblGrid>");
-    for row in &t.rows {
+    for (ri, row) in t.rows.iter().enumerate() {
         s.push_str("<w:tr>");
+        // A table read from lines: a row at least as tall as on the page (twentieths of a point).
+        if let (Some(top), Some(bottom)) = (t.row_edges.get(ri), t.row_edges.get(ri + 1)) {
+            let h = top - bottom;
+            if h.is_finite() && h > 0.0 {
+                s.push_str(&format!(
+                    "<w:trPr><w:trHeight w:val=\"{}\" w:hRule=\"atLeast\"/></w:trPr>",
+                    (h * 20.0).round().clamp(1.0, 31680.0) as i64
+                ));
+            }
+        }
         let mut column = 0usize;
         for c in row {
             let span = if c.span > 1 { format!("<w:gridSpan w:val=\"{}\"/>", c.span) } else { String::new() };
+            let merge = if c.continued {
+                "<w:vMerge/>"
+            } else if c.rowspan > 1 {
+                "<w:vMerge w:val=\"restart\"/>"
+            } else {
+                ""
+            };
             let w: i64 = widths.iter().skip(column).take(c.span).sum();
-            s.push_str(&format!(
-                "<w:tc><w:tcPr><w:tcW w:w=\"{w}\" w:type=\"dxa\"/>{span}</w:tcPr><w:p>{}</w:p></w:tc>",
-                run_xml(&c.text, c.size, c.bold, c.italic, c.color)
-            ));
+            // One paragraph per line of the cell's text.
+            let paras: String = if c.continued || c.text.is_empty() {
+                "<w:p/>".to_string()
+            } else {
+                c.text
+                    .split('\n')
+                    .map(|line| {
+                        format!(
+                            "<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\"/></w:pPr>{}</w:p>",
+                            run_xml(line, c.size, c.bold, c.italic, c.color)
+                        )
+                    })
+                    .collect()
+            };
+            s.push_str(&format!("<w:tc><w:tcPr><w:tcW w:w=\"{w}\" w:type=\"dxa\"/>{span}{merge}</w:tcPr>{paras}</w:tc>"));
             column = column.saturating_add(c.span);
         }
         // Pad the grid so every row covers all columns (Word rejects short rows).

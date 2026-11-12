@@ -5,6 +5,7 @@
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString, Stream, serialize};
 
 mod extract;
+mod picture;
 mod text_font;
 mod upright_image;
 pub use extract::{ExtractedImage, ImageExport, extract_images, image_file, image_file_within};
@@ -13,6 +14,7 @@ mod office;
 pub use office::libreoffice;
 pub use office::{OFFICE_EXTENSIONS, is_office, office_to_pdf};
 use pdfcraft_fonts::wrap_with;
+pub use picture::{preview_rgba, signature_png};
 use text_font::TextFont;
 
 #[derive(Debug, thiserror::Error, PartialEq)]
