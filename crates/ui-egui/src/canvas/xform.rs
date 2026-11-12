@@ -18,6 +18,14 @@ impl DocView {
         self.text_panel.is_positive().then_some(self.text_panel)
     }
 
+    /// Edit text: the paragraph boxes as shown on `page` (user space), with each paragraph's text.
+    /// Across, a box spans where its text wraps when rewritten (the engine's `TextBlock::wrap`, or
+    /// the width a handle drag set); up and down, its rows. Empty until the page has been drawn in
+    /// Edit text (tests and automation).
+    pub fn shown_text_boxes(&self, page: usize) -> Vec<(String, [f64; 4])> {
+        self.edit_lines.get(&page).map(|(_, l)| l.iter().map(|b| (b.text.clone(), crate::edit_text_ui::frame(b))).collect()).unwrap_or_default()
+    }
+
     /// The document area on screen.
     pub fn viewport_rect(&self) -> Rect {
         self.viewport_screen

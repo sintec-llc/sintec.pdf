@@ -171,6 +171,12 @@ impl PdfCraftApp {
         let Some((i, id)) = self.active_ids() else { return false };
         // Sintec.PDF: text that needs glyphs the document's font lacks gets a substitute first,
         // or waits for the Font substitution dialog.
+        // Sintec.PDF (task 014): a paragraph whose width was set by dragging its box keeps
+        // wrapping there.
+        let edit = match (self.views.get(i), self.session.get(id)) {
+            (Some(v), Some(d)) => crate::edit_text_ui::with_kept_width(v, d.edit_generation(), edit),
+            _ => edit,
+        };
         let Some(edit) = self.with_substitutes(id, edit) else { return false };
         let label = edit.label();
         let target_arrange_image = match &edit {
@@ -235,6 +241,7 @@ impl PdfCraftApp {
                     view.comments.settling.clear();
                 }
                 view.signature_drag.committed(&edit, doc.edit_generation());
+                crate::edit_text_ui::kept_after(view, &edit, doc.edit_generation());
                 view.move_background.committed(&edit, doc.edit_generation());
                 view.text_background.committed(&edit);
                 // A form edit that leaves the pages and XFA as they were: the pages its fields are

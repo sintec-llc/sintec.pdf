@@ -103,6 +103,9 @@ pub(crate) enum ParagraphPart {
     /// Its left or right edge (on screen): a drag rewraps it.
     Left,
     Right,
+    /// Sintec.PDF (task 003): the move grip above its top-left corner: a drag moves it, also while
+    /// it is open for typing, and a click does nothing.
+    Grip,
 }
 
 /// The part of a comment a hit is on.

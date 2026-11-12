@@ -93,7 +93,7 @@ impl TextBackground {
             }
         }
         if let Some(ed) = editor {
-            let draft_key = (ed.text.clone(), ed.style());
+            let draft_key = (ed.text.clone(), ed.layout_style());
             if self.draft_key.as_ref() != Some(&draft_key) {
                 self.draft_rect = doc.text_edit_layout(ed.page, ed.block, &ed.text, &draft_key.1).ok().and_then(|layout| layout.draft_rect);
                 self.draft_key = Some(draft_key);

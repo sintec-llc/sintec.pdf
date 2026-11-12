@@ -255,7 +255,10 @@ pub(crate) fn hit(view: &DocView, xf: &PageXform, info: &DocInfo, page: usize, o
     {
         return Some(Hit::new(Owner::Objects { part: ObjectsPart::Selection }, Layer::Placed, egui::CursorIcon::Move));
     }
-    open.filter(|r| on_frame(r.shrink(2.0), p)).map(|_| Hit::new(Owner::Objects { part: ObjectsPart::Frame }, Layer::Handle, egui::CursorIcon::Move))
+    // Sintec.PDF (tasks 003, 011): the open paragraph's move grip and width handles lie on its
+    // frame; there a press takes the paragraph's box (`edit_text_ui::hit`), not the frame.
+    open.filter(|r| on_frame(r.shrink(2.0), p) && !crate::edit_text_ui::on_open_handles(view, xf, info, page, p))
+        .map(|_| Hit::new(Owner::Objects { part: ObjectsPart::Frame }, Layer::Handle, egui::CursorIcon::Move))
 }
 
 /// The object under `p` among the page's `objects`: added content over text over pictures, so a

@@ -93,6 +93,7 @@ mod split_view_find;
 mod split_view_render;
 mod stamps;
 mod status_layers;
+mod text_boxes;
 mod text_select;
 mod theme;
 mod theme_button;

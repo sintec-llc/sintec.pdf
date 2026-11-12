@@ -469,7 +469,9 @@ fn edit_inventory(
     let lines = match view.edit_lines.get(&i) {
         Some((g, l)) if *g == generation => l.clone(),
         _ => {
-            let l = doc.text_blocks(i);
+            let mut l = doc.text_blocks(i);
+            // Sintec.PDF (task 014): a box dragged to a width keeps it.
+            crate::edit_text_ui::keep_width(view, i, generation, &mut l);
             view.edit_lines.insert(i, (generation, l.clone()));
             l
         }
@@ -620,10 +622,9 @@ impl PageHits<'_> {
             can_modify && (tool == QuickTool::EditText || tool == QuickTool::AddText && !crate::content_ui::hits_added(xf, info, page, added, p));
         let (pictures, paragraphs, objects, grips) = if editing {
             let open = view.line_editor.as_ref().filter(|e| e.page == page);
-            let frame = open
-                .filter(|e| !e.has_changes())
-                .and_then(|e| lines.get(e.block))
-                .map(|l| xf.user_rect(info, page, l.rect.map(|v| v as f32)).expand(2.0));
+            // Its frame spans where it wraps (Sintec.PDF, task 015), as the editor draws it.
+            let frame =
+                open.filter(|e| !e.has_changes()).and_then(|e| lines.get(e.block)).map(|l| crate::edit_text_ui::paragraph_box(xf, info, page, l));
             // Add text acts on the page's paragraphs only in their boxes, edges included (its click
             // there finishes the box being typed and opens the paragraph, `ParagraphCx::adding`):
             // not on pictures, nor beside a paragraph, where a click starts a new box.

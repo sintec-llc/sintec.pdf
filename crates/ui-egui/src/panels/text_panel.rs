@@ -76,7 +76,10 @@ pub(crate) fn owns(ctx: &egui::Context, view: &crate::DocView, p: egui::Pos2) ->
 pub(crate) fn show(app: &mut PdfCraftApp, index: usize, ctx: &egui::Context) {
     let shown = floats(app, index);
     let Some(view) = app.views.get_mut(index) else { return };
+    let last = view.text_panel;
     view.text_panel = Rect::NOTHING;
+    // Sintec.PDF (task 013): where the open box is grabbed this frame (set by Edit text, used once).
+    let zones = std::mem::take(&mut view.open_box_zones);
     if !shown {
         return;
     }
@@ -88,8 +91,19 @@ pub(crate) fn show(app: &mut PdfCraftApp, index: usize, ctx: &egui::Context) {
     let t = Tokens::get(ctx);
     let layer = layer(doc_view);
     // Pinned by its top-right corner, and kept inside the page view, so it never spills over the
-    // rail.
-    let area = egui::Area::new(layer.id).order(layer.order).pivot(Align2::RIGHT_TOP).fixed_pos(pos2(right, viewport.top() + GAP));
+    // rail. Sintec.PDF (task 013): it steps over to the left side when on the right it would cover
+    // the open box's grip or width handles, and the left side keeps clear of them.
+    let height = if last.is_positive() { last.height() } else { max_height };
+    let (top, left) = (viewport.top() + GAP, viewport.left() + GAP);
+    let on_right = Rect::from_min_size(pos2(right - width, top), egui::vec2(width, height));
+    let on_left = Rect::from_min_size(pos2(left, top), egui::vec2(width, height));
+    let covers = |r: Rect| zones.iter().any(|z| r.intersects(*z));
+    let area = egui::Area::new(layer.id).order(layer.order);
+    let area = if covers(on_right) && !covers(on_left) {
+        area.pivot(Align2::LEFT_TOP).fixed_pos(pos2(left, top))
+    } else {
+        area.pivot(Align2::RIGHT_TOP).fixed_pos(pos2(right, top))
+    };
     let area = area.constrain_to(viewport).show(ctx, |ui| {
         let frame = egui::Frame::NONE.fill(t.panel).stroke(Stroke::new(BORDER, t.border)).corner_radius(CornerRadius::same(8));
         let frame = frame.inner_margin(Margin::same(PAD)).shadow(ui.visuals().popup_shadow);

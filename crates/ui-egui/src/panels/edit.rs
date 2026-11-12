@@ -474,6 +474,10 @@ impl PdfCraftApp {
                 && let Some(block) = doc.text_blocks(ed.page).get(ed.block)
             {
                 ed.refresh_source(block, doc.text_lines(ed.page));
+                // Sintec.PDF (task 014): a width its box was dragged to stays where it wraps.
+                if let Some(width) = crate::edit_text_ui::kept_width_of(&self.views[index], ed.page, ed.block, doc.edit_generation()) {
+                    ed.keep_wrap(width);
+                }
                 if let Some(ctx) = ctx {
                     // Sintec.PDF: the stand-ins are found again for the rewritten paragraph too.
                     ed.reload_fonts(ctx, doc);

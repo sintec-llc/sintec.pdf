@@ -148,6 +148,12 @@ impl TextLine {
         self.unreadable_mode.as_ref().map_or(Ok(()), |why| Err(EditError::Invalid(why.clone())))
     }
 
+    /// Whether this line starts after a break a rewrite kept on purpose (`/PCHard`): a newline
+    /// that was typed, which no rewrap may join.
+    pub fn after_kept_break(&self) -> bool {
+        self.hard_break
+    }
+
     /// Origin of the source baseline in PDF user space, independent of font ascent/descent.
     pub fn baseline(&self) -> [f64; 2] {
         [self.origin.x, self.origin.baseline]

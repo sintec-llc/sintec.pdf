@@ -5406,8 +5406,11 @@ fn dragging_a_paragraph_moves_it_and_its_edge_rewraps_it() {
     assert!(near(moved.rect[0], before.rect[0] + 30.0) && near(moved.rect[1], before.rect[1] + 50.0), "{:?} → {:?}", before.rect, moved.rect);
     assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().can_undo(), Some("Move object"));
     // Drag the handle on its right edge in to about 45 pt wide: "Page" and "1" rewrap onto two lines.
-    let edge = screen(moved.rect[2], (moved.rect[1] + moved.rect[3]) / 2.0) + egui::vec2(2.0, 0.0);
-    let narrower = (moved.rect[2] - moved.rect[0] - 45.0) as f32 * k;
+    // Sintec.PDF (015): a single line's box reaches where it wraps (the page's margin), not just
+    // its ink.
+    let shown = h.state().views[0].shown_text_boxes(0)[0].1;
+    let edge = screen(shown[2], (moved.rect[1] + moved.rect[3]) / 2.0) + egui::vec2(2.0, 0.0);
+    let narrower = (shown[2] - shown[0] - 45.0) as f32 * k;
     drag(&mut h, edge, edge - egui::vec2(narrower, 0.0));
     let s = h.state();
     let doc = s.session.get(s.views[0].id).unwrap();
@@ -5547,13 +5550,14 @@ fn paragraph_edges_and_frames_are_caught_without_aiming_for_the_hairline() {
         assert!(h.state_mut().execute("edit.edit_text"));
         h.run_steps(2);
         let id = h.state().views[0].id;
-        let b = h.state().session.get(id).unwrap().text_blocks(0)[0].clone();
         let r = h.state().views[0].page_screen_rect(0).expect("on screen");
         let k = r.width() / 200.0;
-        // The drawn box: the text on screen, 2 px larger each side.
+        // The drawn box: the paragraph's frame on screen (Sintec.PDF, 015: across, where it
+        // wraps), 2 px larger each side.
+        let b = h.state().views[0].shown_text_boxes(0)[0].1;
         let bx = egui::Rect::from_min_max(
-            egui::pos2(r.left() + b.rect[0] as f32 * k, r.top() + (300.0 - b.rect[3] as f32) * k),
-            egui::pos2(r.left() + b.rect[2] as f32 * k, r.top() + (300.0 - b.rect[1] as f32) * k),
+            egui::pos2(r.left() + b[0] as f32 * k, r.top() + (300.0 - b[3] as f32) * k),
+            egui::pos2(r.left() + b[2] as f32 * k, r.top() + (300.0 - b[1] as f32) * k),
         )
         .expand(2.0);
         (id, bx)
@@ -5692,8 +5696,9 @@ fn an_open_paragraphs_frame_shows_move_wherever_a_press_takes_the_box() {
     assert!(h.state().views[0].line_editor.is_none(), "and a click there selects the box");
 }
 
-/// The open paragraph's frame takes hold of the box on its sides too: there the edges of a closed
-/// paragraph would rewrap it, but around the open one lies its frame.
+/// The open paragraph's frame takes hold of the box around its text. Sintec.PDF (tasks 011, 013):
+/// beside the text, on its sides, lie the open box's width handles, which rewrap it as a closed
+/// paragraph's edges do (`text_boxes::grip`); above it, the frame.
 #[test]
 fn an_open_paragraphs_frame_takes_the_box_beside_its_text() {
     let mut h = harness(2, |_| {});
@@ -5707,8 +5712,13 @@ fn an_open_paragraphs_frame_takes_the_box_beside_its_text() {
     let middle = (before.rect[1] + before.rect[3]) / 2.0;
     click_at(&mut h, screen((before.rect[0] + before.rect[2]) / 2.0, middle));
     assert!(h.state().views[0].line_editor.is_some(), "a click on the text opens it for typing");
-    // 6 px left of the text: 4 px past the frame drawn 2 px out.
-    let beside = screen(before.rect[0], middle) - egui::vec2(6.0, 0.0);
+    // 6 px left of the text: 4 px past the frame drawn 2 px out, on the width handle.
+    let side = screen(before.rect[0], middle) - egui::vec2(6.0, 0.0);
+    h.hover_at(side);
+    h.run_steps(3);
+    assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::ResizeHorizontal, "the open box's width handle");
+    // 6 px over the text, away from its grip and handles: the frame.
+    let beside = screen((before.rect[0] + before.rect[2]) / 2.0 + 20.0, before.rect[3]) - egui::vec2(0.0, 6.0);
     h.hover_at(beside);
     h.run_steps(3);
     assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::Move, "the frame offers to move the box there");
@@ -6162,24 +6172,28 @@ fn a_quick_flick_on_either_edge_rewraps_the_paragraph() {
     // Grab edges near the box's top: a rewrapped box reaches the window's bottom, where the
     // tool's toast sits over the page and takes the press.
     let grip_y = |b: &pdfcraft_engine::TextBlock| b.rect[3] - 6.0;
-    // Narrow "Page 1" from its right edge to about 45 pt: it rewraps onto two lines.
+    // Narrow "Page 1" from its right edge to about 45 pt: it rewraps onto two lines. Sintec.PDF
+    // (015): the box's right edge is where the line wraps (the page's margin), not its ink's end.
     let b = block(&h);
-    let edge = screen(b.rect[2], grip_y(&b)) + egui::vec2(2.0, 0.0);
-    flick(&mut h, edge, edge - egui::vec2((b.rect[2] - b.rect[0] - 45.0) as f32 * k, 0.0));
+    let shown = h.state().views[0].shown_text_boxes(0)[0].1;
+    let edge = screen(shown[2], grip_y(&b)) + egui::vec2(2.0, 0.0);
+    flick(&mut h, edge, edge - egui::vec2((shown[2] - shown[0] - 45.0) as f32 * k, 0.0));
     let text: Vec<String> = lines(&h).iter().map(|l| l.text.clone()).collect();
     assert_eq!(text, ["Page", "1"], "narrowed from the right edge");
     // Flick the right edge outward, past the box and its handle: back onto one line.
     let b = block(&h);
     // 1 px outside the box: the grab zone's outer limit sits near 2 px, where a pixel of page
     // scale (the canvas width depends on the rail) decides whether the press lands on the handle.
-    let edge = screen(b.rect[2], grip_y(&b)) + egui::vec2(1.0, 0.0);
+    let shown = h.state().views[0].shown_text_boxes(0)[0].1;
+    let edge = screen(shown[2], grip_y(&b)) + egui::vec2(1.0, 0.0);
     flick(&mut h, edge, edge + egui::vec2(80.0 * k, 0.0));
     let text: Vec<String> = lines(&h).iter().map(|l| l.text.clone()).collect();
     assert_eq!(text, ["Page 1"], "widened by a fast drag that left the handle at once");
     // Flick the left edge inward: it rewraps and its left side follows the pointer.
     let b = block(&h);
-    let edge = screen(b.rect[0], grip_y(&b)) - egui::vec2(2.0, 0.0);
-    let inward = (b.rect[2] - b.rect[0] - 45.0) as f32;
+    let shown = h.state().views[0].shown_text_boxes(0)[0].1;
+    let edge = screen(shown[0], grip_y(&b)) - egui::vec2(2.0, 0.0);
+    let inward = (shown[2] - shown[0] - 45.0) as f32;
     flick(&mut h, edge, edge + egui::vec2(inward * k, 0.0));
     let after = lines(&h);
     let text: Vec<String> = after.iter().map(|l| l.text.clone()).collect();
@@ -6212,8 +6226,10 @@ fn a_paragraph_rewraps_from_the_outer_half_of_its_edge_handles() {
     // 3 px outside the box, on the handle. Near the box's top, clear of the tool's toast.
     let outside = 2.0 + 3.0;
     let before = block(&h);
-    let grip = screen(before.rect[2], before.rect[3] - 6.0) + egui::vec2(outside, 0.0);
-    drag(&mut h, grip, grip - egui::vec2((before.rect[2] - before.rect[0] - 45.0) as f32 * k, 0.0));
+    // Sintec.PDF (015): a single line's box reaches where it wraps, not just its ink.
+    let shown = h.state().views[0].shown_text_boxes(0)[0].1;
+    let grip = screen(shown[2], before.rect[3] - 6.0) + egui::vec2(outside, 0.0);
+    drag(&mut h, grip, grip - egui::vec2((shown[2] - shown[0] - 45.0) as f32 * k, 0.0));
     assert_eq!(lines(&h), ["Page", "1"], "narrowed from the right handle");
     let narrowed = block(&h);
     assert!(narrowed.rect[2] < before.rect[2] - 20.0 && (narrowed.rect[0] - before.rect[0]).abs() < 1.5, "{:?} → {:?}", before.rect, narrowed.rect);
@@ -6236,8 +6252,8 @@ fn a_paragraph_rewraps_from_the_outer_half_of_its_edge_handles() {
     // The left handle's outer half too.
     h.state_mut().undo();
     h.run_steps(2);
-    let grip = screen(before.rect[0], before.rect[3] - 6.0) - egui::vec2(outside, 0.0);
-    let inward = (before.rect[2] - before.rect[0] - 45.0) as f32;
+    let grip = screen(shown[0], before.rect[3] - 6.0) - egui::vec2(outside, 0.0);
+    let inward = (shown[2] - shown[0] - 45.0) as f32;
     drag(&mut h, grip, grip + egui::vec2(inward * k, 0.0));
     assert_eq!(lines(&h), ["Page", "1"], "narrowed from the left handle");
     assert!((block(&h).rect[0] - (before.rect[0] + f64::from(inward))).abs() < 1.5, "{:?} → {:?}", before.rect, block(&h).rect);
@@ -6945,10 +6961,14 @@ fn inline_editor_preserves_source_font_and_previews_live_bounds() {
         egui::pos2(page.left() + measured[2] as f32 * scale, page.top() + (300.0 - measured[1] as f32) * scale),
     )
     .expand(2.0);
+    // Sintec.PDF (015): the frame also spans where the paragraph wraps (its `TextBlock::wrap`), so
+    // it is the draft's PDF geometry widened, if need be, to the wrap width the rewrite uses.
+    let wrap_right = page.left() + (source.rect[0] + (source.wrap[1] - source.wrap[0])) as f32 * scale + 2.0;
+    let expected_frame = egui::Rect::from_min_max(expected_frame.min, egui::pos2(expected_frame.max.x.max(wrap_right), expected_frame.max.y));
     let live = frame(&h);
     assert!(
         (live.min - expected_frame.min).length() < 0.1 && (live.max - expected_frame.max).length() < 0.1,
-        "the live frame shows the same PDF geometry as Apply/Save"
+        "the live frame shows the same PDF geometry as Apply/Save: {live:?} vs {expected_frame:?}"
     );
     assert!(!dirty(&h), "draft measurement does not modify the document");
     h.key_press_modifiers(Modifiers::COMMAND, Key::Enter);

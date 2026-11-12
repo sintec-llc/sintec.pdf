@@ -693,6 +693,13 @@ pub struct DocView {
     pub(crate) pictures: crate::image_pick::PagePictures,
     /// A paragraph box being dragged (moved, or resized from its right edge) in Edit text.
     pub block_drag: Option<crate::edit_text_ui::BlockDrag>,
+    /// Sintec.PDF (task 014): the width a paragraph's box was dragged to, which its next rewrites
+    /// keep (PDFs store no wrap width).
+    pub(crate) kept_width: Option<crate::edit_text_ui::KeptWidth>,
+    /// Sintec.PDF (task 013): where a press grabs the box open for typing (its grip and width
+    /// edges, screen), set by Edit text each frame and taken by the Format text panel, which keeps
+    /// clear of them.
+    pub(crate) open_box_zones: Vec<Rect>,
     /// Commenting state: selected comment, gestures, composer.
     pub comments: crate::comments::CommentView,
     pub measure: crate::measure_ui::MeasureView,
@@ -1130,6 +1137,8 @@ impl DocView {
             pending_pick: None,
             pictures: Default::default(),
             block_drag: None,
+            kept_width: None,
+            open_box_zones: Vec::new(),
             pending_action: None,
             insert_at: None,
             grid_gap: None,
