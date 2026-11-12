@@ -1625,6 +1625,7 @@ fn driver_options_take_the_ppds_own_names_in_the_ui_language() {
 mod appearances;
 mod font_names;
 mod optional_content;
+mod windows_dotnet;
 
 #[test]
 fn repeated_content_references_share_one_decode_budget() {

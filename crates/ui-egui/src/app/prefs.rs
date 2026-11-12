@@ -113,6 +113,7 @@ impl PdfCraftApp {
             "always_default_view": self.always_default_view,
             "highlight_fields": self.view_defaults.highlight_fields,
             "units": self.units,
+            "match_paper_to_page": self.match_paper_to_page,
             "language": self.language,
             "reading_colors": self.reading_colors,
             // Null follows the system's text scaling.
@@ -386,6 +387,9 @@ impl PdfCraftApp {
     fn restore_behavior_prefs(&mut self, v: &serde_json::Value) {
         if let Some(show) = v["default_page_gaps"].as_bool() {
             self.view_defaults.show_page_gaps = show;
+        }
+        if let Some(on) = v["match_paper_to_page"].as_bool() {
+            self.match_paper_to_page = on;
         }
         if let Ok(units) = serde_json::from_value::<units::Unit>(v["units"].clone()) {
             self.units = units;

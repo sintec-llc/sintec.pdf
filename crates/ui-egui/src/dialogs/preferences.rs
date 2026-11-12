@@ -843,6 +843,7 @@ fn card_documents_and_view(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens,
         );
     });
     ctx.label_secondary(ui, tl!("For page sizes and margins."), t);
+    ctx.checkbox(ui, &mut app.match_paper_to_page, tl!("Match paper to PDF page size when printing"), t);
     ui.add_space(6.0);
     scrolling(ui, app, t, ctx);
 }

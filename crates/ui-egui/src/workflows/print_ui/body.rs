@@ -108,6 +108,7 @@ fn combo<T: PartialEq + Copy>(ui: &mut egui::Ui, id: &str, name: &str, value: &m
 pub(crate) fn body(
     ui: &mut egui::Ui,
     d: &mut PrintDraft,
+    match_paper: &mut bool,
     t: &Tokens,
     sizes: &[(f64, f64)],
     labels: &[String],
@@ -331,6 +332,15 @@ pub(crate) fn body(
                     custom_paper_row(ui, d, t);
                     ui.end_row();
                 }
+                ui.label("");
+                // Turning it on matches the current page at once; the choice stays for the next print.
+                if ui.add(widgets::checkbox(match_paper, tl!("Match paper to PDF page size when printing"))).changed()
+                    && *match_paper
+                    && let Some(&source) = sizes.get(d.current_page)
+                {
+                    d.match_page(source);
+                }
+                ui.end_row();
             });
             // Windows says which drivers can't print two-sided as they're asked; they keep their
             // own setting, even when Two-sided is Off, and for a booklet's both sides.
@@ -354,17 +364,8 @@ pub(crate) fn body(
                 ui.horizontal_wrapped(|ui| {
                     ui.label(crate::i18n::fmt(tl!("PDF page: {size}"), &[("size", &d.units.size(source.0, source.1))]));
                     let matched = d.matching_paper(source);
-                    if ui.add_enabled(matched.is_some(), egui::Button::new(tl!("Match page at 100%"))).clicked()
-                        && let Some(paper) = matched
-                    {
-                        d.paper = paper;
-                        d.paper_overridden = true;
-                        // A paper picked outright: nothing for leaving Label to give back.
-                        d.paper_before_label = None;
-                        d.handling = Handling::Size;
-                        d.size = SizeMode::Actual;
-                        d.orientation = Orientation::Auto;
-                        d.sheet = 0;
+                    if ui.add_enabled(matched.is_some(), egui::Button::new(tl!("Match page at 100%"))).clicked() {
+                        d.match_page(source);
                     }
                 });
             }

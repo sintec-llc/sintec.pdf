@@ -10,7 +10,11 @@ fn harness() -> Harness<'static, PdfCraftApp> {
 }
 
 fn harness_with_settings(settings: Option<String>) -> Harness<'static, PdfCraftApp> {
-    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+    harness_sized(settings, 900.0)
+}
+
+fn harness_sized(settings: Option<String>, height: f32) -> Harness<'static, PdfCraftApp> {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, height)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         if let Some(json) = &settings {
@@ -239,7 +243,7 @@ fn custom_pages_per_sheet_takes_columns_by_rows() {
     let layout = d.settings(4, &[]).unwrap().layout;
     assert_eq!(
         layout,
-        Layout::Multiple { cols: 2, rows: 1, per_sheet: 2, order: PageOrder::Horizontal, border: false, auto_rotate: true, custom: true }
+        Layout::Multiple { cols: 2, rows: 1, per_sheet: 2, order: PageOrder::Horizontal, border: false, auto_rotate: false, custom: true }
     );
     h.get_by_label("Sheet 1 of 2");
     // A count outside 1 to 99 (set through the control channel) is explained, not drawn.
@@ -354,7 +358,7 @@ fn print_dialog_shows_the_printer_driver_options() {
     h.get_by_label("Media");
     h.get_by_label("Paper tray");
     // The selected sheet's media is always sent, independently of changed driver properties.
-    let media = vec![("media".to_string(), "Letter".to_string())];
+    let media = vec![("media".to_string(), "A4".to_string())];
     assert_eq!(h.state().print_draft.job("form.pdf").options, [("InputSlot".to_string(), "Tray2".to_string()), media[0].clone()]);
     h.get_by_label("Reset to printer defaults").click();
     h.run_steps(2);
@@ -675,7 +679,8 @@ fn hanging_two_sided_reads_are_capped() {
 /// section: the saved print-ready PDF carries the page as a picture, no text.
 #[test]
 fn print_as_image_is_an_advanced_choice_that_saves_pictures() {
-    let mut h = harness();
+    // Tall enough that Advanced is on screen without scrolling.
+    let mut h = harness_sized(None, 1600.0);
     assert!(h.state_mut().execute("print.dialog"));
     h.run_steps(3);
     h.get_by_label("Advanced".to_uppercase().as_str()).click();
@@ -1008,6 +1013,12 @@ fn paper_choice_survives_cancel_and_settings_restore() {
     let mut h = harness();
     assert!(h.state_mut().execute("print.dialog"));
     h.run_steps(3);
+    // A4 is the default; pick another paper and back so the choice is an explicit one.
+    h.get_by_value("A4").click();
+    h.run_steps(2);
+    h.get_by_label("US Letter").click();
+    h.run_steps(2);
+    assert_eq!(h.state().print_draft.paper, letter);
     h.get_by_value("US Letter").click();
     h.run_steps(2);
     h.get_by_label("A4").click();
@@ -1788,7 +1799,7 @@ fn printer_papers_and_properties_selection() {
 
     // Initial state offers standard PAPERS.
     assert!(h.state().print_draft.papers.len() >= 21);
-    assert_eq!(h.state().print_draft.paper_name(), "US Letter");
+    assert_eq!(h.state().print_draft.paper_name(), "A4");
 
     // When the driver offers additional custom papers, they are available in d.papers.
     let custom_paper = ("Custom 333x444".to_string(), (333.0, 444.0));

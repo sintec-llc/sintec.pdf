@@ -183,7 +183,7 @@ impl Drop for WakeOnExit {
 impl PdfCraftApp {
     /// Open the Print dialog, preselecting the default printer and reading papers in the background.
     pub fn open_print(&mut self) {
-        let Some((i, _)) = self.active_ids() else { return };
+        let Some((i, id)) = self.active_ids() else { return };
         let (printers, printers_loading) = match self.printer_source.clone() {
             // The list from the last time the dialog opened, until the fresh one arrives.
             #[cfg(not(target_arch = "wasm32"))]
@@ -253,6 +253,12 @@ impl PdfCraftApp {
         };
         if changed {
             self.print_draft.apply_setup();
+        }
+        // Only with the preference on; otherwise the user's paper stays as it is.
+        if self.match_paper_to_page
+            && let Some(page) = self.session.get(id).and_then(|doc| doc.info.pages.get(current))
+        {
+            self.print_draft.match_page((f64::from(page.width), f64::from(page.height)));
         }
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(p) = printer {

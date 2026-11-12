@@ -149,7 +149,7 @@ impl Default for PrintDraft {
             rows: 1,
             order: PageOrder::Horizontal,
             border: false,
-            auto_rotate: true,
+            auto_rotate: false,
             booklet_subset: BookletSubset::BothSides,
             binding: Binding::Left,
             creep: 0.0,
@@ -160,7 +160,8 @@ impl Default for PrintDraft {
             content: Content::DocumentAndMarkups,
             as_image: false,
             dpi: 300.0,
-            paper: 0,
+            // A4: the standard paper outside North America (US Letter stays one click away).
+            paper: PAPERS.iter().position(|p| p.0 == "A4").unwrap_or(0),
             custom_papers: Vec::new(),
             custom_new: None,
             paper_before_label: None,
@@ -191,6 +192,20 @@ pub fn default_papers() -> Vec<(String, (f64, f64))> {
 }
 
 impl PrintDraft {
+    /// Picks the paper that fits `source` and prints it at 100% (no change when none fits).
+    pub fn match_page(&mut self, source: (f64, f64)) {
+        if let Some(paper) = self.matching_paper(source) {
+            self.paper = paper;
+            self.paper_overridden = true;
+            // A paper picked outright: nothing for leaving Label to give back.
+            self.paper_before_label = None;
+            self.handling = Handling::Size;
+            self.size = SizeMode::Actual;
+            self.orientation = Orientation::Auto;
+            self.sheet = 0;
+        }
+    }
+
     /// Find the index of a paper in `self.papers` matching `size`, allowing for orientation.
     pub fn matching_paper(&self, size: (f64, f64)) -> Option<usize> {
         print::matching_paper(size).or_else(|| {

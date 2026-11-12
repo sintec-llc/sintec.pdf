@@ -365,6 +365,9 @@ pub struct PdfCraftApp {
     pub view_defaults: canvas::ViewDefaults,
     /// The unit page sizes and margins are shown in (Preferences ▸ Documents and view).
     pub units: units::Unit,
+    /// Print picks the paper that fits the PDF page when the dialog opens (off by default: the
+    /// paper the user chose is used).
+    pub match_paper_to_page: bool,
     /// The paper Create ▸ Blank page makes (#5644): the system region's.
     pub blank_paper: paper::Paper,
     /// The Preferences ▸ Date format box while it's being edited, or while it holds an invalid

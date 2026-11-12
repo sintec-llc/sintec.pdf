@@ -73,6 +73,7 @@ mod prepare;
 mod print;
 mod print_custom_paper_names;
 mod print_late_printer_list;
+mod print_match_paper;
 mod properties_session;
 mod protect;
 mod reading_colors;
