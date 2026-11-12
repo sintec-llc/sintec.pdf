@@ -1162,12 +1162,12 @@ mod tests {
             return;
         }
         let ink = command("comment.ink").unwrap();
-        crate::i18n::set_current(crate::i18n::lang_from_tag("fr").unwrap());
-        assert_eq!(tl!(ink.label), "Dessiner à main levée");
-        assert!(matches_search(ink, "dessiner"), "translated French label must match");
+        crate::i18n::set_current(crate::i18n::lang_from_tag("ru").unwrap());
+        assert_eq!(tl!(ink.label), "Рисовать от руки");
+        assert!(matches_search(ink, "рисовать"), "translated Russian label must match");
         assert!(matches_search(ink, "freehand"), "canonical English label must still match");
         assert!(matches_search(ink, "comment.ink"), "command ID must still match");
-        assert!(!matches_search(ink, "introuvable"));
+        assert!(!matches_search(ink, "ненайдено"));
         crate::i18n::set_current(crate::i18n::Lang::EN);
     }
 }

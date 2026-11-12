@@ -2362,7 +2362,7 @@ fn a_stamp_without_an_appearance_draws_the_stamp_it_names() {
     // (restyling, flattening) still find nothing they may write.
     assert!(appearance::display_stamp(&stamp_dict("/Name /Draft /AP << /N 9 0 R >>")).is_none());
     assert!(appearance::build(&bare_doc(), &stamp_dict("/Name /Draft")).is_none());
-    assert!(appearance::display_stamp(&stamp_dict("/Name /Draft /PCStamp true")).is_none(), "PdfCraft's own stamps are drawn by `build`");
+    assert!(appearance::display_stamp(&stamp_dict("/Name /Draft /PCStamp true")).is_none(), "Sintec.PDF's own stamps are drawn by `build`");
     assert!(appearance::display_stamp(&stamp_dict("/Name /Draft /Rect [5 5 5 50]")).is_none(), "no width");
 }
 
@@ -3777,7 +3777,7 @@ fn pdfcraft_text_boxes_and_redaction_marks_look_as_before() {
     let mut doc = fixture();
     let mut tb = new(0, Shape::TextBox { rect: [100.0, 100.0, 220.0, 160.0], font_size: 12.5 });
     tb.style = Style { color: [0.1, 0.2, 0.3], fill: Some([1.0, 1.0, 0.8]), ..Style::default_for(&tb.shape) };
-    tb.contents = "PdfCraft text box that wraps onto a second line".into();
+    tb.contents = "Sintec.PDF text box that wraps onto a second line".into();
     let t = add_annotation(&mut doc, &tb, &meta("t")).unwrap();
     let mut tw = new(0, Shape::Typewriter { rect: [100.0, 300.0, 300.0, 320.0], font_size: 10.0 });
     tw.style = Style::default_for(&tw.shape);
@@ -3789,7 +3789,7 @@ fn pdfcraft_text_boxes_and_redaction_marks_look_as_before() {
     let all = list(&doc, 0);
     assert_eq!(
         ap_content(&doc, &all[t]),
-        "1 1 0.8 rg\n100 100 120 60 re f\n100 100 120 60 re W n\nBT\n/Helv 12.5 Tf\n0.1 0.2 0.3 rg\n1 0 0 1 102 146.75 Tm (PdfCraft text box) Tj\n1 0 0 1 102 131.75 Tm (that wraps onto a) Tj\n1 0 0 1 102 116.75 Tm (second line) Tj\nET\n"
+        "1 1 0.8 rg\n100 100 120 60 re f\n100 100 120 60 re W n\nBT\n/Helv 12.5 Tf\n0.1 0.2 0.3 rg\n1 0 0 1 102 146.75 Tm (Sintec.PDF text box) Tj\n1 0 0 1 102 131.75 Tm (that wraps onto a) Tj\n1 0 0 1 102 116.75 Tm (second line) Tj\nET\n"
     );
     assert_eq!(text(&all[t], b"DS"), "font: Helvetica 12.5pt; text-align:left; color:#1A334D");
     assert_eq!(ap_content(&doc, &all[w]), "100 300 200 20 re W n\nBT\n/Helv 10 Tf\n0 0 0 rg\n1 0 0 1 102 309 Tm (hello) Tj\nET\n");

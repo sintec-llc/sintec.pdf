@@ -79,7 +79,7 @@ fn saving_a_pdf_keeps_the_destinations_extended_attributes() {
     use rustix::fs::{XattrFlags, getxattr, setxattr};
     let dir = workdir("save-xattrs");
     let target = dir.join("a.pdf");
-    let tags = b"<plist version=\"1.0\"><array><string>PdfCraft\n6</string></array></plist>";
+    let tags = b"<plist version=\"1.0\"><array><string>Sintec.PDF\n6</string></array></plist>";
     let binary = b"\0\xffpdfcraft\0";
     let attributes: &[(&str, &[u8])] = &[("com.apple.metadata:_kMDItemUserTags", tags), ("com.pdfcraft.test", binary)];
     for (name, value) in attributes {
@@ -5076,20 +5076,20 @@ fn fill_and_sign_through_tools() {
     assert!(matches!(a.call("fill_sign_date_format", &json!({ "format": "HH:MM" })), Err(ToolError::InvalidArgs(_))));
     assert_eq!(ok(&mut a, "fill_sign_date_format", json!({}))["format"], "yyyy.mm.dd.", "a rejected format keeps the previous one");
     // Month and weekday names in a chosen language, for the preference or one date.
-    let f = ok(&mut a, "fill_sign_date_format", json!({ "format": "d. mmmm yyyy", "language": "cs" }));
-    assert_eq!((f["language"].as_str(), f["today"].as_str()), (Some("cs"), Some("14. listopadu 2023")), "{f}");
+    let f = ok(&mut a, "fill_sign_date_format", json!({ "format": "d. mmmm yyyy", "language": "ru" }));
+    assert_eq!((f["language"].as_str(), f["today"].as_str()), (Some("ru"), Some("14. ноября 2023")), "{f}");
     assert_eq!(f["languages"].as_array().unwrap().len(), pdfcraft_engine::dates::DATE_LANGUAGES.len(), "every date language");
-    ok(&mut a, "fill_sign_add", json!({ "doc": doc, "page": 1, "type": "date", "at": [20, 280], "format": "d \\de mmmm", "language": "es" }));
-    assert!(page_text(&mut a, doc)[0].contains("14 de noviembre"));
+    ok(&mut a, "fill_sign_add", json!({ "doc": doc, "page": 1, "type": "date", "at": [20, 280], "format": "mmmm d", "language": "en" }));
+    assert!(page_text(&mut a, doc)[0].contains("November 14"));
     assert!(matches!(a.call("fill_sign_date_format", &json!({ "format": "yyy" })), Err(ToolError::InvalidArgs(_))));
     // A date the PDF's text font can't hold is refused, not saved as "?".
-    match a.call("fill_sign_add", &json!({ "doc": doc, "page": 1, "type": "date", "at": [20, 300], "format": "dddd", "language": "ja" })) {
-        Err(ToolError::InvalidArgs(e)) => assert!(e.contains("火曜日") && e.contains("can't be written into the PDF yet"), "{e}"),
+    match a.call("fill_sign_add", &json!({ "doc": doc, "page": 1, "type": "date", "at": [20, 300], "format": "dddd", "language": "ru" })) {
+        Err(ToolError::InvalidArgs(e)) => assert!(e.contains("вторник") && e.contains("can't be written into the PDF yet"), "{e}"),
         other => panic!("expected a refusal, got {other:?}"),
     }
-    let f = ok(&mut a, "fill_sign_date_format", json!({ "format": "dddd", "language": "ja" }));
-    assert_eq!((f["today"].as_str(), f["unwritable"].as_str()), (Some("火曜日"), Some("火曜日")));
-    ok(&mut a, "fill_sign_date_format", json!({ "format": "d. mmmm yyyy", "language": "cs" }));
+    let f = ok(&mut a, "fill_sign_date_format", json!({ "format": "dddd", "language": "ru" }));
+    assert_eq!((f["today"].as_str(), f["unwritable"].as_str()), (Some("вторник"), Some("вторник")));
+    ok(&mut a, "fill_sign_date_format", json!({ "format": "d. mmmm yyyy", "language": "ru" }));
     assert!(matches!(a.call("fill_sign_date_format", &json!({ "format": "dd", "language": "xx" })), Err(ToolError::InvalidArgs(_))));
     assert!(matches!(
         a.call("fill_sign_add", &json!({ "doc": doc, "page": 1, "type": "date", "at": [20, 300], "language": "xx" })),

@@ -37,7 +37,7 @@ pub enum NotDecoded {
     BitDepth(i64),
     #[error("its decode array remaps the samples")]
     Decode,
-    #[error("it is compressed in a format PdfCraft cannot read back yet (JPEG 2000, JBIG2 or CCITT fax)")]
+    #[error("it is compressed in a format Sintec.PDF cannot read back yet (JPEG 2000, JBIG2 or CCITT fax)")]
     Filter,
     #[error("its JPEG colour transform is ambiguous, so readers may disagree about its colours")]
     Ambiguous,

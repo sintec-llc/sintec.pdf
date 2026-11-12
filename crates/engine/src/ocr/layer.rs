@@ -58,7 +58,7 @@ pub(crate) fn add_text(doc: &mut Document, page: usize, words: &[PlacedWord]) ->
         let mut differences = vec![Object::Int(1)];
         let mut procs = Dict::new();
         let mut cmap = String::from(
-            "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (PdfCraft) /Ordering (Unicode) /Supplement 0 >> def\n/CMapName /PdfCraftOCR def\n/CMapType 2 def\n1 begincodespacerange\n<01> <FF>\nendcodespacerange\n",
+            "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Sintec.PDF) /Ordering (Unicode) /Supplement 0 >> def\n/CMapName /PdfCraftOCR def\n/CMapType 2 def\n1 begincodespacerange\n<01> <FF>\nendcodespacerange\n",
         );
         for (batch, part) in chunk.chunks(100).enumerate() {
             cmap.push_str(&format!("{} beginbfchar\n", part.len()));

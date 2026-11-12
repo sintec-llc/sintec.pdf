@@ -85,7 +85,7 @@ impl PdfCraftApp {
                 }
                 Request::LaunchUrl(u) => self.request_document_url(&u, crate::LinkOrigin::Script),
                 Request::Submit(u) => self.notify_fmt(
-                    "The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.",
+                    "The form asks to be submitted to {u}; Sintec.PDF doesn't send form data. Save the document to keep your entries.",
                     &[("u", &u)],
                 ),
                 Request::SaveAs => {
@@ -420,11 +420,9 @@ mod tests {
             return;
         }
         let date_language = |code: &str| pdfcraft_engine::dates::DATE_LANGUAGES.iter().find(|l| l.code == code).expect("date language");
-        let hindi = date_language("hi");
-        assert_eq!(date_language_picker_name(hindi, |_| true), hindi.name, "the native name is kept when it can be drawn");
-        assert_eq!(date_language_picker_name(hindi, |_| false), "Hindi", "no Devanagari face: show the English name");
-        let chinese = date_language("zh-hans");
-        assert_eq!(date_language_picker_name(chinese, |_| false), "Simplified Chinese");
+        let russian = date_language("ru");
+        assert_eq!(date_language_picker_name(russian, |_| true), russian.name, "the native name is kept when it can be drawn");
+        assert_eq!(date_language_picker_name(russian, |_| false), "Russian", "no Cyrillic face: show the English name");
         for language in &pdfcraft_engine::dates::DATE_LANGUAGES {
             assert!(!date_language_picker_name(language, |_| false).is_empty(), "{}", language.code);
         }

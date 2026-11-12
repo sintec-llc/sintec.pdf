@@ -289,9 +289,9 @@ fn wait_value(h: &mut Harness<'static, PdfCraftApp>, name: &str, expected: &str)
 /// Every native script prompt identifies its document, even with misleading or empty titles.
 fn native_script_prompts_show_an_app_owned_caption() {
     for (script, body, title) in [
-        ("app.response({cQuestion:'Type a value',cTitle:'PdfCraft security',bPassword:true});", "Type a value", Some("PdfCraft security")),
+        ("app.response({cQuestion:'Type a value',cTitle:'Sintec.PDF security',bPassword:true});", "Type a value", Some("Sintec.PDF security")),
         ("app.response({cQuestion:'Empty title prompt',cTitle:''});", "Empty title prompt", None),
-        ("app.alert({cMsg:'Script message',cTitle:'PdfCraft security'});", "Script message", Some("PdfCraft security")),
+        ("app.alert({cMsg:'Script message',cTitle:'Sintec.PDF security'});", "Script message", Some("Sintec.PDF security")),
         ("app.alert({cMsg:'Untitled alert',cTitle:''});", "Untitled alert", None),
         ("app.popUpMenuEx({cName:'Pick a value',cReturn:'yes'});", "Pick a value", None),
     ] {
@@ -301,7 +301,7 @@ fn native_script_prompts_show_an_app_owned_caption() {
         wait_for(&mut h, body);
         assert!(h.query_by_label("This document's script is asking").is_some(), "{script}");
         assert_eq!(
-            h.query_by_label("This request comes from the document, not PdfCraft. Only enter a password if you trust this document.").is_some(),
+            h.query_by_label("This request comes from the document, not Sintec.PDF. Only enter a password if you trust this document.").is_some(),
             script.contains("bPassword:true"),
             "{script}"
         );

@@ -76,7 +76,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::NONE.inner_margin(egui::Margin { left: 36, right: 36, top: 28, bottom: 28 }).show(ui, |ui| {
-            ui.label(egui::RichText::new(tl!("Welcome to PdfCraft")).font(theme::semibold(24.0)));
+            ui.label(egui::RichText::new(tl!("Welcome to Sintec.PDF")).font(theme::semibold(24.0)));
             ui.label(
                 egui::RichText::new(tl!("An open-source PDF workbench — local, private, and scriptable."))
                     .color(t.text_muted)
@@ -202,7 +202,9 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 });
                 ui.add_space(8.0);
                 if app.recent.is_empty() {
-                    ui.label(egui::RichText::new(tl!("Files you open in PdfCraft appear here. Drop a PDF anywhere to open it.")).color(t.text_muted));
+                    ui.label(
+                        egui::RichText::new(tl!("Files you open in Sintec.PDF appear here. Drop a PDF anywhere to open it.")).color(t.text_muted),
+                    );
                 }
             }
             let mut open = None;
@@ -269,7 +271,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             ui.add_space(20.0);
             widgets::section_title(ui, tl!("Privacy"));
             ui.label(
-                egui::RichText::new(tl!("PdfCraft works offline. No telemetry, no account, and no cloud processing unless you add a provider."))
+                egui::RichText::new(tl!("Sintec.PDF works offline. No telemetry, no account, and no cloud processing unless you add a provider."))
                     .color(t.text_muted),
             );
         });
@@ -320,8 +322,8 @@ mod tests {
         if !crate::i18n::needs_catalogs() {
             return;
         }
-        let de = crate::i18n::Lang::from_code("de").unwrap();
-        crate::i18n::set_current(de);
+        let ru = crate::i18n::Lang::from_code("ru").unwrap();
+        crate::i18n::set_current(ru);
         let ctx = egui::Context::default();
         ctx.set_fonts(theme::font_definitions());
         let mut app = PdfCraftApp::new();
@@ -333,7 +335,7 @@ mod tests {
             .items
             .iter()
             .take(3)
-            .map(|item| crate::i18n::tr(de, item.label))
+            .map(|item| crate::i18n::tr(ru, item.label))
             .collect::<Vec<_>>()
             .join(" · ");
         let output = ctx
@@ -346,7 +348,7 @@ mod tests {
         let description = text_shapes.iter().find(|text| text.galley.job.text == blurb).unwrap();
         let action = text_shapes
             .iter()
-            .find(|text| text.galley.job.text == crate::i18n::tr(de, "Use now") && (text.pos.x - description.pos.x).abs() < 0.1)
+            .find(|text| text.galley.job.text == crate::i18n::tr(ru, "Use now") && (text.pos.x - description.pos.x).abs() < 0.1)
             .unwrap();
         assert!(description.galley.rows.len() <= 2);
         assert!(

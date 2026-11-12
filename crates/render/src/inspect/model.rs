@@ -932,7 +932,7 @@ mod review_state_tests {
             ("m3", Some("c"), "Carol", Some("Marked")),
             ("n", None, "Alice", None),
             ("n1", Some("n"), "Bob", Some("Completed")),
-            ("n2", Some("n"), "Bob", Some("None")), // unchained, as PdfCraft wrote it before
+            ("n2", Some("n"), "Bob", Some("None")), // unchained, as Sintec.PDF wrote it before
             // A loop of state replies belongs to nothing.
             ("x", Some("y"), "Eve", Some("Accepted")),
             ("y", Some("x"), "Eve", Some("Accepted")),

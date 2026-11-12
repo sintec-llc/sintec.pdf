@@ -73,7 +73,7 @@ mod web {
             Box::pin(wait(client.send(&method, params)))
         });
         if let Err(e) = Rc::new(PageApi::new(APP, methods(), request)).install() {
-            eframe::web_sys::console::warn_1(&format!("PdfCraft: couldn't install window.{APP}: {e:?}").into());
+            eframe::web_sys::console::warn_1(&format!("Sintec.PDF: couldn't install window.{APP}: {e:?}").into());
         }
     }
 

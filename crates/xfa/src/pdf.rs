@@ -948,7 +948,7 @@ impl Emitter<'_> {
         }
         let Some(target) = link_target(href) else {
             if !self.warnings.iter().any(|w| w.starts_with(LINK_LEFT_OUT)) {
-                self.warnings.push(format!("{LINK_LEFT_OUT}: PdfCraft makes links only of web (http, https) and email (mailto) addresses"));
+                self.warnings.push(format!("{LINK_LEFT_OUT}: Sintec.PDF makes links only of web (http, https) and email (mailto) addresses"));
             }
             return None;
         };

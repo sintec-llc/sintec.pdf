@@ -493,29 +493,29 @@ fn theme_commands_and_options_report_preference_and_effective_colours() {
 }
 
 #[test]
-fn lithuanian_password_dialog_translates_dynamic_labels_and_validation() {
-    if crate::support::skip_without_catalogs("lithuanian_password_dialog_translates_dynamic_labels_and_validation") {
+fn russian_password_dialog_translates_dynamic_labels_and_validation() {
+    if crate::support::skip_without_catalogs("russian_password_dialog_translates_dynamic_labels_and_validation") {
         return;
     }
     let (mut h, c) = harness();
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "lt" }));
+    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ru" }));
     ok(&mut h, &c, "ui.set", json!({ "key": "dialog", "value": "protect" }));
     h.run_steps(2);
-    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Peržiūrėti");
-    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Redaguoti").click();
+    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Просмотра");
+    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Редактирования").click();
     h.run_steps(2);
     assert!(!h.state().protect_draft.viewing);
-    h.get_by_role_and_label(egui::accesskit::Role::PasswordInput, "Įveskite slaptažodį");
-    h.get_by_role_and_label(egui::accesskit::Role::PasswordInput, "Pakartokite slaptažodį");
+    h.get_by_role_and_label(egui::accesskit::Role::PasswordInput, "Введите пароль");
+    h.get_by_role_and_label(egui::accesskit::Role::PasswordInput, "Повторите пароль");
     h.state_mut().protect_draft.password = "abc".into();
     h.state_mut().protect_draft.confirm = "xyz".into();
     h.run_steps(2);
-    h.get_by_label("Slaptažodžiai nesutampa.");
+    h.get_by_label("Пароли не совпадают.");
 }
 
 #[test]
-fn lithuanian_inspector_title_updates_through_the_control_channel() {
-    if crate::support::skip_without_catalogs("lithuanian_inspector_title_updates_through_the_control_channel") {
+fn russian_inspector_title_updates_through_the_control_channel() {
+    if crate::support::skip_without_catalogs("russian_inspector_title_updates_through_the_control_channel") {
         return;
     }
     let (mut h, c) = harness();
@@ -523,9 +523,9 @@ fn lithuanian_inspector_title_updates_through_the_control_channel() {
     h.run_steps(2);
     h.get_by_label("Inspector");
     let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "lt" }));
+    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ru" }));
     h.run_steps(2);
-    h.get_by_label("Inspektorius");
+    h.get_by_label("Инспектор");
     assert!(h.query_by_label("Inspector").is_none());
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"], documents);
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "en" }));
@@ -547,7 +547,7 @@ fn language_switch_preserves_document_and_command_ids() {
     let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
     assert_eq!(documents[0]["dirty"], true);
     let commands = ok(&mut h, &c, "ui.commands", json!({}));
-    for code in ["ja", "zh-hans", "fr", "de", "uk", "lt", "en"] {
+    for code in ["ru", "en"] {
         if crate::support::skip_without_glyphs(&format!("language_switch_preserves_document_and_command_ids ({code})"), code, "") {
             continue;
         }
@@ -559,11 +559,11 @@ fn language_switch_preserves_document_and_command_ids() {
         assert_eq!(ok(&mut h, &c, "ui.commands", json!({})), commands);
 
         let lang = i18n::Lang::from_code(code).unwrap();
-        // A title without an ASCII letter shows its mnemonic after it ("ファイル(F)").
+        // A title without an ASCII letter shows its mnemonic after it ("Файл(F)").
         let file = i18n::tr(lang, "File");
         h.get_by(|n| n.role() == egui::accesskit::Role::MenuItem && n.label().is_some_and(|l| l.starts_with(file))).click();
         h.run_steps(2);
-        // The mnemonic goes before an ellipsis: "開く(O)…".
+        // The mnemonic goes before an ellipsis: "Открыть…(O)" would hide it, so it reads "Открыть(O)…".
         let open = i18n::tr(lang, "Open…").trim_end_matches('…');
         let open_row = |n: &egui_kittest::kittest::AccessKitNode<'_>| {
             n.role() == egui::accesskit::Role::MenuItem && n.label().is_some_and(|l| l.starts_with(open))
@@ -987,31 +987,40 @@ fn state_and_view_options() {
     assert!(call(&mut h, &c, "ui.set", json!({ "key": "panel", "value": "nonsense" })).is_err());
 }
 
-/// In a Japanese interface, the mode tabs and Preferences show Japanese labels, the command
-/// palette finds commands by their Japanese or English names or their ids, and switching back to
-/// English keeps the tabs working.
+/// In a Russian interface, the mode tabs and Preferences show Russian labels, the language
+/// selector switches to English and back, the command palette finds commands by their Russian or
+/// English names or their ids, and switching back to English keeps the tabs working.
 #[test]
-fn japanese_controls_and_search_keep_command_ids() {
-    if crate::support::skip_without_catalogs("japanese_controls_and_search_keep_command_ids") {
-        return;
-    }
-    if crate::support::skip_without_glyphs("japanese_controls_and_search_keep_command_ids", "ja", "") {
+fn russian_preferences_and_search_keep_command_ids() {
+    if crate::support::skip_without_catalogs("russian_preferences_and_search_keep_command_ids") {
         return;
     }
     let (mut h, c) = harness();
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ja" }));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "ja");
-    ok(&mut h, &c, "ui.click", json!({ "label": "変換" }));
+    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ru" }));
+    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "ru");
+    ok(&mut h, &c, "ui.click", json!({ "label": "Преобразовать" }));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "Convert");
 
     ok(&mut h, &c, "ui.command", json!({ "id": "app.preferences" }));
     // The command sets the dialog; its content reaches the accessibility tree in the next pass.
     h.run_steps(2);
-    let prefs = ok(&mut h, &c, "ui.inspect", json!({ "query": "表示言語" }));
+    let prefs = ok(&mut h, &c, "ui.inspect", json!({ "query": "Язык интерфейса" }));
     assert!(prefs["count"].as_u64().unwrap() > 0, "{prefs}");
-    ok(&mut h, &c, "ui.click", json!({ "label": "OK" }));
+    for (current, next, code) in [("Русский", "English", "en"), ("English", "Русский", "ru")] {
+        let selector = ok(&mut h, &c, "ui.inspect", json!({ "query": current }));
+        let combo = selector["widgets"].as_array().unwrap().iter().find(|w| w["role"] == "ComboBox").expect("language selector");
+        ok(&mut h, &c, "ui.click", json!({ "id": combo["id"] }));
+        ok(&mut h, &c, "ui.click", json!({ "label": next }));
+        assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], code);
+    }
+    ok(&mut h, &c, "ui.click", json!({ "label": "ОК" }));
 
-    for (query, translated) in [("整理", "ページを整理"), ("Split document", "文書を分割…"), ("page.split", "文書を分割…")] {
+    for (query, translated) in [
+        ("Упорядочить", "Упорядочить страницы"),
+        ("Разделить", "Разделить документ…"),
+        ("Split document", "Разделить документ…"),
+        ("page.split", "Разделить документ…"),
+    ] {
         ok(&mut h, &c, "ui.command", json!({ "id": "view.palette" }));
         ok(&mut h, &c, "ui.type", json!({ "text": query }));
         let hits = ok(&mut h, &c, "ui.inspect", json!({ "query": translated }));
@@ -1025,106 +1034,26 @@ fn japanese_controls_and_search_keep_command_ids() {
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "AllTools");
 }
 
-/// In a German interface, the mode tabs and Preferences show German labels, the language
-/// selector switches to English and back, and the command palette finds Split document by its
-/// German name, its English name or its command id.
-#[test]
-fn german_preferences_and_search_keep_command_ids() {
-    if crate::support::skip_without_catalogs("german_preferences_and_search_keep_command_ids") {
-        return;
-    }
-    let (mut h, c) = harness();
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "de" }));
-    ok(&mut h, &c, "ui.click", json!({ "label": "Konvertieren" }));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "Convert");
-    ok(&mut h, &c, "ui.command", json!({ "id": "app.preferences" }));
-    h.run_steps(2);
-    let prefs = ok(&mut h, &c, "ui.inspect", json!({ "query": "Sprache der Oberfläche" }));
-    assert!(prefs["count"].as_u64().unwrap() > 0, "{prefs}");
-    let selector = ok(&mut h, &c, "ui.inspect", json!({ "query": "Deutsch" }));
-    let combo = selector["widgets"].as_array().unwrap().iter().find(|w| w["role"] == "ComboBox").expect("language selector");
-    ok(&mut h, &c, "ui.click", json!({ "id": combo["id"] }));
-    ok(&mut h, &c, "ui.click", json!({ "label": "English" }));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "en");
-    let selector = ok(&mut h, &c, "ui.inspect", json!({ "query": "English" }));
-    let combo = selector["widgets"].as_array().unwrap().iter().find(|w| w["role"] == "ComboBox").expect("language selector");
-    ok(&mut h, &c, "ui.click", json!({ "id": combo["id"] }));
-    ok(&mut h, &c, "ui.click", json!({ "label": "Deutsch" }));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "de");
-    ok(&mut h, &c, "ui.click", json!({ "label": "OK" }));
-    for query in ["Dokument teilen", "Split document", "page.split"] {
-        ok(&mut h, &c, "ui.command", json!({ "id": "view.palette" }));
-        ok(&mut h, &c, "ui.type", json!({ "text": query }));
-        let hits = ok(&mut h, &c, "ui.inspect", json!({ "query": "Dokument teilen…" }));
-        assert!(hits["count"].as_u64().unwrap() > 0, "{query}: {hits}");
-        ok(&mut h, &c, "ui.key", json!({ "key": "Escape" }));
-        h.state_mut().palette_query.clear();
-    }
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"][0]["name"], "doc.pdf");
-}
-
-/// In a Ukrainian interface, Preferences and dialogs show Ukrainian labels, the command palette
-/// finds Split document by its Ukrainian name, its English name or its command id, and a refused
-/// edit's notice names the command in Ukrainian.
-#[test]
-fn ukrainian_preferences_and_search_keep_command_ids() {
-    if crate::support::skip_without_catalogs("ukrainian_preferences_and_search_keep_command_ids") {
-        return;
-    }
-    let (mut h, c) = harness();
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "uk" }));
-    ok(&mut h, &c, "ui.command", json!({ "id": "app.preferences" }));
-    h.run_steps(2);
-    for label in ["Мова інтерфейсу", "Українська"] {
-        let found = ok(&mut h, &c, "ui.inspect", json!({ "query": label }));
-        assert!(found["count"].as_u64().unwrap() > 0, "{label}: {found}");
-    }
-    ok(&mut h, &c, "ui.click", json!({ "label": "OK" }));
-    for query in ["Розділити", "Split document", "page.split"] {
-        ok(&mut h, &c, "ui.command", json!({ "id": "view.palette" }));
-        ok(&mut h, &c, "ui.type", json!({ "text": query }));
-        let hits = ok(&mut h, &c, "ui.inspect", json!({ "query": "Розділити документ…" }));
-        assert!(hits["count"].as_u64().unwrap() > 0, "{query}: {hits}");
-        ok(&mut h, &c, "ui.key", json!({ "key": "Escape" }));
-        h.state_mut().palette_query.clear();
-    }
-    for (dialog, label) in [("properties", "Властивості документа"), ("protect", "Захистити паролем"), ("about", "Учасники")]
-    {
-        ok(&mut h, &c, "ui.set", json!({ "key": "dialog", "value": dialog }));
-        let found = ok(&mut h, &c, "ui.inspect", json!({ "query": label }));
-        assert!(found["count"].as_u64().unwrap() > 0, "{dialog}: {found}");
-    }
-    ok(&mut h, &c, "ui.set", json!({ "key": "dialog", "value": "none" }));
-    assert!(!h.state_mut().apply_edit(pdfcraft_engine::Edit::DeletePages { pages: vec![0, 1, 2, 3, 4] }));
-    let state = ok(&mut h, &c, "ui.state", json!({}));
-    assert_eq!(state["language"], "uk");
-    assert_eq!(state["notice"], "Помилка «Видалити сторінки»: a document must keep at least one page");
-    assert_eq!(state["documents"][0]["name"], "doc.pdf");
-}
-
-/// In a Japanese interface, Preferences opened from the menu bar switches the language to English,
-/// Ukrainian and back, and opens again with Cmd+,; the shortcuts list then reads in Japanese and
-/// the document stays open. Preferences is in Edit on Windows and Linux, and in the app menu (as
-/// Settings…) on macOS.
+/// In a Russian interface, Preferences opened from the menu bar switches the language to English
+/// and back, and opens again with Cmd+,; the shortcuts list then reads in Russian and the document
+/// stays open. Preferences is in Edit on Windows and Linux, and in the app menu (as Settings…) on
+/// macOS.
 #[test]
 fn preferences_menu_and_shortcut_allow_switching_interface_languages() {
     if crate::support::skip_without_catalogs("preferences_menu_and_shortcut_allow_switching_interface_languages") {
         return;
     }
-    if crate::support::skip_without_glyphs("preferences_menu_and_shortcut_allow_switching_interface_languages", "ja", "") {
-        return;
-    }
     let (mut h, c) = harness();
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ja" }));
+    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ru" }));
     // The menu bar's Edit menu holds Preferences on Windows and Linux. On macOS the in-window bar
     // takes the Mac layout (`Target::current()`), which moves it to the app menu as Settings….
-    // Titles and rows carry their mnemonic ("編集(E)", "環境設定(P)…"), so match by the start of
-    // the label.
+    // Titles and rows carry their mnemonic ("Правка(E)", "Настройки(P)…"), so match by the start
+    // of the label.
     let (menu, preferences) = if cfg!(target_os = "macos") {
-        let ja = pdfcraft_ui_egui::i18n::Lang::from_code("ja").unwrap();
-        ("PdfCraft", pdfcraft_ui_egui::i18n::tr(ja, "Settings…").trim_end_matches('…'))
+        let ru = pdfcraft_ui_egui::i18n::Lang::from_code("ru").unwrap();
+        ("Sintec.PDF", pdfcraft_ui_egui::i18n::tr(ru, "Settings…").trim_end_matches('…'))
     } else {
-        ("編集", "環境設定")
+        ("Правка", "Настройки")
     };
     let menu_row = |text: &'static str| {
         move |n: &egui_kittest::kittest::AccessKitNode<'_>| {
@@ -1135,52 +1064,52 @@ fn preferences_menu_and_shortcut_allow_switching_interface_languages() {
     h.run_steps(2);
     h.get_by(menu_row(preferences)).click();
     h.run_steps(2);
-    for (current, next, code) in [("日本語", "English", "en"), ("English", "Українська", "uk"), ("Українська", "日本語", "ja")]
-    {
+    for (current, next, code) in [("Русский", "English", "en"), ("English", "Русский", "ru")] {
         let selector = ok(&mut h, &c, "ui.inspect", json!({ "query": current }));
         let combo = selector["widgets"].as_array().unwrap().iter().find(|w| w["role"] == "ComboBox").expect("language selector");
         ok(&mut h, &c, "ui.click", json!({ "id": combo["id"] }));
         ok(&mut h, &c, "ui.click", json!({ "label": next }));
         assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], code);
     }
-    ok(&mut h, &c, "ui.click", json!({ "label": "OK" }));
+    ok(&mut h, &c, "ui.click", json!({ "label": "ОК" }));
     ok(&mut h, &c, "ui.key", json!({ "key": ",", "modifiers": ["command"] }));
-    let prefs = ok(&mut h, &c, "ui.inspect", json!({ "query": "表示言語" }));
+    let prefs = ok(&mut h, &c, "ui.inspect", json!({ "query": "Язык интерфейса" }));
     assert!(prefs["count"].as_u64().unwrap() > 0, "{prefs}");
-    ok(&mut h, &c, "ui.click", json!({ "label": "OK" }));
+    ok(&mut h, &c, "ui.click", json!({ "label": "ОК" }));
 
     ok(&mut h, &c, "ui.command", json!({ "id": "help.shortcuts" }));
-    for label in ["キーボードショートカット", "開く", "環境設定", "次／前の検索結果", "ダブルクリック", "閉じる"]
+    for label in ["Сочетания клавиш", "Открыть", "Настройки", "Следующее / предыдущее совпадение", "Двойной щелчок", "Закрыть"]
     {
         let found = ok(&mut h, &c, "ui.inspect", json!({ "query": label }));
         assert!(found["count"].as_u64().unwrap() > 0, "{label}: {found}");
     }
     let english = ok(&mut h, &c, "ui.inspect", json!({ "query": "Next / previous match" }));
     assert_eq!(english["count"], 0);
-    ok(&mut h, &c, "ui.click", json!({ "label": "閉じる" }));
+    ok(&mut h, &c, "ui.click", json!({ "label": "Закрыть" }));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"][0]["name"], "doc.pdf");
 }
 
+/// In a Russian interface, dialogs show Russian titles, a refused edit's notice names the command
+/// in Russian (the engine's own error text is shown as it is), and custom action names stay as the
+/// user typed them.
 #[test]
-fn japanese_dialogs_errors_and_custom_action_names() {
-    if crate::support::skip_without_catalogs("japanese_dialogs_errors_and_custom_action_names") {
-        return;
-    }
-    if crate::support::skip_without_glyphs("japanese_dialogs_errors_and_custom_action_names", "ja", "") {
+fn russian_dialogs_errors_and_custom_action_names() {
+    if crate::support::skip_without_catalogs("russian_dialogs_errors_and_custom_action_names") {
         return;
     }
     let (mut h, c) = harness();
-    ok(&mut h, &c, "ui.set", json!({"key": "language", "value": "ja"}));
+    ok(&mut h, &c, "ui.set", json!({"key": "language", "value": "ru"}));
     for (dialog, label) in [
-        ("properties", "文書のプロパティ"),
-        ("protect", "パスワードで保護"),
-        ("export-image", "画像に書き出し"),
-        ("optimize", "PDF の最適化"),
-        ("recognize-text", "テキストを認識"),
-        ("accessibility-options", "アクセシビリティチェックのオプション"),
-        ("js-console", "JavaScript コンソール"),
-        ("compare-files", "ファイルを比較"),
-        ("sign", "署名用のデジタル ID を設定"),
+        ("properties", "Свойства документа"),
+        ("protect", "Защита паролем"),
+        ("export-image", "Экспорт в изображение"),
+        ("optimize", "Оптимизатор PDF"),
+        ("recognize-text", "Распознать текст"),
+        ("accessibility-options", "Параметры проверки специальных возможностей"),
+        ("js-console", "Консоль JavaScript"),
+        ("compare-files", "Сравнение файлов"),
+        ("sign", "Настройка цифрового удостоверения для подписи"),
+        ("about", "Участники"),
     ] {
         ok(&mut h, &c, "ui.set", json!({"key": "dialog", "value": dialog}));
         let found = ok(&mut h, &c, "ui.inspect", json!({"query": label}));
@@ -1189,9 +1118,10 @@ fn japanese_dialogs_errors_and_custom_action_names() {
     ok(&mut h, &c, "ui.set", json!({"key": "dialog", "value": "none"}));
     assert!(!h.state_mut().apply_edit(pdfcraft_engine::Edit::DeletePages { pages: vec![0, 1, 2, 3, 4] }));
     let state = ok(&mut h, &c, "ui.state", json!({}));
+    assert_eq!(state["language"], "ru");
     // The frame is translated; the engine's own error text is shown as it is.
-    assert_eq!(state["notice"], "操作「ページを削除」に失敗しました: a document must keep at least one page");
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"][0]["name"], "doc.pdf");
+    assert_eq!(state["notice"], "Удалить страницы: ошибка: a document must keep at least one page");
+    assert_eq!(state["documents"][0]["name"], "doc.pdf");
 
     h.state_mut().custom_actions.push(pdfcraft_engine::actions::Action {
         name: "Save".to_string(),
@@ -1201,80 +1131,76 @@ fn japanese_dialogs_errors_and_custom_action_names() {
     });
     h.state_mut().wizard.selected = Some("Save".to_string());
     ok(&mut h, &c, "ui.set", json!({"key": "dialog", "value": "action-wizard"}));
-    for label in ["アクションウィザード", "Save", "Print"] {
+    for label in ["Мастер операций", "Save", "Print"] {
         let found = ok(&mut h, &c, "ui.inspect", json!({"query": label}));
         assert!(found["widgets"].as_array().unwrap().iter().any(|w| w["label"] == label || w["value"] == label), "{found}");
     }
 }
 
 #[test]
-fn simplified_chinese_about_tabs_and_credit_controls() {
-    if crate::support::skip_without_catalogs("simplified_chinese_about_tabs_and_credit_controls") {
-        return;
-    }
-    if crate::support::skip_without_glyphs("simplified_chinese_about_tabs_and_credit_controls", "zh-hans", "") {
+fn russian_about_tabs_and_credit_controls() {
+    if crate::support::skip_without_catalogs("russian_about_tabs_and_credit_controls") {
         return;
     }
     let (mut h, c) = harness();
     let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
-    ok(&mut h, &c, "ui.set", json!({"key": "language", "value": "zh-hans"}));
+    ok(&mut h, &c, "ui.set", json!({"key": "language", "value": "ru"}));
     settle(&mut h);
     ok(&mut h, &c, "ui.set", json!({"key": "dialog", "value": "about"}));
     settle(&mut h);
-    for label in ["关于", "贡献者", "模型"] {
+    for label in ["О программе", "Участники", "Модели"] {
         let found = ok(&mut h, &c, "ui.inspect", json!({"query": label}));
         assert!(found["widgets"].as_array().unwrap().iter().any(|w| w["label"] == label), "{found}");
     }
-    ok(&mut h, &c, "ui.click", json!({"label": "贡献者"}));
-    for label in ["用户名", "显示名称", "真实姓名", "排序", "名称列表", "表格", "首次提交"] {
+    ok(&mut h, &c, "ui.click", json!({"label": "Участники"}));
+    for label in ["Имя пользователя", "Отображаемое имя", "Настоящее имя", "Сортировка", "Разное", "Таблица", "Первый коммит"]
+    {
         let found = ok(&mut h, &c, "ui.inspect", json!({"query": label}));
         assert!(found["count"].as_u64().unwrap() > 0, "{label}: {found}");
     }
-    ok(&mut h, &c, "ui.click", json!({"label": "表格"}));
-    for label in ["新增行", "删除行", "净增行", "新增资源", "删除资源"] {
+    ok(&mut h, &c, "ui.click", json!({"label": "Таблица"}));
+    for label in ["Добавлено строк", "Удалено строк", "Изменение строк", "Добавлено двоичных файлов", "Удалено двоичных файлов"]
+    {
         let found = ok(&mut h, &c, "ui.inspect", json!({"query": label}));
         assert!(found["count"].as_u64().unwrap() > 0, "{label}: {found}");
     }
-    ok(&mut h, &c, "ui.click", json!({"label": "模型"}));
-    let columns = ok(&mut h, &c, "ui.inspect", json!({"query": "占全部提交的比例"}));
-    let empty = ok(&mut h, &c, "ui.inspect", json!({"query": "此版本未包含模型贡献记录。"}));
+    ok(&mut h, &c, "ui.click", json!({"label": "Модели"}));
+    let columns = ok(&mut h, &c, "ui.inspect", json!({"query": "% от всех коммитов"}));
+    let empty = ok(&mut h, &c, "ui.inspect", json!({"query": "В эту сборку не включены сведения об авторах моделей."}));
     assert!(columns["count"].as_u64().unwrap() > 0 || empty["count"].as_u64().unwrap() > 0, "{columns}, {empty}");
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"], documents);
 }
 
 #[test]
-fn simplified_chinese_signature_prompts_and_errors_keep_document_state() {
-    if crate::support::skip_without_catalogs("simplified_chinese_signature_prompts_and_errors_keep_document_state") {
-        return;
-    }
-    if crate::support::skip_without_glyphs("simplified_chinese_signature_prompts_and_errors_keep_document_state", "zh-hans", "") {
+fn russian_signature_prompts_and_errors_keep_document_state() {
+    if crate::support::skip_without_catalogs("russian_signature_prompts_and_errors_keep_document_state") {
         return;
     }
     let (mut h, c) = harness();
     let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
-    ok(&mut h, &c, "ui.set", json!({"key": "language", "value": "zh-hans"}));
+    ok(&mut h, &c, "ui.set", json!({"key": "language", "value": "ru"}));
     settle(&mut h);
     ok(&mut h, &c, "ui.set", json!({"key": "dialog", "value": "signature"}));
     settle(&mut h);
-    let typed = ok(&mut h, &c, "ui.inspect", json!({"query": "请输入您的签名。"}));
+    let typed = ok(&mut h, &c, "ui.inspect", json!({"query": "Введите подпись."}));
     assert!(typed["count"].as_u64().unwrap() > 0, "{typed}");
     // The shell also has a Draw control; the modal's button is registered after the shell.
-    let draw = ok(&mut h, &c, "ui.inspect", json!({"query": "绘制"}));
+    let draw = ok(&mut h, &c, "ui.inspect", json!({"query": "Рисование"}));
     let id = draw["widgets"]
         .as_array()
         .unwrap()
         .iter()
         .rev()
-        .find(|w| w["label"] == "绘制" && w["clickable"] == true)
+        .find(|w| w["label"] == "Рисование" && w["clickable"] == true)
         .expect("signature Draw button")["id"]
         .clone();
     ok(&mut h, &c, "ui.click", json!({"id": id}));
-    let drawn = ok(&mut h, &c, "ui.inspect", json!({"query": "请在下方绘制您的签名。"}));
+    let drawn = ok(&mut h, &c, "ui.inspect", json!({"query": "Нарисуйте подпись ниже."}));
     assert!(drawn["count"].as_u64().unwrap() > 0, "{drawn}");
-    ok(&mut h, &c, "ui.click", json!({"label": "取消"}));
+    ok(&mut h, &c, "ui.click", json!({"label": "Отмена"}));
     assert!(!h.state_mut().apply_edit(pdfcraft_engine::Edit::DeletePages { pages: vec![0, 1, 2, 3, 4] }));
     let state = ok(&mut h, &c, "ui.state", json!({}));
-    assert_eq!(state["notice"], "删除页面失败：a document must keep at least one page");
+    assert_eq!(state["notice"], "Удалить страницы: ошибка: a document must keep at least one page");
     assert_eq!(state["documents"], documents, "a language change and failed edit must preserve the document");
 }
 

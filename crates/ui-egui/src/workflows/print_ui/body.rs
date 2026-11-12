@@ -812,15 +812,15 @@ mod tests {
     }
 
     /// A row narrower than the buttons plus one ellipsis cannot be cut any further: the title is
-    /// left out instead of being painted back over the buttons. Bulgarian, Ukrainian and Spanish
-    /// are the catalogs that get there first, at the row's own width.
+    /// left out instead of being painted back over the buttons. Russian's long reset label gets
+    /// there first: at 440 px its title still has room, at 380 px it has none.
     #[test]
     fn a_row_without_room_for_a_title_leaves_it_out() {
         if !crate::i18n::needs_catalogs() {
             return;
         }
         for width in [449.0, 440.0, 400.0, 300.0] {
-            for lang in ["bg", "uk", "es", "it", "en"] {
+            for lang in ["ru", "en"] {
                 let (title, reset) = header_at(lang, width);
                 assert!(
                     title.is_none_or(|title| !title.intersects(reset)),
@@ -828,7 +828,7 @@ mod tests {
                 );
             }
         }
-        let (title, reset) = header_at("bg", 440.0);
+        let (title, reset) = header_at("ru", 380.0);
         assert!(title.is_none(), "the title is dropped, not squeezed to a sliver: {:?} next to {reset:?}", title);
     }
 
@@ -848,14 +848,11 @@ mod tests {
     /// `Label` does that by itself when it elides), and a title that fits whole shows none.
     #[test]
     fn the_truncated_title_is_reachable_through_a_tooltip() {
-        if !crate::i18n::needs_catalogs() {
-            return;
-        }
-        let (whole, _, _) = header_frame("it", 620.0, false);
+        let (whole, _, _) = header_frame("en", 620.0, false);
         let whole = whole.expect("a wide row keeps the title");
-        let (cut, _, tooltip) = header_frame("it", PANEL_ROW, true);
-        let cut = cut.expect("the Italian title is elided, not dropped");
-        assert!(cut.width() < whole.width(), "the Italian title is cut at {PANEL_ROW}px: {} of {}", cut.width(), whole.width());
+        let (cut, _, tooltip) = header_frame("en", 300.0, true);
+        let cut = cut.expect("the title is elided, not dropped");
+        assert!(cut.width() < whole.width(), "the title is cut at 300px: {} of {}", cut.width(), whole.width());
         assert!(tooltip, "hovering the elided title opens a tooltip with the full string");
         let (_, _, tooltip) = header_frame("en", 620.0, true);
         assert!(!tooltip, "a title that fits whole needs no tooltip");

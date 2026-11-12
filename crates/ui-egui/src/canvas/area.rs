@@ -234,7 +234,7 @@ pub(super) fn run_button(app: &mut PdfCraftApp, index: usize, name: &str, identi
         }
         B::Alert(m) => app.notify(m),
         B::Submit(url) => app.notify_fmt(
-            "{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.",
+            "{name} submits the form to {url}; Sintec.PDF doesn't send form data. Save the document to keep your entries.",
             &[("name", name), ("url", &url)],
         ),
         B::ImportIcon => app.choose_field_image_target(app.views[index].id, name, Some(identity)),

@@ -1,28 +1,26 @@
-//! UI localisation. Strings in code stay English and are the default lookup keys; the craft-i18n
-//! catalogs map them to display text at render time. Command ids, document text, file names, the
-//! control channel, the CLI and MCP never see translated text, so agents and scripts are
-//! unaffected. A string without a translation is shown in English, so coverage can grow
-//! incrementally, and a missing translation never fails a build, a test or a release.
+//! UI localisation. Strings in code stay English and are the default lookup keys; the catalogs map
+//! them to display text at render time. Command ids, document text, file names, the control
+//! channel, the CLI and MCP never see translated text, so agents and scripts are unaffected. A
+//! string without a translation is shown in English, so coverage can grow incrementally, and a
+//! missing translation never fails a build or a release (`tests/sintec_guard.rs` fails the tests
+//! when a menu, tool or `tl!` label has no Russian).
 //!
-//! The catalogs live in [storytold/craft-i18n](https://github.com/storytold/craft-i18n)
-//! (`locales/<code>/common.tsv`, shared by the Crafting Apps, and `pdfcraft.tsv`), not in this
-//! repository. `build.rs` embeds them from `CRAFT_I18N_DIR` (CI and releases check out the commit
-//! in `craft-i18n.rev`); without it the build is English only. Lookup, fallback (PdfCraft's rows
-//! over shared ones), plural forms (CLDR) and language names are the `craft-i18n` crate's
-//! (craft-libs). Which languages are offered, how the system locale picks one, right to left and
-//! `{name}` placeholders stay here.
+//! The catalogs live in this repository, in craft-i18n's format: `i18n/locales/<code>/common.tsv`
+//! (strings shared by the Crafting Apps) and `pdfcraft.tsv` (this app's own rows, which win over the
+//! shared ones). `build.rs` embeds them. English is the source language and has no catalog. Lookup,
+//! fallback, plural forms (CLDR) and language names are the `craft-i18n` crate's (craft-libs).
+//! Which languages are offered, how the system locale picks one, right to left and `{name}`
+//! placeholders stay here.
 //!
 //! # Adding or changing a translation
-//! In craft-i18n: add rows to `locales/<code>/pdfcraft.tsv` (its `docs/integration.md`). They show
-//! here once `craft-i18n.rev` moves to a commit that has them. A feature PR here adds the English
-//! only.
+//! Add or edit rows in `i18n/locales/ru/pdfcraft.tsv` (its header describes the format), then run
+//! `cargo xtask assets --write` to refresh its hash in `ATTRIBUTION.toml`.
 //!
 //! # Adding a language
-//! 1. craft-i18n gets `locales/<code>/pdfcraft.tsv` with its `@id language.name` row.
-//! 2. Add one row to [`LANGUAGES`] (code, right to left), and its English name to
-//!    [`Lang::english_name`].
-//!
-//! The Preferences dropdown and the system-locale match pick it up from there.
+//! Sintec.PDF ships English and Russian only. A new language would need
+//! `i18n/locales/<code>/pdfcraft.tsv` (and `common.tsv`) with its `@id language.name` row, one row
+//! in [`LANGUAGES`] (code, right to left) and its English name in [`Lang::english_name`], and its
+//! month and weekday names in `pdfcraft_engine::dates::DATE_LANGUAGES`.
 //!
 //! # Looking strings up
 //! - `tl!` / [`t`]: a plain string in the current language. [`tr`]: in a given one.
@@ -66,90 +64,14 @@ pub struct LangInfo {
 }
 
 /// How many languages [`LANGUAGES`] lists.
-const LANGUAGE_COUNT: usize = 35;
+const LANGUAGE_COUNT: usize = 2;
 
-/// The languages PdfCraft offers. English first: it is the fallback and the source language.
+/// The languages Sintec.PDF offers: English and Russian. English first: it is the fallback and the
+/// source language.
 pub static LANGUAGES: [LangInfo; LANGUAGE_COUNT] = [
     LangInfo { code: "en", rtl: false },
-    LangInfo { code: "ja", rtl: false },
-    // Simplified Chinese; `zh`, `zh-CN`, `zh-SG` and `zh-Hans-*` locales resolve here (see `candidates`).
-    LangInfo { code: "zh-hans", rtl: false },
-    // Traditional Chinese in the vocabulary used in Taiwan; `zh-TW`, `zh-HK`, `zh-MO` and `zh-Hant-*`
-    // locales all resolve here (see `candidates`).
-    LangInfo { code: "zh-hant", rtl: false },
-    LangInfo { code: "cs", rtl: false },
-    // Brazilian Portuguese; `pt`, `pt-BR` and `pt-PT` locales all resolve here (see `candidates`).
-    LangInfo { code: "pt-br", rtl: false },
-    // German (informal "du"); every `de-*` locale (`de-DE`, `de-AT`, `de-CH` ...) resolves here.
-    LangInfo { code: "de", rtl: false },
-    // Spanish (European vocabulary); every `es-*` locale (`es-ES`, `es-MX`, `es-419` ...) resolves here.
-    LangInfo { code: "es", rtl: false },
-    // French; every `fr-*` locale (`fr-FR`, `fr-CA`, `fr-BE` ...) resolves here.
-    LangInfo { code: "fr", rtl: false },
     // Russian; every `ru-*` locale (`ru-RU`, `ru-BY`, `ru-KZ` ...) resolves here.
     LangInfo { code: "ru", rtl: false },
-    // Kazakh; every `kk-*` locale (`kk-KZ`, `kk-KZ.UTF-8`) resolves here.
-    LangInfo { code: "kk", rtl: false },
-    // Bulgarian; every `bg-*` locale (`bg-BG`) resolves here.
-    LangInfo { code: "bg", rtl: false },
-    // Telugu; every `te-*` locale (`te-IN`) resolves here.
-    LangInfo { code: "te", rtl: false },
-    // Hungarian; every `hu-*` locale (`hu-HU`) resolves here.
-    LangInfo { code: "hu", rtl: false },
-    // Ukrainian; every `uk-*` locale (`uk-UA`, `uk_UA.UTF-8`) resolves here.
-    LangInfo { code: "uk", rtl: false },
-    // Italian; every `it-*` locale (`it-IT`) resolves here.
-    LangInfo { code: "it", rtl: false },
-    // Arabic (Modern Standard, Western digits); every `ar-*` locale (`ar-MA`, `ar-EG`, `ar-SA` ...)
-    // resolves here. Right to left: see `LangInfo::rtl`.
-    LangInfo { code: "ar", rtl: true },
-    // Central Kurdish (Sorani); every `ckb-*` locale (`ckb-IQ`, `ckb-IR`) resolves here. Right to
-    // left like Arabic: see `LangInfo::rtl`. CLDR `ckb` counts have two forms (one, other).
-    LangInfo { code: "ckb", rtl: true },
-    // Persian (Farsi); every `fa-*` locale (`fa-IR`, `fa_IR.UTF-8`, `fa-AF` ...) resolves here. Right
-    // to left like Arabic: see `LangInfo::rtl`. CLDR `fa` counts have two forms (one: i = 0 or n = 1,
-    // other), which for whole counts is the French rule, so `@plural` entries list two forms.
-    LangInfo { code: "fa", rtl: true },
-    // Polish; every `pl-*` locale (`pl-pl`, `pl_pl.UTF-8`) resolves here.
-    LangInfo { code: "pl", rtl: false },
-    // Slovene; every `sl-*` locale (`sl-SI`) resolves here. Four plural forms (one, two, few, other).
-    LangInfo { code: "sl", rtl: false },
-    LangInfo { code: "el", rtl: false },
-    // Turkish; every `tr-*` locale (`tr-TR`, `tr_TR.UTF-8`) resolves here. CLDR `tr` has two forms
-    // (one, other); the catalog's counted nouns read the same in both, so its `@plural` rows repeat
-    // the one form.
-    LangInfo { code: "tr", rtl: false },
-    // Lithuanian; every `lt-*` locale (`lt-LT`, `lt_LT.UTF-8`) resolves here. Three plural forms (one, few, other).
-    LangInfo { code: "lt", rtl: false },
-    // Indonesian; every `id-*` locale (`id-ID`, `id_ID.UTF-8`) resolves here. CLDR `id` counts have
-    // one form ("other"), so `@plural` entries list a single form.
-    LangInfo { code: "id", rtl: false },
-    // Vietnamese; every `vi-*` locale (`vi-VN`, `vi_VN.UTF-8`) resolves here. CLDR `vi` counts have
-    // one form ("other"), so `@plural` entries list a single form.
-    LangInfo { code: "vi", rtl: false },
-    // Finnish; every `fi-*` locale (`fi-FI`, `fi_FI.UTF-8`) resolves here. Two plural forms (one, other):
-    // the partitive singular follows any number but 1 (`1 sivu`, `2 sivua`).
-    LangInfo { code: "fi", rtl: false },
-    // Albanian; every `sq-*` locale (`sq-AL`, `sq_AL.UTF-8`, `sq-XK`) resolves here. One/other plural, like English.
-    LangInfo { code: "sq", rtl: false },
-    // Thai; every `th-*` locale (`th-TH`, `th_TH.UTF-8`) resolves here. No grammatical plural.
-    LangInfo { code: "th", rtl: false },
-    // Catalan; every `ca-*` locale (`ca-ES`, `ca_ES.UTF-8`, `ca_ES@valencia`) resolves here.
-    LangInfo { code: "ca", rtl: false },
-    // Romanian; every `ro-*` locale (`ro-RO`, `ro_RO.UTF-8`, `ro-MD`) resolves here. Three plural forms (one, few, other).
-    LangInfo { code: "ro", rtl: false },
-    // Lao; every `lo-*` locale (`lo-LA`, `lo_LA.UTF-8` ...) resolves here.
-    LangInfo { code: "lo", rtl: false },
-    // Hindi; every `hi-*` locale (`hi-IN`, `hi_IN.UTF-8`) resolves here. CLDR `hi` has "one"
-    // (0 and 1) and "other", but the catalog's nouns are the same in both ("{n} पृष्ठ"), so its
-    // `@plural` rows repeat the one form.
-    LangInfo { code: "hi", rtl: false },
-    // Korean; every `ko-*` locale (`ko-KR`, `ko_KR.UTF-8`) resolves here. CLDR `ko` counts have
-    // one form ("other"), so `@plural` entries list a single form.
-    LangInfo { code: "ko", rtl: false },
-    // Norwegian Bokmål; every `nb-*` locale resolves here, and so do general Norwegian (`no-*`) and
-    // Nynorsk (`nn-*`), which have no catalog of their own (see `candidates`).
-    LangInfo { code: "nb", rtl: false },
 ];
 
 /// Per language of [`LANGUAGES`], the (context, source) keys of PdfCraft's own catalog as written
@@ -243,40 +165,7 @@ impl Lang {
     pub fn english_name(self) -> &'static str {
         match self.code() {
             "en" => "English",
-            "ja" => "Japanese",
-            "zh-hans" => "Simplified Chinese",
-            "zh-hant" => "Traditional Chinese",
-            "cs" => "Czech",
-            "pt-br" => "Portuguese (Brazil)",
-            "de" => "German",
-            "es" => "Spanish",
-            "fr" => "French",
             "ru" => "Russian",
-            "kk" => "Kazakh",
-            "bg" => "Bulgarian",
-            "te" => "Telugu",
-            "hu" => "Hungarian",
-            "uk" => "Ukrainian",
-            "it" => "Italian",
-            "ar" => "Arabic",
-            "ckb" => "Central Kurdish",
-            "fa" => "Persian",
-            "pl" => "Polish",
-            "sl" => "Slovenian",
-            "el" => "Greek",
-            "tr" => "Turkish",
-            "lt" => "Lithuanian",
-            "id" => "Indonesian",
-            "vi" => "Vietnamese",
-            "fi" => "Finnish",
-            "nb" => "Norwegian Bokmål",
-            "sq" => "Albanian",
-            "th" => "Thai",
-            "ca" => "Catalan",
-            "ro" => "Romanian",
-            "lo" => "Lao",
-            "hi" => "Hindi",
-            "ko" => "Korean",
             // Only reached if a language is added to `LANGUAGES` without an English name; the
             // code still tells the reader which entry it is.
             code => code,
@@ -330,8 +219,8 @@ impl Lang {
     }
 }
 
-/// Whether this build embeds the craft-i18n catalogs (`CRAFT_I18N_DIR` was set). Without them the
-/// interface is English only; tests that need a translation skip with a note.
+/// Whether this build embeds the interface catalogs (`i18n/locales/`; `build.rs` fails without
+/// them). Tests that need a translation skip with a note when it is false.
 pub fn catalogs_embedded() -> bool {
     !CRAFT_I18N.is_empty()
 }
@@ -345,8 +234,12 @@ pub fn normalize_pref(pref: &str) -> Option<&'static str> {
     Lang::from_code(pref).map(Lang::code)
 }
 
-/// Candidate language codes for a locale tag, most specific first: `zh_TW.UTF-8` →
-/// `zh-tw`, `zh-hant`, `zh`.
+/// Systems in these languages get the Russian interface rather than English: Sintec.PDF has no
+/// catalog of theirs, and their readers commonly read Russian.
+const RUSSIAN_FALLBACK: &[&str] = &["uk", "kk"];
+
+/// Candidate language codes for a locale tag, most specific first: `ru_RU.UTF-8` →
+/// `ru-ru`, `ru`; `uk_UA` → `uk-ua`, `uk`, `ru` ([`RUSSIAN_FALLBACK`]).
 fn candidates(tag: &str) -> Vec<String> {
     let base = tag.split(['.', '@']).next().unwrap_or("").replace('_', "-").to_ascii_lowercase();
     let parts: Vec<&str> = base.split('-').filter(|p| !p.is_empty()).collect();
@@ -355,19 +248,8 @@ fn candidates(tag: &str) -> Vec<String> {
     for n in (1..=parts.len()).rev() {
         out.push(parts.get(..n).unwrap_or_default().join("-"));
     }
-    if primary == "zh" && !parts.iter().any(|p| matches!(*p, "hans" | "hant")) {
-        // Chinese by region when no script is given.
-        let script = if parts.iter().any(|p| matches!(*p, "tw" | "hk" | "mo")) { "zh-hant" } else { "zh-hans" };
-        out.insert(out.len().saturating_sub(1), script.to_string());
-    }
-    if primary == "pt" && !out.iter().any(|c| c == "pt-br") {
-        // The only Portuguese catalog is Brazilian; other regions use it rather than English.
-        out.insert(out.len().saturating_sub(1), "pt-br".to_string());
-    }
-    if matches!(primary, "no" | "nn") {
-        // The only Norwegian catalog is Bokmål. `no` (Norwegian in general) and Nynorsk readers use
-        // it rather than English; last, so a catalog of their own would win.
-        out.push("nb".to_string());
+    if RUSSIAN_FALLBACK.contains(&primary) {
+        out.push("ru".to_string());
     }
     out
 }
@@ -722,11 +604,12 @@ pub(crate) fn fixture_lang(code: &'static str, source: &'static str) -> Lang {
 }
 
 /// For a test that needs the embedded catalogs: `false`, with a note, when none were embedded
-/// (`CRAFT_I18N_DIR` unset), so the test can skip; the interface is then English only.
+/// (`build.rs` fails without `i18n/locales/`, so this is a safety net); the interface is then
+/// English only.
 #[cfg(test)]
 pub(crate) fn needs_catalogs() -> bool {
     if !catalogs_embedded() {
-        eprintln!("skipped: built without craft-i18n (set CRAFT_I18N_DIR to a craft-i18n checkout); the interface is English only");
+        eprintln!("skipped: built without the interface catalogs (i18n/locales/); the interface is English only");
     }
     catalogs_embedded()
 }

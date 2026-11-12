@@ -845,7 +845,7 @@ mod tests {
         let plain = app.session.create_from_text("t", "No signatures here.").unwrap();
         app.open_bytes("plain.pdf", None, plain.as_ref().clone()).unwrap();
         app.views[0].texts.insert(0, std::sync::Arc::new(pdfcraft_render::PageText::default()));
-        app.apply_status_captions(crate::i18n::Lang::from_code("de").unwrap());
+        app.apply_status_captions(crate::i18n::Lang::from_code("ru").unwrap());
         assert!(!app.views[0].texts.is_empty(), "its text, selection and search results stay");
     }
 
@@ -867,11 +867,20 @@ mod tests {
     fn status_captions_reach_the_sign_crate_in_logical_order() {
         // The sign crate receives the catalogue's logical order and shapes the words itself, so
         // they are never reversed a second time.
+        // Sintec.PDF ships no right-to-left catalog, so a test catalog stands in for one.
+        let ar = status_captions(crate::i18n::fixture_lang(
+            "x-ar-captions",
+            "\tSignature valid\tالتوقيع صالح\n\tValidity unknown\tالصلاحية غير معروفة\n\tSignature invalid\tالتوقيع غير صالح\n",
+        ));
+        assert_eq!([ar.valid.as_str(), ar.unknown.as_str(), ar.invalid.as_str()], ["التوقيع صالح", "الصلاحية غير معروفة", "التوقيع غير صالح"]);
         if !crate::i18n::needs_catalogs() {
             return;
         }
-        let ar = status_captions(crate::i18n::Lang::from_code("ar").unwrap());
-        assert_eq!([ar.valid.as_str(), ar.unknown.as_str(), ar.invalid.as_str()], ["التوقيع صالح", "الصلاحية غير معروفة", "التوقيع غير صالح"]);
+        let ru = status_captions(crate::i18n::Lang::from_code("ru").unwrap());
+        assert_eq!(
+            [ru.valid.as_str(), ru.unknown.as_str(), ru.invalid.as_str()],
+            ["Подпись действительна", "Действительность неизвестна", "Подпись недействительна"]
+        );
     }
 
     #[test]
@@ -963,6 +972,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// German stamp labels, standing in for a Latin-script catalog Sintec.PDF doesn't ship.
+    const GERMAN_LABELS: &str =
+        "\tDigitally signed by\tDigital signiert von\n\tDN: \tDN: \n\tReason: \tGrund: \n\tLocation: \tOrt: \n\tDate: \tDatum: \n";
+
     /// The labels a signature is stamped with are all in the interface language, or all in
     /// English when the signature's font can't draw them there (or the language is right to
     /// left): never a mix, and never a label signing would refuse.
@@ -971,25 +984,21 @@ mod tests {
         if !crate::i18n::needs_catalogs() {
             return;
         }
-        use crate::i18n::{Lang, has, tr};
+        use crate::i18n::{Lang, tr};
         let english = AppearanceLabels::default();
         assert_eq!(appearance_labels(Lang::EN), (english.clone(), false));
-        // Latin-script catalogs the signature's font can draw: stamped in the language once every
-        // label is translated there.
-        for code in ["de", "es", "fr", "it", "pt-br", "pl", "tr", "sl", "hu"] {
-            let lang = Lang::from_code(code).unwrap();
-            if !english.fields().into_iter().all(|(_, source)| has(lang, source)) {
-                continue;
-            }
-            let (labels, in_english) = appearance_labels(lang);
-            assert!(!in_english, "{code}: {labels:?}");
-            for ((field, ours), (_, source)) in labels.fields().into_iter().zip(english.fields()) {
-                assert_eq!(ours, tr(lang, source), "{code}: {field}");
-            }
+        // A Latin-script catalog the signature's font can draw is stamped in its language once
+        // every label is translated there (Sintec.PDF ships none, so a test catalog stands in).
+        let de = crate::i18n::fixture_lang("x-de-labels", GERMAN_LABELS);
+        let (labels, in_english) = appearance_labels(de);
+        assert!(!in_english, "{labels:?}");
+        for ((field, ours), (_, source)) in labels.fields().into_iter().zip(english.fields()) {
+            assert_eq!(ours, tr(de, source), "{field}");
         }
-        for code in ["zh-hans", "zh-hant", "ja", "ru", "uk", "bg", "kk", "el", "te", "cs", "lt", "ar"] {
-            assert_eq!(appearance_labels(Lang::from_code(code).unwrap()), (english.clone(), true), "{code}");
-        }
+        let partial = crate::i18n::fixture_lang("x-de-partial", "\tDigitally signed by\tDigital signiert von\n");
+        assert_eq!(appearance_labels(partial), (english.clone(), true), "never a mix");
+        // Russian has every label, but Helvetica can't draw Cyrillic, so signing would refuse it.
+        assert_eq!(appearance_labels(Lang::from_code("ru").unwrap()), (english.clone(), true));
         for lang in Lang::all() {
             let (labels, in_english) = appearance_labels(lang);
             assert_eq!(labels.first_undrawable(), None, "{}: signing would refuse {labels:?}", lang.code());
@@ -1001,10 +1010,7 @@ mod tests {
     /// its label, in the words given, and only the values when the labels are off.
     #[test]
     fn preview_lines_use_the_labels_signing_stamps() {
-        if !crate::i18n::needs_catalogs() {
-            return;
-        }
-        let (de, _) = appearance_labels(crate::i18n::Lang::from_code("de").unwrap());
+        let (de, _) = appearance_labels(crate::i18n::fixture_lang("x-de-preview", GERMAN_LABELS));
         let all = Appearance { reason: true, location: true, ..Appearance::default() };
         let lines = detail_lines(&all, &de, "Ada", " Genehmigt ", "Berlin", "2026.10.14 09:30:00 Z");
         assert_eq!(lines, ["Digital signiert von", "Ada", "Grund: Genehmigt", "Ort: Berlin", "Datum: 2026.10.14 09:30:00 Z"]);

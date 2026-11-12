@@ -1306,7 +1306,7 @@ fn the_panel_keeps_its_width_with_a_reply_box_open() {
     h.state_mut().set_option("language", "ru").unwrap();
     h.run_steps(3);
     let before = panel_width(&h);
-    h.get_by_label("Опубликовать").hover();
+    h.get_by_label("Отправить").hover();
     for _ in 0..30 {
         h.run_steps(1);
     }
@@ -4462,10 +4462,10 @@ fn closing_a_pop_up_saves_its_typed_text() {
 }
 
 /// The selection bar stays inside the pages' area: its place was worked out for a 520 pt bar,
-/// so longer labels (German here) pushed it over the side panel next to a selection on the right.
+/// so longer labels (Russian here) pushed it over the side panel next to a selection on the right.
 #[test]
 fn the_selection_bar_stays_inside_the_pages_area() {
-    let mut h = harness(|app| app.set_option("language", "de").unwrap());
+    let mut h = harness(|app| app.set_option("language", "ru").unwrap());
     // Narrower than the harness, as with a side panel open.
     h.set_size(egui::vec2(1100.0, 900.0));
     h.run_steps(4);
@@ -4642,15 +4642,15 @@ fn hotbar_picker_searches_translated_tool_labels() {
         return;
     }
     let mut h = harness(|app| {
-        app.set_option("language", "fr").unwrap();
+        app.set_option("language", "ru").unwrap();
     });
-    h.get_by_label("Hotbar settings").click();
+    h.get_by_label("Настройки панели быстрого доступа").click();
     h.run_steps(3);
-    field(&h, "Search all tools…").click();
+    field(&h, "Поиск по всем инструментам…").click();
     h.run_steps(2);
-    field(&h, "Search all tools…").type_text("Dessiner");
+    field(&h, "Поиск по всем инструментам…").type_text("Рисовать");
     h.run_steps(3);
-    h.get_by_role_and_label(Role::CheckBox, "Dessiner à main levée").click();
+    h.get_by_role_and_label(Role::CheckBox, "Рисовать от руки").click();
     h.run_steps(3);
     let saved: serde_json::Value = serde_json::from_str(&h.state().persist()).unwrap();
     assert_eq!(saved["hotbar"]["tools"], serde_json::json!(["comment.ink"]));

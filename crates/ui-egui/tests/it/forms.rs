@@ -715,13 +715,13 @@ fn the_calendar_picks_today_in_the_fields_format_from_any_month() {
 }
 
 #[test]
-fn lithuanian_calendar_localizes_months_and_weekdays_without_changing_field_values() {
-    if crate::support::skip_without_catalogs("lithuanian_calendar_localizes_months_and_weekdays_without_changing_field_values") {
+fn russian_calendar_localizes_months_and_weekdays_without_changing_field_values() {
+    if crate::support::skip_without_catalogs("russian_calendar_localizes_months_and_weekdays_without_changing_field_values") {
         return;
     }
     use egui_kittest::kittest::Queryable;
     let mut h = harness();
-    h.state_mut().set_option("language", "lt").unwrap();
+    h.state_mut().set_option("language", "ru").unwrap();
     h.state_mut().apply_edit(pdfcraft_engine::Edit::AddField {
         page: 0,
         rect: [50.0, 40.0, 200.0, 60.0],
@@ -731,15 +731,16 @@ fn lithuanian_calendar_localizes_months_and_weekdays_without_changing_field_valu
     h.run_steps(4);
     click_field(&mut h, "due", 0);
     let (y, m, _) = h.state().session.today();
-    let months = ["sausis", "vasaris", "kovas", "balandis", "gegužė", "birželis", "liepa", "rugpjūtis", "rugsėjis", "spalis", "lapkritis", "gruodis"];
-    h.get_by_label(&format!("{y} m. {}", months[(m - 1) as usize]));
-    for day in ["Sk", "Pr", "An", "Tr", "Kt", "Pn", "Št"] {
+    // The month heading is the standalone (nominative) name, not the one a date uses ("ноября").
+    let months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+    h.get_by_label(&format!("{} {y}", months[(m - 1) as usize]));
+    for day in ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"] {
         h.get_by_label(day);
     }
     h.get_by_label("›").click();
     h.run_steps(2);
     let (ny, nm) = if m == 12 { (y + 1, 1) } else { (y, m + 1) };
-    h.get_by_label(&format!("{ny} m. {}", months[(nm - 1) as usize]));
+    h.get_by_label(&format!("{} {ny}", months[(nm - 1) as usize]));
     h.get_by_label("15").click();
     h.run_steps(4);
     assert_eq!(value(&h, "due"), vec![format!("{nm:02}/15/{ny}")], "the PDF field keeps its own date format");

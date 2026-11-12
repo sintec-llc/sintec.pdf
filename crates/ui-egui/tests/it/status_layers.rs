@@ -219,17 +219,17 @@ fn named_layers_follow_trust_and_language_and_keep_the_badge() {
     assert!(valid > 100 && unknown < 10, "n1 redraws in the valid state: {valid} green, {unknown} amber pixels");
     assert!(hovered(&mut h, "Signature is valid") > h.query_all_by_label("Signature is valid").count(), "a valid signature keeps its badge");
     // The interface language changes the caption, on the page as well as in the document.
-    if crate::support::skip_without_catalogs("the German captions of named_layers_follow_trust_and_language_and_keep_the_badge") {
+    if crate::support::skip_without_catalogs("the Russian captions of named_layers_follow_trust_and_language_and_keep_the_badge") {
         return;
     }
     let english = caption_strip(&mut h);
-    h.state_mut().set_option("language", "de").unwrap();
+    h.state_mut().set_option("language", "ru").unwrap();
     settle(&mut h);
     // Compared whole, not with assert_ne!: a failure would print both strips, byte by byte.
     assert!(caption_strip(&mut h) != english, "the page redraws the caption");
     let text = pdfcraft_engine::export::Exporter::new(h.state().session.get(doc_id).unwrap()).text_of(&[0]).unwrap();
-    let de = pdfcraft_ui_egui::i18n::tr(pdfcraft_ui_egui::i18n::Lang::from_code("de").unwrap(), "Signature valid");
-    assert!(text.contains(de), "{text:?}");
+    let ru = pdfcraft_ui_egui::i18n::tr(pdfcraft_ui_egui::i18n::Lang::from_code("ru").unwrap(), "Signature valid");
+    assert!(text.contains(ru), "{text:?}");
 }
 
 #[test]
@@ -434,9 +434,9 @@ fn a_file_opened_before_the_first_frame_is_drawn_in_the_interface_language() {
     let p12 = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12")).unwrap();
     let id = pdfcraft_engine::sign::pkcs12::open(&p12, "test").unwrap();
     let mut app = PdfCraftApp::new();
-    app.set_option("language", "de").unwrap();
+    app.set_option("language", "ru").unwrap();
     app.open_bytes("named.pdf", None, signed(&id)).expect("opens");
     let doc = app.session.get(app.views[0].id).unwrap();
     let text = pdfcraft_engine::export::Exporter::new(doc).text_of(&[0]).unwrap();
-    assert!(text.contains("Gültigkeit unbekannt"), "{text:?}");
+    assert!(text.contains("Действительность неизвестна"), "{text:?}");
 }
