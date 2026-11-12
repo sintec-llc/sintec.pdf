@@ -499,7 +499,7 @@ mod tests {
         let (mut app, dir) = reducing("first");
         let out = dir.join("notes (reduced).pdf");
         app.pick_override = Some(vec![out.to_string_lossy().into_owned()]);
-        app.reduce_file_size();
+        app.reduce_at(pdfcraft_engine::optimizer::Level::Medium);
         assert!(app.optimize_run.is_none() && app.progress_notice.is_none(), "nothing runs until the answer is in");
         assert!(app.pickers.pending(), "the question is out");
         app.process_picked();
@@ -525,7 +525,7 @@ mod tests {
     fn cancelling_reduce_file_size_compresses_nothing() {
         let (mut app, dir) = reducing("cancel");
         app.pick_override = Some(vec![]);
-        app.reduce_file_size();
+        app.reduce_at(pdfcraft_engine::optimizer::Level::Medium);
         app.process_picked();
         assert!(app.optimize_run.is_none() && app.progress_notice.is_none());
         assert!(!app.pickers.pending());
@@ -540,7 +540,7 @@ mod tests {
         let out = dir.join("notes (reduced).pdf");
         app.pick_override = Some(vec![out.to_string_lossy().into_owned()]);
         app.run_inline = true;
-        app.reduce_file_size();
+        app.reduce_at(pdfcraft_engine::optimizer::Level::Medium);
         app.open_bytes("other.pdf", None, text_pdf("Another document")).unwrap();
         app.process_picked();
         assert!(app.optimize_run.is_none() && !out.exists(), "nothing runs, and nothing is written");
@@ -554,7 +554,7 @@ mod tests {
         let (gone, good) = (dir.join("gone").join("notes (reduced).pdf"), dir.join("notes (reduced).pdf"));
         app.pick_override = Some(vec![gone.to_string_lossy().into_owned()]);
         app.run_inline = true;
-        app.reduce_file_size();
+        app.reduce_at(pdfcraft_engine::optimizer::Level::Medium);
         app.pick_override = Some(vec![good.to_string_lossy().into_owned()]);
         app.process_picked();
         let told = app.toast.as_ref().map(|t| t.0.clone()).unwrap_or_default();
@@ -573,7 +573,7 @@ mod tests {
         let good = dir.join("notes (reduced).pdf");
         app.pick_override = Some(vec![bad("gone")]);
         app.run_inline = true;
-        app.reduce_file_size();
+        app.reduce_at(pdfcraft_engine::optimizer::Level::Medium);
         app.pick_override = Some(vec![bad("gone too")]);
         app.process_picked();
         assert!(app.pickers.pending(), "it asks after the first");
@@ -592,9 +592,13 @@ mod tests {
         let out = dir.join("existing.pdf");
         std::fs::write(&out, b"what was there").unwrap();
         app.open_bytes("notes.txt", None, "lorem ipsum ".repeat(500).into_bytes()).unwrap();
+        // Reduced once already: a second time finds nothing more to take out.
+        let (_, id) = app.active_ids().unwrap();
+        let (reduced, ..) = app.session.reduced_bytes_at(id, pdfcraft_engine::optimizer::Level::Medium).unwrap();
+        app.open_bytes("notes.pdf", None, reduced.to_vec()).unwrap();
         app.pick_override = Some(vec![out.to_string_lossy().into_owned()]);
         app.run_inline = true;
-        app.reduce_file_size();
+        app.reduce_at(pdfcraft_engine::optimizer::Level::Medium);
         app.process_picked();
         assert_eq!(std::fs::read(&out).unwrap(), b"what was there");
         let told = app.toast.as_ref().map(|t| t.0.clone()).unwrap_or_default();
@@ -614,7 +618,7 @@ mod tests {
             progress: Arc::default(),
         });
         app.pick_override = Some(vec![dir.join("no.pdf").to_string_lossy().into_owned()]);
-        app.reduce_file_size();
+        app.reduce_at(pdfcraft_engine::optimizer::Level::Medium);
         assert!(!app.pickers.pending(), "no question");
         assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Optimization is already running"));
         let _ = std::fs::remove_dir_all(&dir);

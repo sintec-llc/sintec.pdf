@@ -3864,6 +3864,81 @@ fn streams_the_wrapper_stripping_does_not_touch_stay_unchanged() {
     }
 }
 
+/// Acrobat's choices with the lossless stream recompression Reduce File Size's levels add.
+fn recompressing() -> Settings {
+    Settings { recompress_streams: true, ..Settings::default() }
+}
+
+#[test]
+fn recompression_replaces_a_wrapped_stream_with_best_level_flate() {
+    let ops = vector_ops();
+    let inner = Stream::flate(Dict::new(), &ops).raw.to_vec();
+    let source = filtered(&["ASCII85Decode", "FlateDecode"], ascii85(&inner));
+    let (mut doc, c) = with_content(source.clone());
+    let r = optimize(&mut doc, &recompressing()).unwrap();
+    assert_eq!((r.streams_recompressed, r.streams_compressed), (1, 0), "{r:?}");
+    let after = stream(&doc, c);
+    assert_eq!(after.dict.name(b"Filter"), Some(&b"FlateDecode"[..]));
+    assert_eq!(after.decoded_strict().unwrap(), ops);
+    assert!(after.raw.len() <= inner.len(), "at least as small as the inner level-6 data");
+}
+
+#[test]
+fn recompression_never_changes_what_a_stream_decodes_to() {
+    let inner = Stream::flate(Dict::new(), &vector_ops()).raw.to_vec();
+    let wrapped = ascii85(&inner);
+    let mut objstm = filtered(&["ASCII85Decode", "FlateDecode"], wrapped.clone());
+    objstm.dict.set(b"Type".to_vec(), Object::name("ObjStm"));
+    let mut metadata = filtered(&["ASCII85Decode", "FlateDecode"], wrapped.clone());
+    metadata.dict.set(b"Type".to_vec(), Object::name("Metadata"));
+    // A predictor given by reference would be read as none, and the rows stored again with their
+    // tag bytes: such a stream is left as it is.
+    let mut indirect = Stream::flate(Dict::new(), &vector_ops());
+    let mut parms = Dict::new();
+    parms.set(b"Predictor".to_vec(), Object::Ref(ObjRef::new(99, 0)));
+    indirect.dict.set(b"DecodeParms".to_vec(), Object::Dict(parms));
+    let cases = [
+        ("malformed ASCII85", filtered(&["ASCII85Decode", "FlateDecode"], b"{{ not ASCII85 ~>".to_vec())),
+        ("crypt after the wrapper", filtered(&["ASCII85Decode", "Crypt", "FlateDecode"], wrapped.clone())),
+        ("object stream", objstm),
+        ("metadata", metadata),
+        ("tiny", filtered(&["ASCII85Decode", "FlateDecode"], ascii85(b"ab"))),
+        ("indirect predictor", indirect),
+        ("single Flate", Stream::flate(Dict::new(), &vector_ops())),
+        ("unencoded", Stream::from_raw(Dict::new(), vector_ops())),
+    ];
+    for (label, s) in cases {
+        let (mut doc, c) = with_content(s.clone());
+        optimize(&mut doc, &recompressing()).unwrap();
+        let after = stream(&doc, c);
+        match s.decoded_strict() {
+            Ok(data) if !matches!(label, "object stream" | "metadata" | "tiny" | "indirect predictor") => {
+                assert_eq!(after.decoded_strict().unwrap(), data, "{label}")
+            }
+            _ => assert_eq!(after, s, "{label}"),
+        }
+    }
+}
+
+/// Recompression reports where it is, and stops when told to before it changes anything.
+#[test]
+fn recompression_reports_its_progress_and_can_be_cancelled() {
+    use pdfcraft_optimize::{OptimizeError, Stage, optimize_with_progress};
+    let (mut doc, c) = with_content(Stream::from_raw(Dict::new(), vector_ops()));
+    let original = stream(&doc, c);
+    let mut seen = Vec::new();
+    let r = optimize_with_progress(&mut doc.clone(), &recompressing(), &mut |s| {
+        seen.push(s);
+        true
+    })
+    .unwrap();
+    assert_eq!(r.streams_recompressed, 1, "{r:?}");
+    assert!(matches!(seen.last(), Some(Stage::Streams { done, total }) if done == total), "{seen:?}");
+    let cancelled = optimize_with_progress(&mut doc, &recompressing(), &mut |s| !matches!(s, Stage::Streams { .. }));
+    assert!(matches!(cancelled, Err(OptimizeError::Cancelled)));
+    assert_eq!(stream(&doc, c), original, "nothing recompressed before the first report");
+}
+
 #[test]
 fn a_second_run_leaves_the_stripped_stream_alone() {
     let inner = Stream::flate(Dict::new(), &vector_ops()).raw.to_vec();

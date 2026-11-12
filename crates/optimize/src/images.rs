@@ -657,9 +657,35 @@ fn jpeg_samples(data: &[u8], w: usize, h: usize, n: usize, ycc: bool) -> Option<
 }
 
 pub(crate) fn resample(px: &[u8], n: usize, w: u32, h: u32, nw: u32, nh: u32) -> Option<Vec<u8>> {
+    resample_with(px, n, w, h, nw, nh, Filter::Bicubic)
+}
+
+/// How samples are resampled: bicubic (Catmull-Rom) for the fixed-quality settings, Lanczos (3
+/// lobes) for photos and scans under [`Compression::Targeted`] and [`Compression::Lossless`], and a
+/// tent (area-like, no ringing) for their soft masks, whose hard edges would get halos.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Filter {
+    Bicubic,
+    Photo,
+    Hard,
+}
+
+impl Filter {
+    fn kind(self) -> image::imageops::FilterType {
+        use image::imageops::FilterType;
+        match self {
+            Filter::Bicubic => FilterType::CatmullRom,
+            Filter::Photo => FilterType::Lanczos3,
+            Filter::Hard => FilterType::Triangle,
+        }
+    }
+}
+
+/// [`resample`] with another filter.
+pub(crate) fn resample_with(px: &[u8], n: usize, w: u32, h: u32, nw: u32, nh: u32, filter: Filter) -> Option<Vec<u8>> {
     Some(match n {
-        1 => scaled(&image::GrayImage::from_raw(w, h, px.to_vec())?, nw, nh).into_raw(),
-        _ => scaled(&image::RgbImage::from_raw(w, h, px.to_vec())?, nw, nh).into_raw(),
+        1 => scaled(&image::GrayImage::from_raw(w, h, px.to_vec())?, nw, nh, filter.kind()).into_raw(),
+        _ => scaled(&image::RgbImage::from_raw(w, h, px.to_vec())?, nw, nh, filter.kind()).into_raw(),
     })
 }
 
@@ -669,23 +695,28 @@ pub(crate) fn resample(px: &[u8], n: usize, w: u32, h: u32, nw: u32, nh: u32) ->
 /// process. Such a one is scaled across first, which holds no more pixels than one of the two has.
 /// Past a quarter over the larger of them, so that rounding leaves a picture of the same shape as
 /// it was.
-fn scaled<P: image::Pixel<Subpixel = u8> + 'static>(img: &image::ImageBuffer<P, Vec<u8>>, w: u32, h: u32) -> image::ImageBuffer<P, Vec<u8>> {
-    use image::imageops::{FilterType, resize};
+fn scaled<P: image::Pixel<Subpixel = u8> + 'static>(
+    img: &image::ImageBuffer<P, Vec<u8>>,
+    w: u32,
+    h: u32,
+    filter: image::imageops::FilterType,
+) -> image::ImageBuffer<P, Vec<u8>> {
+    use image::imageops::resize;
     let (iw, ih) = (u64::from(img.width()), u64::from(img.height()));
     let largest = (iw * ih).max(u64::from(w) * u64::from(h));
     if (iw * u64::from(h)).saturating_mul(4) > largest.saturating_mul(5) {
-        resize(&resize(img, w, img.height(), FilterType::CatmullRom), w, h, FilterType::CatmullRom)
+        resize(&resize(img, w, img.height(), filter), w, h, filter)
     } else {
-        resize(img, w, h, FilterType::CatmullRom)
+        resize(img, w, h, filter)
     }
 }
 
+/// 8-bit grey or RGB samples as a JPEG at `quality`, by PdfCraft's own encoder (`crate::jpeg`):
+/// plain YCbCr with no Adobe marker, 4:2:0 chroma when that keeps sharp coloured edges, Huffman
+/// tables made for the image.
 pub(crate) fn jpeg(px: &[u8], n: usize, w: u32, h: u32, quality: u8) -> Option<Vec<u8>> {
-    let mut out = Vec::new();
-    let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, quality.clamp(1, 100));
-    let ty = if n == 1 { image::ExtendedColorType::L8 } else { image::ExtendedColorType::Rgb8 };
-    enc.encode(px, w, h, ty).ok()?;
-    Some(out)
+    let sub = n == 3 && crate::quality::chroma_halves_well(px, usize::try_from(w).ok()?, usize::try_from(h).ok()?);
+    crate::jpeg::encode(px, n, w, h, quality.clamp(1, 100), sub)
 }
 
 /// Whether [`pixels`] reads `s` as it is drawn: a codec it decodes, no decode array that
@@ -709,34 +740,77 @@ pub(crate) fn is_identity_decode(doc: &Document, decode: &Object, n: usize) -> b
     a.len() == 2 * n && a.chunks(2).all(|p| matches!(p, [lo, hi] if doc.resolve(lo).as_f64() == Some(0.0) && doc.resolve(hi).as_f64() == Some(1.0)))
 }
 
-/// A new image stream from 8-bit samples: the original dictionary with the new size and filter.
-/// A decode array is dropped: only images without one, or with the default one, get here. So are
-/// the filter parameters: the samples are decoded, and a JPEG written here is plain YCbCr with no
-/// Adobe marker, which is what a missing /ColorTransform means.
-fn image_stream(old: &Dict, px: &[u8], n: usize, w: u32, h: u32, compression: Compression, was_dct: bool) -> Option<Stream> {
+/// The image dictionary `old` for new 8-bit samples of `w` × `h`. A decode array is dropped: only
+/// images without one, or with the default one, get here. So are the filter parameters: the
+/// samples are decoded, and a JPEG written here is plain YCbCr with no Adobe marker, which is what
+/// a missing /ColorTransform means.
+fn new_dict(old: &Dict, w: u32, h: u32) -> Dict {
     let mut d = old.clone();
     for k in [&b"Filter"[..], b"DecodeParms", b"Decode", b"Length", b"DL"] {
         d.remove(k);
     }
-    d.set(b"Width".to_vec(), Object::Int(w as i64));
-    d.set(b"Height".to_vec(), Object::Int(h as i64));
+    d.set(b"Width".to_vec(), Object::Int(i64::from(w)));
+    d.set(b"Height".to_vec(), Object::Int(i64::from(h)));
     d.set(b"BitsPerComponent".to_vec(), Object::Int(8));
-    let use_jpeg = match compression {
-        Compression::Jpeg(_) => true,
-        Compression::Flate => false,
-        Compression::Retain => was_dct,
+    d
+}
+
+/// A JPEG image stream from `data` under `old`'s dictionary.
+fn jpeg_stream(old: &Dict, data: Vec<u8>, w: u32, h: u32) -> Stream {
+    let mut d = new_dict(old, w, h);
+    d.set(b"Filter".to_vec(), Object::name("DCTDecode"));
+    Stream::from_raw(d, data)
+}
+
+/// A new image stream from 8-bit samples: the original dictionary with the new size and filter
+/// ([`new_dict`]). Flate is at the best level, with a PNG predictor when that is smaller.
+fn image_stream(old: &Dict, px: &[u8], n: usize, w: u32, h: u32, compression: Compression, was_dct: bool) -> Option<Stream> {
+    let quality = match compression {
+        Compression::Jpeg(q) => Some(q),
+        Compression::Retain if was_dct => Some(80),
+        _ => None,
     };
-    if use_jpeg {
-        let q = match compression {
-            Compression::Jpeg(q) => q,
-            _ => 80,
-        };
-        let data = jpeg(px, n, w, h, q)?;
-        d.set(b"Filter".to_vec(), Object::name("DCTDecode"));
-        Some(Stream::from_raw(d, data))
-    } else {
-        Some(Stream::flate(d, px))
+    match quality {
+        Some(q) => Some(jpeg_stream(old, jpeg(px, n, w, h, q)?, w, h)),
+        None => Some(crate::recompress::flate_best(new_dict(old, w, h), px, Some(&crate::recompress::rows8(n, w)))),
     }
+}
+
+/// `px` as an indexed image when it has few colours (at most 256, or 16 for grey, which would
+/// gain nothing from 8-bit indices): 1, 2, 4 or 8 bits a pixel, the palette in `old`'s colour
+/// space. Lossless.
+fn palette_stream(old: &Dict, px: &[u8], n: usize, w: u32, h: u32) -> Option<Stream> {
+    let (entries, idx) = crate::quality::palette(px, n, if n == 1 { 16 } else { 256 })?;
+    let count = entries.len() / n.max(1);
+    let bits: usize = match count {
+        0..=2 => 1,
+        3..=4 => 2,
+        5..=16 => 4,
+        _ => 8,
+    };
+    let wu = usize::try_from(w).ok()?.max(1);
+    let row = (wu * bits).div_ceil(8);
+    let mut packed = Vec::with_capacity(row * (idx.len() / wu));
+    for r in idx.chunks(wu) {
+        let mut line = vec![0u8; row];
+        for (x, i) in r.iter().enumerate() {
+            let bit = x * bits;
+            if let Some(b) = line.get_mut(bit / 8) {
+                *b |= i << (8 - bits - bit % 8);
+            }
+        }
+        packed.extend(line);
+    }
+    let mut d = new_dict(old, w, h);
+    let base = old.get(b"ColorSpace")?.clone();
+    let hival = i64::try_from(count.checked_sub(1)?).ok()?;
+    d.set(
+        b"ColorSpace".to_vec(),
+        Object::Array(vec![Object::name("Indexed"), base, Object::Int(hival), Object::String(pdfcraft_cos::PdfString::literal(entries))]),
+    );
+    d.set(b"BitsPerComponent".to_vec(), Object::Int(bits as i64));
+    let params = pdfcraft_filters::Params { predictor: 15, colors: 1, bits_per_component: bits as i64, columns: i64::from(w), ..Default::default() };
+    Some(crate::recompress::flate_best(d, &packed, Some(&params)))
 }
 
 /// Whether a `/Mask` value is a stencil mask: an image that says `/ImageMask true`.
@@ -744,16 +818,27 @@ fn is_stencil(doc: &Document, mask: &Object) -> bool {
     matches!(&*doc.resolve(mask), Object::Stream(s) if matches!(s.dict.get(b"ImageMask"), Some(Object::Bool(true))))
 }
 
-/// One image: resample and/or recompress per `settings`; `ppi` is its effective resolution.
-/// Returns the new image and its new soft mask, if the result is smaller.
-fn process(
-    doc: &Document,
-    s: &Stream,
-    ppi: f64,
-    settings: &ImageSettings,
-    n: usize,
-    budget: &mut ImageBudget,
-) -> Option<(Stream, Option<(ObjRef, Stream)>)> {
+/// What [`encode`] would do to an image, decided without touching its pixels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Plan {
+    /// Colour components (1 or 3).
+    pub n: usize,
+    pub w: u32,
+    pub h: u32,
+    /// The size after resampling (`w`, `h` when not resampled).
+    pub nw: u32,
+    pub nh: u32,
+    pub was_dct: bool,
+}
+
+impl Plan {
+    pub(crate) fn resized(&self) -> bool {
+        (self.nw, self.nh) != (self.w, self.h)
+    }
+}
+
+/// Whether and how `settings` change image `s` drawn at `ppi`: the checks that need no pixels.
+pub(crate) fn plan(doc: &Document, s: &Stream, ppi: f64, settings: &ImageSettings, n: usize) -> Option<Plan> {
     let d = &s.dict;
     // A colour-key mask names sample values, which resampling and JPEG would change. A stencil mask
     // is an image of its own, with its own resolution (ISO 32000-2 §8.9.6.3): the picture can change
@@ -770,43 +855,192 @@ fn process(
     }
     let was_dct = is_dct(s)?;
     let (w, h) = (u32::try_from(d.int(b"Width")?).ok()?, u32::try_from(d.int(b"Height")?).ok()?);
-    if w == 0 || h == 0 || (w as u64) * (h as u64) > MAX_PIXELS {
+    if w == 0 || h == 0 || u64::from(w) * u64::from(h) > MAX_PIXELS {
         return None;
     }
+    // Tiny images (icons, rules) gain nothing, and JPEG or resampling would blur them.
+    let tiny = u64::from(w) * u64::from(h) < 64 * 64;
     let resize = settings.downsample && ppi.is_finite() && ppi > settings.above_ppi && settings.target_ppi > 0.0 && settings.target_ppi.is_finite();
-    let recompress = matches!(settings.compression, Compression::Jpeg(_)) || (matches!(settings.compression, Compression::Flate) && was_dct);
+    let recompress = match settings.compression {
+        Compression::Jpeg(_) | Compression::Targeted(_) => true,
+        Compression::Flate => was_dct,
+        // JPEGs are transcoded losslessly by the stream pass.
+        Compression::Lossless => !was_dct,
+        Compression::Retain => false,
+    };
     let (nw, nh) = if resize {
         // Downsampling never enlarges: a target above the image's own resolution (or a hostile
-        // settings value) must not size a buffer from the setting.
+        // settings value) must not size a buffer from the setting. `ppi > above_ppi` and
+        // `target_ppi > 0`, so `k` is finite and positive; the casts saturate.
         let k = (settings.target_ppi / ppi).min(1.0);
-        (((w as f64 * k).round() as u32).max(1), ((h as f64 * k).round() as u32).max(1))
+        (((f64::from(w) * k).round() as u32).clamp(1, w), ((f64::from(h) * k).round() as u32).clamp(1, h))
     } else {
         (w, h)
     };
     // A target at or above the image's own resolution resizes nothing.
     let resize = resize && (nw, nh) != (w, h);
-    if !resize && !recompress {
+    let targeted = matches!(settings.compression, Compression::Targeted(_));
+    if (!resize && (!recompress || tiny)) || (targeted && tiny) {
         return None;
     }
-    // Tiny images (icons, rules) don't benefit and JPEG would blur them.
-    if !resize && (w as u64) * (h as u64) < 64 * 64 {
+    Some(Plan { n, w, h, nw, nh, was_dct })
+}
+
+/// A JPEG re-encoded without resampling must save at least this share of its bytes (fixed
+/// quality settings): a second generation of JPEG loss for a few percent isn't worth it.
+const REENCODE_MIN_SAVING: f64 = 0.1;
+
+/// The share of pixels equal to their left neighbour from which an image counts as a graphic
+/// (screenshot, chart, line art, text) and stays lossless.
+const GRAPHIC_FLATNESS: f64 = 0.5;
+
+/// The smaller of `px` stored with Flate and as an indexed palette (lossless both).
+fn lossless(old: &Dict, px: &[u8], n: usize, w: u32, h: u32) -> Option<Stream> {
+    let flate = image_stream(old, px, n, w, h, Compression::Flate, false)?;
+    match palette_stream(old, px, n, w, h) {
+        Some(p) if p.raw.len() < flate.raw.len() => Some(p),
+        _ => Some(flate),
+    }
+}
+
+/// Steps of [`requantized`], gentlest first: (multiplier of chroma AC steps, of luma steps for
+/// the lowest AC coefficients, of luma steps above zigzag 10).
+const REQUANTIZE: [(u16, u16, u16); 5] = [(2, 1, 1), (2, 1, 2), (2, 2, 2), (3, 2, 3), (3, 3, 3)];
+
+/// JPEG image `s` that isn't resampled, made smaller on its own coefficients, so it loses no more
+/// than that (`px` are its decoded samples): its luma alone when it is grey to the eye, then its
+/// quantization steps multiplied (up to [`Target::requantize`](crate::Target::requantize)) as far
+/// as the SSIM target allows. Returns the JPEG and whether it became grey. A colour JPEG is only
+/// taken when it stores YCbCr ([`ycc_encoded`] and no Adobe marker saying otherwise): stored as
+/// RGB, its "chroma" tables would be two of its colours.
+fn requantized(doc: &Document, s: &Stream, px: &[u8], n: usize, w: u32, h: u32, target: &crate::Target) -> Option<(Vec<u8>, bool)> {
+    let j = crate::jpeg::read(&s.raw)?;
+    if n == 3 && !(ycc_encoded(doc, s)? && crate::jpeg::is_ycbcr(&j)) {
         return None;
     }
+    let rgb = matches!(s.dict.name(b"ColorSpace"), Some(b"DeviceRGB" | b"RGB"));
+    let grey = target.grey && n == 3 && rgb && crate::quality::is_grey(px);
+    let j = if grey { crate::jpeg::luma_only(&j)? } else { j };
+    let reference = crate::quality::luma(px, n);
+    let min = f64::from(target.min_ssim) / 10_000.0;
+    let (wu, hu) = (usize::try_from(w).ok()?, usize::try_from(h).ok()?);
+    let check = |j: &crate::jpeg::Jpeg| -> Option<Vec<u8>> {
+        let data = crate::jpeg::write(j)?;
+        let l = crate::quality::decoded_luma(&data, if grey { 1 } else { n })?;
+        (crate::quality::ssim(&reference, &l, wu, hu) >= min).then_some(data)
+    };
+    let mut best = if grey { Some(check(&j)?) } else { None };
+    for (c, lo, hi) in REQUANTIZE {
+        if c.max(lo).max(hi) > u16::from(target.requantize) {
+            break;
+        }
+        let factor = |chroma: bool, k: usize| {
+            if chroma {
+                c
+            } else if k < 10 {
+                lo
+            } else {
+                hi
+            }
+        };
+        match crate::jpeg::requantize(&j, &factor).as_ref().and_then(check) {
+            Some(data) => best = Some(data),
+            None => break,
+        }
+    }
+    best.map(|data| (data, grey))
+}
+
+/// Carry out `plan` on image `s`. Returns the new image and its new soft mask, if the result is
+/// worth it (see [`Compression`]).
+pub(crate) fn encode(
+    doc: &Document,
+    s: &Stream,
+    plan: &Plan,
+    settings: &ImageSettings,
+    budget: &mut ImageBudget,
+) -> Option<(Stream, Option<(ObjRef, Stream)>)> {
+    let Plan { n, w, h, was_dct, .. } = *plan;
+    let d = &s.dict;
     let px = pixels(doc, s, n, budget)?;
-    let px = if (nw, nh) != (w, h) { resample(&px, n, w, h, nw, nh)? } else { px };
-    let new = image_stream(d, &px, n, nw, nh, settings.compression, was_dct)?;
+    let targeted = matches!(settings.compression, Compression::Targeted(_));
+    // Graphics (recognised on the original samples; a JPEG is a photo or scan, or was one when
+    // it was made lossy) keep their resolution: resampling would blur text and lines and blend
+    // their few colours into many, which a palette can't hold.
+    let graphic = targeted
+        && !was_dct
+        && (crate::quality::palette(&px, n, if n == 1 { 16 } else { 256 }).is_some()
+            || crate::quality::flatness(&px, n, w as usize) >= GRAPHIC_FLATNESS);
+    let plan = &Plan { nw: if graphic { w } else { plan.nw }, nh: if graphic { h } else { plan.nh }, ..*plan };
+    let (nw, nh) = (plan.nw, plan.nh);
+    // The levels (Targeted, Lossless) resample with Lanczos and soft masks with a tent; the fixed
+    // settings stay bicubic.
+    let ours = targeted || settings.compression == Compression::Lossless;
+    let (photo, hard) = if ours { (Filter::Photo, Filter::Hard) } else { (Filter::Bicubic, Filter::Bicubic) };
+    let px = if plan.resized() { resample_with(&px, n, w, h, nw, nh, photo)? } else { px };
+    let new = match settings.compression {
+        Compression::Lossless => {
+            if plan.resized() {
+                lossless(d, &px, n, nw, nh)?
+            } else {
+                // Only a palette is new here: plain Flate is the stream pass's job.
+                let p = palette_stream(d, &px, n, nw, nh)?;
+                let flate = image_stream(d, &px, n, nw, nh, Compression::Flate, false)?;
+                if p.raw.len() >= flate.raw.len() {
+                    return None;
+                }
+                p
+            }
+        }
+        Compression::Targeted(target) if was_dct && !plan.resized() && crate::jpeg::read(&s.raw).is_some() => {
+            let (data, grey) = requantized(doc, s, &px, n, w, h, &target)?;
+            let mut dict = d.clone();
+            dict.remove(b"Length");
+            if grey {
+                dict.set(b"ColorSpace".to_vec(), Object::name("DeviceGray"));
+                dict.remove(b"DecodeParms");
+            }
+            Stream::from_raw(dict, data)
+        }
+        Compression::Targeted(target) => {
+            // A colour image that is grey to the eye is stored as grey (DeviceRGB only: other
+            // RGB spaces would need their own grey axis).
+            let rgb = matches!(d.name(b"ColorSpace"), Some(b"DeviceRGB" | b"RGB"));
+            let (px, n, dict) = if target.grey && n == 3 && rgb && crate::quality::is_grey(&px) {
+                let mut dict = d.clone();
+                dict.set(b"ColorSpace".to_vec(), Object::name("DeviceGray"));
+                (crate::quality::luma(&px, 3), 1, dict)
+            } else {
+                (px, n, d.clone())
+            };
+            if graphic {
+                lossless(&dict, &px, n, nw, nh)?
+            } else {
+                let sub = n == 3 && crate::quality::chroma_halves_well(&px, nw as usize, nh as usize);
+                match crate::quality::search(&px, n, nw, nh, &target, sub) {
+                    Some((data, _, _)) => jpeg_stream(&dict, data, nw, nh),
+                    // Not even the ceiling reaches the target: grain (sensor noise, paper) that
+                    // SSIM counts as detail. A JPEG is kept as it is; anything else is stored at
+                    // the ceiling quality, which looks the same.
+                    None if was_dct && !plan.resized() => return None,
+                    None => jpeg_stream(&dict, crate::jpeg::encode(&px, n, nw, nh, target.ceiling, sub)?, nw, nh),
+                }
+            }
+        }
+        _ => image_stream(d, &px, n, nw, nh, settings.compression, was_dct)?,
+    };
     // A soft mask must keep the image's dimensions: resample it with the image (lossless).
     let mut smask = None;
     if let Some(mr) = d.reference(b"SMask") {
         let mobj = doc.get(mr);
         let Object::Stream(m) = &*mobj else { return None };
-        if (nw, nh) != (w, h) {
+        if plan.resized() {
             if m.dict.int(b"BitsPerComponent") != Some(8) || m.dict.contains(b"Matte") || m.dict.contains(b"Decode") {
                 return None;
             }
             let (mw, mh) = (u32::try_from(m.dict.int(b"Width")?).ok()?, u32::try_from(m.dict.int(b"Height")?).ok()?);
             let mpx = pixels(doc, m, 1, budget)?;
-            let mpx = resample(&mpx, 1, mw, mh, nw, nh)?;
+            let mpx = resample_with(&mpx, 1, mw, mh, nw, nh, hard)?;
             smask = Some((mr, image_stream(&m.dict, &mpx, 1, nw, nh, Compression::Flate, false)?));
         }
     }
@@ -816,7 +1050,32 @@ fn process(
             _ => 0,
         });
     let after = new.raw.len() + smask.as_ref().map_or(0, |(_, m)| m.raw.len());
-    (after < before).then_some((new, smask))
+    let worth = if !plan.resized() && was_dct {
+        match settings.compression {
+            // Against the JPEG as the lossless transcode will store it.
+            Compression::Targeted(t) => {
+                let base = crate::jpeg::transcode_unchecked(&s.raw).map_or(before, |j| j.len());
+                (after as f64) <= (base as f64) * (1.0 - f64::from(t.min_saving.min(100)) / 100.0)
+            }
+            _ => (after as f64) <= (before as f64) * (1.0 - REENCODE_MIN_SAVING),
+        }
+    } else {
+        after < before
+    };
+    worth.then_some((new, smask))
+}
+
+/// One image: resample and/or recompress per `settings`; `ppi` is its effective resolution.
+/// Returns the new image and its new soft mask, if the result is smaller.
+fn process(
+    doc: &Document,
+    s: &Stream,
+    ppi: f64,
+    settings: &ImageSettings,
+    n: usize,
+    budget: &mut ImageBudget,
+) -> Option<(Stream, Option<(ObjRef, Stream)>)> {
+    encode(doc, s, &plan(doc, s, ppi, settings, n)?, settings, budget)
 }
 
 /// Whether colour space `cs` has one colour component, so a 1-bit image in it has one bit per
@@ -1365,6 +1624,56 @@ fn share(doc: &mut Document, group: &mut Vec<Held>, report: &mut Report) {
     }
 }
 
+/// [`drawn`]'s pictures with their resolutions, and the images default colour spaces may draw.
+type Drawn = (Vec<(ObjRef, f64)>, HashSet<u32>);
+
+/// The pictures the pages draw, in object order, each with its effective resolution (soft masks
+/// are processed with their image, not on their own), and the images, by object number, that
+/// default colour spaces may draw otherwise ([`decide`]'s `defaults`). `tick` hears how many pages
+/// are read, and stops by returning false.
+pub(crate) fn drawn(doc: &Document, pages: &[ObjRef], settings: &Settings, tick: &mut dyn FnMut(usize) -> bool) -> Result<Drawn, OptimizeError> {
+    let (ppi, mut defaults, read) = walk_pages(doc, pages, tick)?;
+    // Black-and-white RGB becomes grey, which default colour spaces would draw otherwise, and an
+    // indexed image's palette says which of its samples a resampled one keeps, which they may
+    // change: one used where the walk didn't look may be drawn so.
+    let packs = settings.mono.compression != MonoCompression::Retain;
+    let checked: HashSet<u32> =
+        ppi.keys().filter(|r| (packs && device_rgb(doc, **r)) || (settings.mono.downsample && indexed(doc, **r))).map(|r| r.num).collect();
+    defaults.extend(used_elsewhere(doc, &checked, &read));
+    let masks: HashSet<ObjRef> = ppi
+        .keys()
+        .filter_map(|r| match &*doc.get(*r) {
+            Object::Stream(s) => s.dict.reference(b"SMask"),
+            _ => None,
+        })
+        .collect();
+    let mut refs: Vec<(ObjRef, f64)> = ppi.into_iter().filter(|(r, _)| !masks.contains(r)).collect();
+    refs.sort_by_key(|(r, _)| (r.num, r.generation));
+    Ok((refs, defaults))
+}
+
+/// What [`decide`] makes of picture `r` at `ppi`, if it replaces it: the new image and soft mask.
+/// For estimates, which try a sample of pictures for real.
+pub(crate) fn trial(
+    doc: &Document,
+    r: ObjRef,
+    ppi: f64,
+    defaults: bool,
+    settings: &Settings,
+    budget: &mut ImageBudget,
+) -> Option<(Stream, Option<(ObjRef, Stream)>)> {
+    match decide(doc, r, ppi, defaults, settings, budget) {
+        Decision::Replace { new, smask, .. } => Some((new, smask)),
+        Decision::NotAnImage | Decision::Stays { .. } => None,
+    }
+}
+
+/// Whether the black-and-white step ([`mono`]) may take image `s`: one bit a sample, or an image
+/// mask. Images it packs from more bits are the grey and colour settings' too.
+pub(crate) fn one_bit_image(s: &Stream) -> bool {
+    matches!(s.dict.get(b"ImageMask"), Some(Object::Bool(true))) || s.dict.int(b"BitsPerComponent") == Some(1)
+}
+
 /// One pass over the document's images, within `budget`. An image past it stays as it is, and is
 /// counted in the report.
 pub(crate) fn run(
@@ -1375,24 +1684,7 @@ pub(crate) fn run(
     progress: &mut dyn FnMut(Stage) -> bool,
     budget: &mut ImageBudget,
 ) -> Result<(), OptimizeError> {
-    let (ppi, mut defaults, read) = walk_pages(doc, pages, &mut |done| progress(Stage::Reading { done, total: pages.len() }))?;
-    // Black-and-white RGB becomes grey, which default colour spaces would draw otherwise, and an
-    // indexed image's palette says which of its samples a resampled one keeps, which they may
-    // change: one used where the walk didn't look may be drawn so.
-    let packs = settings.mono.compression != MonoCompression::Retain;
-    let checked: HashSet<u32> =
-        ppi.keys().filter(|r| (packs && device_rgb(doc, **r)) || (settings.mono.downsample && indexed(doc, **r))).map(|r| r.num).collect();
-    defaults.extend(used_elsewhere(doc, &checked, &read));
-    // Soft masks are processed with their image, not on their own.
-    let masks: HashSet<ObjRef> = ppi
-        .keys()
-        .filter_map(|r| match &*doc.get(*r) {
-            Object::Stream(s) => s.dict.reference(b"SMask"),
-            _ => None,
-        })
-        .collect();
-    let mut refs: Vec<(ObjRef, f64)> = ppi.into_iter().filter(|(r, _)| !masks.contains(r)).collect();
-    refs.sort_by_key(|(r, _)| (r.num, r.generation));
+    let (refs, defaults) = drawn(doc, pages, settings, &mut |done| progress(Stage::Reading { done, total: pages.len() }))?;
     // Then the pictures' masks of one bit a sample, each once ([`decide_mask`]).
     let mask_refs = picture_masks(doc, &refs);
     let total = refs.len() + mask_refs.len();

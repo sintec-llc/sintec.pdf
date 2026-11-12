@@ -19,6 +19,11 @@ Not stashed because they were resolved in place:
 - `ATTRIBUTION.toml`: ours plus upstream's new records; the `ru.tsv` record was dropped with the file
   (it is here, see feature 5).
 
+Feature 4 (compression levels, 024/026) has been carried onto upstream's optimizer by task 046
+(black-and-white images use upstream's CCITT Group 4 / JBIG2; our `jpeg/`, `quality.rs`,
+`estimate.rs`, `recompress.rs`, `Level` and the Reduce dialog are back in the tree). Its files stay
+here as a reference.
+
 | File | Feature (report 038) | Commits |
 |---|---|---|
 | `apps/pdfcraft/src/collect.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | 037: CI: flaky timing-sensitive tests on the macOS runners (x86_64 and; Explorer «Преобразовать в PDF»: selected files become one PDF |

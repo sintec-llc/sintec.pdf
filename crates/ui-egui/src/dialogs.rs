@@ -74,6 +74,7 @@ struct Pending {
     lock_answer: Option<bool>,
     summarize_now: bool,
     optimize_now: bool,
+    reduce_now: bool,
     duplicate_now: Option<Edit>,
     page_props_now: Option<(pdfcraft_engine::DocId, u64, Edit)>,
     attachment_description_now: Option<(pdfcraft_engine::DocId, Edit)>,
@@ -92,6 +93,10 @@ struct Pending {
 }
 
 pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
+    // The Reduce File Size dialog went away, whichever way: its estimate stops.
+    if app.reduce.is_some() && app.dialog != Some(Dialog::Reduce) {
+        app.reduce = None;
+    }
     // The page sets hover cursors from the raw pointer position (form fields, links, comments)
     // before any dialog is drawn, and nothing under a modal's backdrop takes clicks. Start from
     // the arrow; the modal's own widgets set theirs as they are drawn.
@@ -282,6 +287,16 @@ fn dialog_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, dialog: Dialog, req: &m
                 app.refresh_space_audit();
                 req.next = Some(Dialog::AuditSpace);
             }
+            return false;
+        }
+        Dialog::Reduce => {
+            let Some(d) = app.reduce.as_mut() else {
+                req.close = true;
+                return false;
+            };
+            let (ok, cancel) = crate::optimize_ui::reduce_body(ui, d, &t);
+            req.reduce_now = ok;
+            req.close = ok || cancel;
             return false;
         }
         Dialog::CertificateViewer => {
@@ -1943,6 +1958,9 @@ fn finish_actions(app: &mut PdfCraftApp, req: &mut Pending) {
     }
     if req.optimize_now {
         app.optimize_with_draft();
+    }
+    if req.reduce_now {
+        app.confirm_reduce();
     }
     if let Some(e) = req.duplicate_now.take() {
         app.duplicate_draft = None;

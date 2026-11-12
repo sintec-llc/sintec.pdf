@@ -141,14 +141,19 @@ impl Session {
         if pdf { Ok(bytes.clone()) } else { self.convert(name, bytes, office).map(|(_, pdf)| pdf) }
     }
 
-    /// Reduce File Size: Acrobat's defaults (colour and grey images above 225 ppi to 150 ppi,
-    /// JPEG medium quality; black-and-white averaged down to 300 ppi above 450 ppi, and stored as
-    /// CCITT Group 4 whenever smaller; thumbnails dropped), identical resources merged, unused
-    /// objects dropped, objects packed into compressed object streams. Returns the bytes, how
-    /// many objects were merged and how many images stayed as they were, past what one run may
-    /// decode. The open document is not changed (Acrobat saves the reduced copy as a new file).
+    /// Reduce File Size at its default level, Medium ([`Self::reduced_bytes_at`]).
     pub fn reduced_bytes(&self, id: DocId) -> Result<(Arc<Vec<u8>>, usize, usize), EditError> {
-        let (bytes, report) = self.optimized_bytes(id, &optimize::Settings::default(), &[])?;
+        self.reduced_bytes_at(id, crate::optimizer::Level::default())
+    }
+
+    /// Reduce File Size at `level` (see [`crate::optimizer::Level`]): images resampled and
+    /// recompressed as the level says, streams recompressed losslessly, identical resources
+    /// merged, unused objects dropped, objects packed into compressed object streams. Returns the
+    /// bytes, how many objects were merged and how many images stayed as they were, past what one
+    /// run may decode. The open document is not changed (Acrobat saves the reduced copy as a new
+    /// file).
+    pub fn reduced_bytes_at(&self, id: DocId, level: crate::optimizer::Level) -> Result<(Arc<Vec<u8>>, usize, usize), EditError> {
+        let (bytes, report) = self.reduce_job(id, level)?.run(|_| true)?;
         Ok((bytes, report.merged, report.optimize.images_refused))
     }
 

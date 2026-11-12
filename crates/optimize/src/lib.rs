@@ -6,7 +6,12 @@
 //!   settings can work on it.
 //! - **Images:** each image's effective resolution is measured where pages draw it (the
 //!   smallest over its uses, through form XObjects); colour and grayscale images above a
-//!   threshold are resampled (bicubic) to a target resolution and recompressed as JPEG or Flate.
+//!   threshold are resampled (bicubic) to a target resolution and recompressed as JPEG or Flate:
+//!   at a fixed quality, or ([`Compression::Targeted`], resampled with Lanczos) at the lowest
+//!   quality that keeps the image's SSIM, graphics staying lossless and JPEGs that aren't
+//!   resampled made smaller on their own coefficients ([`Compression::Lossless`] only converts
+//!   few-colour images to an indexed palette). JPEG is written by PdfCraft's own encoder (4:2:0
+//!   chroma when the colours allow it, Huffman tables made for each image).
 //!   A new image replaces the old one only if it is smaller. The colour and grey settings leave
 //!   alone images they can't decode faithfully (CMYK and other colour spaces, masks, decode arrays
 //!   other than the default, JPEG 2000, JBIG2, CCITT, other than 8 bits, JPEGs whose Adobe marker
@@ -22,6 +27,14 @@
 //! - **Clean up:** drop images and forms that pages list but never draw (such as a deleted
 //!   image); Flate-compress streams that have no filter; remove a redundant outer ASCII85 or
 //!   ASCIIHex layer from streams that have one; store LZW-compressed streams with Flate instead.
+//! - **Recompress streams** (lossless, [`Settings::recompress_streams`]): every stream in a
+//!   general-purpose encoding is stored again with Flate at the best level, image samples with a
+//!   PNG predictor; JPEGs are transcoded losslessly (the same coefficients, better Huffman tables,
+//!   no Exif); a stream is replaced only when that is smaller and, for a JPEG, decodes to the same
+//!   pixels. JPEG 2000, JBIG2 and CCITT data stay as they are.
+//! - **Estimate:** [`estimate_with_progress`] predicts what the slow steps would make of each
+//!   stream, from trial encodes of a budgeted sample, so a caller can show sizes before it
+//!   optimizes.
 //! - **Discard embedded search index** (off by default): the search indexes stored in the
 //!   catalog's `/PieceInfo` (see [`Settings::discard_search_index`]).
 //!
@@ -37,17 +50,22 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 mod audit;
+mod estimate;
 mod external_refs;
 mod form_actions;
 pub mod fragments;
 mod images;
+mod jpeg;
 mod links;
 mod pool;
+mod quality;
+mod recompress;
 mod samples;
 mod tiles;
 mod unused;
 
 pub use audit::{SpaceCategory, SpaceUse, audit_space};
+pub use estimate::{Budget, StreamSizes, TrialCache, estimate_with_progress, reachable};
 
 use pdfcraft_cos::{Dict, Document, ImageBudget, MAX_PAGE_DECODED, ObjRef, Object, Stream, serialize};
 use pdfcraft_filters::{Filter, Params};
@@ -132,6 +150,8 @@ pub enum Stage {
     Fragments,
     /// Discarding objects, cleaning up links and compressing unencoded streams.
     CleanUp,
+    /// Recompressing stream `done` of `total` (the objects of the file, in order).
+    Streams { done: usize, total: usize },
 }
 
 /// How resampled (or recompressed) images are stored.
@@ -143,6 +163,31 @@ pub enum Compression {
     Flate,
     /// Keep the image's own compression (resampled images become Flate if they weren't JPEG).
     Retain,
+    /// Lossless only: an image that isn't JPEG is stored as an indexed palette when it has few
+    /// enough colours and that is smaller (JPEGs are left to the lossless stream pass).
+    Lossless,
+    /// JPEG at the lowest quality that keeps the image looking the same ([`Target`]); graphics
+    /// (few colours or large flat areas: screenshots, charts, line art, text) stay lossless.
+    Targeted(Target),
+}
+
+/// What [`Compression::Targeted`] holds an image to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Target {
+    /// The lowest structural similarity (SSIM of the luma over 8×8 windows) the JPEG may have to
+    /// the image it replaces (resampled, if it is), in ten-thousandths: 9850 is 0.985.
+    pub min_ssim: u16,
+    /// The JPEG qualities searched (1–100). The floor holds even when the SSIM would allow less.
+    pub floor: u8,
+    pub ceiling: u8,
+    /// A JPEG that isn't resampled is re-encoded only when that saves at least this share (in
+    /// percent) of its size after the lossless transcode.
+    pub min_saving: u8,
+    /// Store colour images that are grey to the eye (scans of black-and-white pages) as grey.
+    pub grey: bool,
+    /// A JPEG that isn't resampled is made smaller on its own coefficients: its quantization
+    /// steps multiplied by up to this (1 leaves them; the SSIM target still decides how far).
+    pub requantize: u8,
 }
 
 /// How black-and-white (1-bit) images are stored.
@@ -229,6 +274,11 @@ pub struct Settings {
     pub object_streams: bool,
     /// Clean Up: decode LZW-compressed streams and store them with Flate instead.
     pub lzw_to_flate: bool,
+    /// Clean Up: store every stream in a general-purpose encoding again with Flate at the best
+    /// level (image samples with a PNG predictor), and JPEGs transcoded losslessly, when that is
+    /// smaller. Lossless. Off in Acrobat's choices ([`Settings::default`]); Reduce File Size's
+    /// levels turn it on.
+    pub recompress_streams: bool,
     /// Clean Up: remove links (and bookmark destinations) that point nowhere.
     pub remove_invalid_links: bool,
     /// Clean Up: remove named destinations nothing refers to.
@@ -266,6 +316,7 @@ impl Default for Settings {
             flate_unencoded: true,
             object_streams: true,
             lzw_to_flate: true,
+            recompress_streams: false,
             remove_invalid_links: true,
             remove_unreferenced_dests: true,
             discard_external_refs: false,
@@ -334,6 +385,9 @@ pub struct Report {
     /// Form submission, import and reset actions removed.
     pub form_actions: usize,
     pub streams_compressed: usize,
+    /// Streams recompressed losslessly (Flate at the best level, predictors for images, JPEGs
+    /// transcoded).
+    pub streams_recompressed: usize,
     /// Streams whose LZW compression was replaced with Flate (Clean Up).
     pub lzw_streams: usize,
     /// Links removed and bookmarks whose destination was cleared (Clean Up).
@@ -389,9 +443,24 @@ pub fn optimize_with_progress(doc: &mut Document, settings: &Settings, progress:
     if !progress(Stage::CleanUp) {
         return Err(OptimizeError::Cancelled);
     }
-    report.unused_xobjects = unused::remove_unused(doc, &pages, progress)?;
+    clean_up(doc, &pages, settings, &mut report, progress)?;
+    compress_streams(doc, settings, &mut report, progress, &mut budget)?;
+    Ok(report)
+}
+
+/// The steps between the images and the stream passes: unused images and forms, the Discard
+/// Objects choices, the target version and the link clean-up. They are quick, so estimates run
+/// them too.
+fn clean_up(
+    doc: &mut Document,
+    pages: &[ObjRef],
+    settings: &Settings,
+    report: &mut Report,
+    progress: &mut dyn FnMut(Stage) -> bool,
+) -> Result<(), OptimizeError> {
+    report.unused_xobjects = unused::remove_unused(doc, pages, progress)?;
     if settings.discard_thumbnails {
-        for p in &pages {
+        for p in pages {
             if doc.get(*p).as_dict().is_some_and(|d| d.contains(b"Thumb")) {
                 doc.update_dict(*p, |d| {
                     d.remove(b"Thumb");
@@ -433,7 +502,7 @@ pub fn optimize_with_progress(doc: &mut Document, settings: &Settings, progress:
             c.remove(b"StructTreeRoot");
             c.remove(b"MarkInfo");
         })?;
-        for p in &pages {
+        for p in pages {
             if doc.get(*p).as_dict().is_some_and(|d| d.contains(b"StructParents")) {
                 doc.update_dict(*p, |d| {
                     d.remove(b"StructParents");
@@ -456,18 +525,33 @@ pub fn optimize_with_progress(doc: &mut Document, settings: &Settings, progress:
         report.form_actions = form_actions::discard(doc)?;
     }
     if settings.remove_invalid_links {
-        let (l, b) = links::remove_invalid(doc, &pages)?;
+        let (l, b) = links::remove_invalid(doc, pages)?;
         report.invalid_links = l;
         report.invalid_bookmarks = b;
     }
     if settings.discard_external_refs {
-        let (l, b) = external_refs::discard(doc, &pages)?;
+        let (l, b) = external_refs::discard(doc, pages)?;
         report.external_links = l;
         report.external_bookmarks = b;
     }
     if settings.remove_unreferenced_dests {
         report.unreferenced_dests = links::remove_unreferenced_dests(doc)?;
     }
+    Ok(())
+}
+
+/// How many objects are looked at between two progress reports while recompressing streams.
+const STREAMS_PER_REPORT: usize = 64;
+
+/// The stream passes: [`Settings::lzw_to_flate`], then [`Settings::recompress_streams`] and
+/// [`Settings::flate_unencoded`] together, decoding within the run's `budget`.
+fn compress_streams(
+    doc: &mut Document,
+    settings: &Settings,
+    report: &mut Report,
+    progress: &mut dyn FnMut(Stage) -> bool,
+    budget: &mut ImageBudget,
+) -> Result<(), OptimizeError> {
     // Before the unencoded-stream pass, which would otherwise take the ASCII layer off an
     // `[/ASCII85Decode /LZWDecode]` stream first and count it twice.
     if settings.lzw_to_flate {
@@ -479,36 +563,58 @@ pub fn optimize_with_progress(doc: &mut Document, settings: &Settings, progress:
             if s.filters().iter().any(|(f, _)| *f == Filter::Lzw) && !progress(Stage::CleanUp) {
                 return Err(OptimizeError::Cancelled);
             }
-            if let Some(replacement) = lzw_to_flate(s, MAX_LZW_DECODED, &mut budget) {
+            if let Some(replacement) = lzw_to_flate(s, MAX_LZW_DECODED, budget) {
                 doc.set(r, Object::Stream(replacement));
                 report.lzw_streams += 1;
             }
         }
     }
-    if settings.flate_unencoded {
-        for num in doc.object_numbers() {
-            let r = ObjRef { num, generation: doc.generation(num) };
-            let obj = doc.get(r);
-            let Object::Stream(s) = &*obj else { continue };
-            // XMP stays readable as plain text (PDF/A requires it); tiny streams don't gain.
-            if s.dict.name(b"Type") == Some(b"Metadata") || s.dict.name(b"Type") == Some(b"XRef") || s.raw.len() < 64 {
-                continue;
-            }
-            let replacement = if s.dict.contains(b"Filter") {
-                strip_ascii_wrapper(s)
-            } else {
-                let mut d = s.dict.clone();
-                d.remove(b"Length");
-                let packed = Stream::flate(d, &s.raw);
-                (packed.raw.len() < s.raw.len()).then_some(packed)
-            };
-            if let Some(replacement) = replacement {
+    if !settings.recompress_streams && !settings.flate_unencoded {
+        return Ok(());
+    }
+    let encrypted = doc.trailer().contains(b"Encrypt");
+    let numbers = doc.object_numbers();
+    let total = numbers.len();
+    for (done, num) in numbers.into_iter().enumerate() {
+        if settings.recompress_streams && done % STREAMS_PER_REPORT == 0 && !progress(Stage::Streams { done, total }) {
+            return Err(OptimizeError::Cancelled);
+        }
+        let r = ObjRef { num, generation: doc.generation(num) };
+        let obj = doc.get(r);
+        let Object::Stream(s) = &*obj else { continue };
+        if settings.recompress_streams && recompress::eligible(s, encrypted).is_some() {
+            if let Some(replacement) = recompress::recompress(doc, s, budget) {
                 doc.set(r, Object::Stream(replacement));
-                report.streams_compressed += 1;
+                report.streams_recompressed += 1;
             }
+        } else if settings.flate_unencoded
+            && let Some(replacement) = flate_unencoded(s)
+        {
+            doc.set(r, Object::Stream(replacement));
+            report.streams_compressed += 1;
         }
     }
-    Ok(report)
+    if settings.recompress_streams && !progress(Stage::Streams { done: total, total }) {
+        return Err(OptimizeError::Cancelled);
+    }
+    Ok(())
+}
+
+/// Clean Up's "Use Flate to encode streams that are not encoded" for one stream: Flate for a
+/// stream without a filter, or without its redundant outer ASCII layer.
+fn flate_unencoded(s: &Stream) -> Option<Stream> {
+    // XMP stays readable as plain text (PDF/A requires it); tiny streams don't gain.
+    if s.dict.name(b"Type") == Some(b"Metadata") || s.dict.name(b"Type") == Some(b"XRef") || s.raw.len() < 64 {
+        return None;
+    }
+    if s.dict.contains(b"Filter") {
+        strip_ascii_wrapper(s)
+    } else {
+        let mut d = s.dict.clone();
+        d.remove(b"Length");
+        let packed = Stream::flate(d, &s.raw);
+        (packed.raw.len() < s.raw.len()).then_some(packed)
+    }
 }
 
 /// Largest decoded LZW stream converted, as for a page's content: the data and its check are

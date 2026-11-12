@@ -169,6 +169,8 @@ pub enum Dialog {
     Sign,
     /// Optimize PDF ▸ Advanced optimization.
     Optimize,
+    /// Reduce File Size: its three levels, with estimated sizes.
+    Reduce,
     /// Prepare a form ▸ right-click a field ▸ Duplicate.
     DuplicateField,
     /// Prepare a form ▸ Text field table: a movable window rather than a modal (`field_table_ui`).

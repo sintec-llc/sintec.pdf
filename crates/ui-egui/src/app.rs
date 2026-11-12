@@ -274,6 +274,7 @@ impl PdfCraftApp {
             stamp_draft: Default::default(),
             optimize_draft: OptimizeDraft::default(),
             optimize_run: None,
+            reduce: None,
             scan_clean_draft: scan_clean_ui::ScanCleanDraft::default(),
             scan_clean_run: None,
             progress_notice: None,

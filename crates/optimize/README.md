@@ -135,6 +135,27 @@ let report = optimize_with_progress(&mut doc, &settings, &mut |stage| keep_going
     1,000 scanned pages' worth, plus more for each byte of the file, enough to decode a stream
     about 8 times at Flate's best. Images past it stay as they are, and `Report::images_refused`
     counts those the image step read. Streams it only stores with Flate (below) aren't counted.
+- **Reduce File Size's levels** (`pdfcraft_engine::optimizer::Level`, `docs/file-size-levels.md`)
+  add two image compressions. `Compression::Targeted`: the lowest JPEG quality keeping a luma
+  SSIM target (`quality.rs`), resampled with Lanczos 3 and soft masks with a tent; graphics (few
+  colours, flat areas) stay lossless; colour pages grey to the eye are stored as grey; JPEGs it
+  doesn't resample are made smaller on their own coefficients (grey pages as luma alone,
+  quantization steps multiplied) and must save `min_saving` against their lossless transcode.
+  `Compression::Lossless` turns few-colour images into indexed palettes. JPEGs are written by this
+  crate's own encoder (`src/jpeg/`, from T.81: 4:2:0 chroma when the colours allow it, Huffman
+  tables made for each image); a JPEG re-encoded at a fixed quality without resampling must save a
+  tenth.
+- **Recompress streams** (lossless, `Settings::recompress_streams`, off in Acrobat's choices, on in
+  the levels): every stream in a general-purpose encoding (Flate, LZW, RunLength, ASCII85, ASCIIHex
+  or none) with direct parameters is decoded strictly and stored again with Flate at the best level;
+  image samples also try a PNG predictor. JPEGs are transcoded losslessly (Huffman tables made for
+  the image, progressive when smaller, Exif/XMP dropped) and kept only when they decode to the same
+  pixels. Kept only when smaller, counting the dictionary; decoding spends the run's allowance. Left
+  alone: other image codecs, XMP, object and cross-reference streams, external data, `Crypt`, and
+  attachments in encrypted files.
+- **Estimate** (`estimate_with_progress`): the quick steps for real, the slow ones (images through
+  the same decision as the run, stream recompression) tried on a budgeted sample and predicted for
+  the rest; the engine turns this into Reduce File Size's per-level estimates.
 - **Threads**: pictures are worked out on up to half the machine's processors (at most 8, one on
   the web), and as many as 1 GiB holds of the largest picture. Those threads go at low priority
   where the system allows it, so other programs go first; pictures done on the calling thread keep
@@ -175,7 +196,8 @@ The engine runs Remove Hidden Information (`pdfcraft-redact`) for the user-data 
 then this, then merges identical objects and writes a full, compressed save
 (`pdfcraft_engine::optimizer::OptimizeJob`, which the UI runs on a worker thread with a
 progress bar). JPEG decoding comes from `zune-jpeg` (the decoder behind `image` and the
-renderer), JPEG encoding and resampling from the `image` crate.
+renderer), resampling from the `image` crate, JPEG encoding and the coefficient-level transcoder
+from this crate (`src/jpeg/`).
 
 Discard embedded search index (`discard_search_index`, off by default) removes the entries of
 the catalog's `/PieceInfo` whose application name contains "index" in any letter case, such as

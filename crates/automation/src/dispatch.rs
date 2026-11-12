@@ -330,13 +330,31 @@ impl Automation {
                 let id = self.doc(&a)?.id;
                 let before = self.doc(&a)?.bytes.len();
                 let path = self.resolve(a.str("path")?, true)?;
-                let (bytes, merged, images_refused) = self.session.reduced_bytes(id).map_err(failed)?;
+                let level = reduce_level(&a)?;
+                let (bytes, merged, images_refused) = self.session.reduced_bytes_at(id, level).map_err(failed)?;
                 // As in the app, a copy that isn't smaller is not written (#490).
                 let written = bytes.len() < before;
                 if written {
                     write_atomic(&path, &bytes)?;
                 }
-                json!({ "path": path.to_string_lossy(), "written": written, "bytes_before": before, "bytes_after": bytes.len(), "merged_objects": merged, "images_refused": images_refused })
+                json!({ "path": path.to_string_lossy(), "level": level.name(), "written": written, "bytes_before": before, "bytes_after": bytes.len(), "merged_objects": merged, "images_refused": images_refused })
+            }
+            "doc_reduce_estimate" => {
+                let id = self.doc(&a)?.id;
+                let before = self.doc(&a)?.bytes.len();
+                let mut levels = Vec::new();
+                self.session
+                    .estimate_job(id)
+                    .map_err(failed)?
+                    .run(
+                        || false,
+                        |level, bytes| {
+                            let saved = if before == 0 { 0.0 } else { 100.0 * (1.0 - bytes as f64 / before as f64) };
+                            levels.push(json!({ "level": level.name(), "bytes": bytes, "saved_percent": (saved * 10.0).round() / 10.0 }));
+                        },
+                    )
+                    .map_err(failed)?;
+                json!({ "bytes_before": before, "estimated": true, "levels": levels })
             }
             "doc_optimize" => self.doc_optimize(&a)?,
             "doc_initial_view" => self.doc_initial_view(&a)?,
@@ -1009,5 +1027,14 @@ impl Automation {
         out["not_scanned"] = json!(numbered(&report.not_scanned));
         out["skipped"] = json!(skipped);
         Ok(out)
+    }
+}
+
+/// The `level` argument of doc_reduce (default medium).
+fn reduce_level(a: &Args) -> Result<pdfcraft_engine::optimizer::Level> {
+    match a.opt_str("level")? {
+        None => Ok(pdfcraft_engine::optimizer::Level::Medium),
+        Some(l) => pdfcraft_engine::optimizer::Level::from_name(l)
+            .ok_or_else(|| ToolError::InvalidArgs(format!("unknown level {l:?} (light, medium, strong)"))),
     }
 }

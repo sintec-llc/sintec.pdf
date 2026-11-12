@@ -702,6 +702,8 @@ pub struct PdfCraftApp {
     pub optimize_draft: OptimizeDraft,
     /// The running optimization (Optimize PDF ▸ Advanced optimization).
     pub optimize_run: Option<optimize_ui::OptimizeRun>,
+    /// The Reduce File Size dialog, while it is open (dropping it stops its estimate).
+    pub reduce: Option<optimize_ui::ReduceDraft>,
     /// Scan & OCR ▸ Enhance scanned file: the dialog's choices and the running clean-up.
     pub scan_clean_draft: scan_clean_ui::ScanCleanDraft,
     pub scan_clean_run: Option<scan_clean_ui::ScanCleanRun>,

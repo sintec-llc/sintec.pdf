@@ -252,14 +252,21 @@ impl PdfCraftApp {
         }
     }
 
-    /// Reduce File Size: write a compacted copy with images downsampled (the open document is
-    /// unchanged). It asks where to save first, so a heavy file can finish by itself, then runs in
-    /// the background with a progress bar, like the PDF Optimizer.
+    /// Reduce File Size: choose a level (with estimated sizes) in a small dialog, then
+    /// [`Self::reduce_at`].
     pub(crate) fn reduce_file_size(&mut self) {
+        self.open_reduce_dialog();
+    }
+
+    /// Reduce File Size at `level`: write a compacted copy (the open document is unchanged). It
+    /// asks where to save first, so a heavy file can finish by itself, then runs in the background
+    /// with a progress bar, like the PDF Optimizer.
+    pub(crate) fn reduce_at(&mut self, level: pdfcraft_engine::optimizer::Level) {
         use crate::optimize_ui::OptimizeKind::Reduce;
-        let settings = pdfcraft_engine::optimize::Settings::default();
+        let settings = level.settings();
+        let discard = level.discard();
         #[cfg(target_arch = "wasm32")]
-        self.start_optimize(Reduce, &settings, &[]);
+        self.start_optimize(Reduce, &settings, discard);
         #[cfg(not(target_arch = "wasm32"))]
         {
             // What can't run says so now, not after asking where to save.
@@ -271,18 +278,18 @@ impl PdfCraftApp {
                 self.notify_tr("Optimization is already running");
                 return;
             }
-            if let Err(e) = self.session.optimize_job(id, &settings, &[]) {
+            if let Err(e) = self.session.optimize_job(id, &settings, discard) {
                 return self.save_optimized(id, Reduce, Err(e), None);
             }
             if let Some(path) = self.save_override.clone() {
-                return self.run_optimize(id, Reduce, &settings, &[], Some(path));
+                return self.run_optimize(id, Reduce, &settings, discard, Some(path));
             }
             let Some(doc) = self.session.get(id) else { return };
             let dialog = rfd::AsyncFileDialog::new().add_filter_any_case("PDF", &["pdf"]).set_file_name(optimized_name(&doc.name, Reduce));
             let dialog = crate::editing::in_document_folder(dialog, doc.path.as_deref());
             // With the target, a document closed, switched from or edited meanwhile isn't compressed.
             self.ask_one(crate::pickers::Ask::Save(dialog), Some(id), move |app, path| {
-                app.run_optimize(id, Reduce, &settings, &[], Some(path.to_string_lossy().into_owned()));
+                app.run_optimize(id, Reduce, &settings, discard, Some(path.to_string_lossy().into_owned()));
             });
         }
     }
