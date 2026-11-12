@@ -41,4 +41,6 @@ Sintec.PDF ships English and Russian only. Should another language be needed:
 2. Add one row to `LANGUAGES` in `crates/ui-egui/src/i18n/mod.rs` (code, native name, catalog and plural rule) and the language's month and weekday names to `DATE_LANGUAGES` in `crates/engine/src/dates.rs`.
 3. Add an `ATTRIBUTION.toml` entry for the catalog (`kind = "translation"`), then run `cargo xtask assets --write` and `cargo xtask assets`.
 
-The Preferences dropdown, the system-language match and the catalog tests (format, duplicates, placeholders, plural forms, command ids) then pick it up.
+The Preferences dropdown, the system-language match and the translation gaps report then pick it up.
+
+The egui 0.37 migration pins craft-fonts `b076417b5880bd4154bd22f00695b1d28c6bea83`. That manifest supplies Arabic, Hebrew, Thai and Devanagari faces selected for the web payload, but contains no Telugu face. The build code accepts a `Telu` row when a future input provides one; it does not establish Telugu glyph coverage with the current pin.
