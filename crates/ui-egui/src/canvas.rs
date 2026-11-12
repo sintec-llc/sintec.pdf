@@ -624,6 +624,9 @@ pub struct DocView {
     screen_ppp: f32,
     /// The scroll viewport on screen last frame.
     viewport_screen: Rect,
+    /// Sintec.PDF: where the floating Format text panel was drawn last frame (`Rect::NOTHING`
+    /// while it is hidden). Clicks there keep the paragraph being edited open.
+    pub(crate) text_panel: Rect,
     /// Pending zoom anchor: page, fractional position (also in gutters), and viewport offset.
     zoom_anchor: Option<(usize, f32, f32, Vec2)>,
     /// The match a find step just went to: its page and its centre as fractions of the displayed
@@ -1095,6 +1098,7 @@ impl DocView {
             screen_xforms: Vec::new(),
             screen_ppp: 1.0,
             viewport_screen: Rect::NOTHING,
+            text_panel: Rect::NOTHING,
             zoom_anchor: None,
             find_hold: None,
             shown: false,
@@ -3174,6 +3178,12 @@ fn fits_height(r: Rect, view_height: f32, pixels_per_point: f32) -> bool {
 /// scroll area with this frame's zoom, scrolling, tool input, overlays (form fields, comments,
 /// signature badges and sign tabs) and render requests.
 pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
+    page_view(app, index, ui);
+    // Sintec.PDF: Format text floats over the page view's right edge while text is edited.
+    crate::text_panel::show(app, index, ui.ctx());
+}
+
+fn page_view(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let can_paste_key = egui::Id::unique("can-paste-image");
     let can_paste_image = if ui.input(|i| i.pointer.secondary_pressed()) {

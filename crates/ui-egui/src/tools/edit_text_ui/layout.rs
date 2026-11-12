@@ -1,4 +1,4 @@
-use super::{Arc, BTreeMap, Color32, FontFamily, FontId, LineEditor, Rect};
+use super::{Arc, BTreeMap, Color32, FontFamily, FontId, LineEditor, Rect, SubstituteFace, SubstitutePreview};
 
 /// The look shown for a paragraph: the family and weight guessed from its PDF font name.
 pub(super) fn source_look(base_font: &str, size: f64, color: [f64; 3], detected_bold: bool, detected_italic: bool) -> pdfcraft_engine::AddedText {
@@ -68,14 +68,47 @@ pub(crate) fn editor_fill(text: Color32) -> Color32 {
 
 /// One TextEdit lays out all source runs; its caret and selection span the whole region.
 pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::Document, page: usize) -> BTreeMap<String, String> {
+    install_source_fonts_with(ctx, doc, page, &BTreeMap::new()).0
+}
+
+/// Sintec.PDF: [`install_source_fonts`], with `substitutes` (source resource → its stand-in)
+/// drawing what each source font lacks, before the interface's own faces. Each stand-in is also a
+/// family of its own (task 033), drawn at the size its fit gives it; returned per resource.
+pub(crate) fn install_source_fonts_with(
+    ctx: &egui::Context,
+    doc: &pdfcraft_engine::Document,
+    page: usize,
+    substitutes: &BTreeMap<String, SubstituteFace>,
+) -> (BTreeMap<String, String>, BTreeMap<String, SubstitutePreview>) {
     // Bundled replacement selectors are menu choices, never source resource names. Installing
     // an unused choice would make even a standard-font editor wait a frame for its font atlas.
     let programs: Vec<_> = doc.text_editor_fonts(page).into_iter().filter(|font| !font.choice_only).collect();
     let mut definitions = ctx.fonts(|f| f.definitions().clone());
+    let before = (definitions.font_data.len(), definitions.families.len());
     // Only the current editor's document fonts live in the atlas. Never accumulate the
     // programs of previously opened files or add them to the interface's default families.
-    definitions.font_data.retain(|name, _| !name.starts_with("pdf-source-"));
-    definitions.families.retain(|family, _| !matches!(family, FontFamily::Name(name) if name.starts_with("pdf-source-")));
+    let ours = |name: &str| name.starts_with("pdf-source-") || name.starts_with("pdf-substitute-");
+    definitions.font_data.retain(|name, _| !ours(name));
+    definitions.families.retain(|family, _| !matches!(family, FontFamily::Name(name) if ours(name)));
+    let removed = before != (definitions.font_data.len(), definitions.families.len());
+    let fallback = definitions.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    let mut substitute_names = BTreeMap::new();
+    let mut previews = BTreeMap::new();
+    for (index, (resource, face)) in substitutes.iter().enumerate() {
+        let name = format!("pdf-substitute-{index}");
+        // The glyphs at the fitted size; their advances are made up in the layout (`editor_job`).
+        let size = face.fit.size as f32;
+        let tweak = egui::FontTweak { scale: if size.is_finite() && size > 0.0 { size } else { 1.0 }, ..Default::default() };
+        definitions.font_data.insert(name.clone(), Arc::new(egui::FontData::from_owned(face.bytes.to_vec()).tweak(tweak)));
+        let mut stack = vec![name.clone()];
+        stack.extend(fallback.iter().cloned());
+        definitions.families.insert(FontFamily::Name(name.clone().into()), stack);
+        previews.insert(
+            resource.clone(),
+            SubstitutePreview { path: face.path.clone(), family: name.clone(), fit: face.fit, italic: face.italic, chars: BTreeMap::new() },
+        );
+        substitute_names.insert(resource.clone(), name);
+    }
     let mut families = BTreeMap::new();
     for (index, program) in programs.iter().enumerate() {
         let name = format!("pdf-source-{index}");
@@ -96,15 +129,14 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
                 })
                 .filter_map(|p| families.get(&p.resource).cloned()),
         );
-        if let Some(fallback) = definitions.families.get(&FontFamily::Proportional) {
-            stack.extend(fallback.iter().cloned());
-        }
+        stack.extend(substitute_names.get(&program.resource).cloned());
+        stack.extend(fallback.iter().cloned());
         definitions.families.insert(FontFamily::Name(name.clone().into()), stack);
     }
-    if !families.is_empty() {
+    if removed || !families.is_empty() || !previews.is_empty() {
         ctx.set_fonts(definitions);
     }
-    families
+    (families, previews)
 }
 
 pub(super) fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> egui::text::LayoutJob {
@@ -158,20 +190,57 @@ pub(super) fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32,
             if embedded && let Some(name) = ed.fonts.get(&line.font) {
                 font.family = FontFamily::Name(name.clone().into());
             }
+            // Sintec.PDF (task 033): the font's stand-in, the face the edit draws what the font
+            // lacks in. A font the editor has no program of is shown in it entirely, not in the
+            // interface's face.
+            // `set_fonts` takes effect next frame: until egui has the stand-in's family, laying text
+            // out in it would panic ("the family has no fonts"), so the text shows without it.
+            let stand_in = ed
+                .substitutes
+                .get(&line.font)
+                .filter(|s| original_face && ui.fonts(|f| f.definitions().families.contains_key(&FontFamily::Name(s.family.clone().into()))));
+            let stand_in_font = stand_in.map(|s| FontId::new(font.size, FontFamily::Name(s.family.clone().into())));
+            if !embedded && let Some(f) = &stand_in_font {
+                font = f.clone();
+            }
             let native_width = ui.fonts_mut(|f| f.layout_no_wrap(line.text.clone(), font.clone(), Color32::BLACK).size().x);
             let target_width = ((line.rect[2] - line.rect[0]) * look.size / base.max(0.01)) as f32 * scale;
             let spacing = if original_face { (target_width - native_width) / line.text.chars().count().saturating_sub(1).max(1) as f32 } else { 0.0 };
-            job.append(
-                text.get(range).unwrap_or_default(),
-                0.0,
-                egui::TextFormat {
-                    font_id: font,
-                    extra_letter_spacing: spacing + ed.extras.char_spacing as f32 * scale,
-                    color: color32(look.color),
-                    italics: look.italic && !embedded,
-                    ..Default::default()
-                },
-            );
+            let spacing = spacing + ed.extras.char_spacing as f32 * scale;
+            let format = |font_id: FontId, extra: f32, italics: bool| egui::TextFormat {
+                font_id,
+                extra_letter_spacing: extra,
+                color: color32(look.color),
+                italics,
+                ..Default::default()
+            };
+            let segment = text.get(range).unwrap_or_default();
+            let italics = look.italic && !embedded && !stand_in.is_some_and(|s| s.italic);
+            match (stand_in, stand_in_font) {
+                (Some(stand_in), Some(stand_in_font)) => {
+                    // What the edit draws in the stand-in: in it, as far apart as the edit sets it
+                    // (its fit's size and scale; egui draws a tweaked face larger but advances it
+                    // as at its own size).
+                    let mut own = String::new();
+                    for c in segment.chars() {
+                        if !stand_in.draws(c) {
+                            own.push(c);
+                            continue;
+                        }
+                        if !own.is_empty() {
+                            job.append(&std::mem::take(&mut own), 0.0, format(font.clone(), spacing, italics));
+                        }
+                        let advance = ui.fonts_mut(|f| f.glyph_width(&stand_in_font, c));
+                        let extra = advance * (stand_in.fit.advance() as f32 - 1.0);
+                        let extra = if extra.is_finite() { extra } else { 0.0 };
+                        job.append(c.encode_utf8(&mut [0; 4]), 0.0, format(stand_in_font.clone(), spacing + extra, false));
+                    }
+                    if !own.is_empty() {
+                        job.append(&own, 0.0, format(font, spacing, italics));
+                    }
+                }
+                _ => job.append(segment, 0.0, format(font, spacing, italics)),
+            }
         }
     } else {
         job.append(

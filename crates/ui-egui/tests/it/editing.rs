@@ -47,6 +47,7 @@ fn harness(pages: usize, setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harn
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("doc.pdf", None, fixture(pages)).expect("fixture opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         setup(&mut app);
         app
     });
@@ -211,6 +212,7 @@ fn organize_tool_chosen_before_opening_a_document_shows_its_pages() {
     let mut app = PdfCraftApp::new();
     app.set_option("tool", "organize").unwrap();
     app.open_bytes("doc.pdf", None, fixture(3)).unwrap();
+    app.fonts.installed_override = Some(support::standard_faces());
     assert!(app.views[0].organize);
 }
 
@@ -280,6 +282,7 @@ fn organize_local_actions_respect_document_permissions() {
         }));
         let bytes = app.session.save_bytes(app.views[0].id).unwrap();
         app.open_bytes("restricted.pdf", None, bytes.as_ref().clone()).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app.set_option("tool", "organize").unwrap();
     });
     h.get_by_label("Select page 2").click();
@@ -440,6 +443,7 @@ fn organize_select_all_works_without_page_editing_permission() {
         }));
         let bytes = app.session.save_bytes(app.views[0].id).unwrap();
         app.open_bytes("restricted.pdf", None, bytes.as_ref().clone()).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app.set_option("organize", "on").unwrap();
     });
     let index = h.state().active.unwrap();
@@ -772,6 +776,7 @@ fn clean_tabs_close_without_asking() {
 fn quitting_with_unsaved_changes_asks_for_each_document() {
     let mut h = harness(2, |app| {
         app.open_bytes("second.pdf", None, fixture(1)).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
     });
     // Edit both documents.
     for tab in 0..2 {
@@ -1056,6 +1061,7 @@ fn save_prompt_stays_inside_the_screen_for_a_long_filename() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes(name, None, fixture(1)).expect("fixture opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app.close_request = Some(CloseRequest::Tab(app.views[0].id));
         app
     });
@@ -1094,6 +1100,7 @@ fn save_prompt_fits_the_smallest_window_whatever_the_name() {
             let mut app = PdfCraftApp::new();
             app.set_option("language", "en").unwrap();
             app.open_bytes(&name, None, fixture(1)).expect("fixture opens");
+            app.fonts.installed_override = Some(support::standard_faces());
             app.close_request = Some(CloseRequest::Tab(app.views[0].id));
             app
         });
@@ -1263,6 +1270,7 @@ fn a_custom_property_whose_name_the_tools_refuse_is_listed_and_left_alone() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("doc.pdf", None, pdf.into_bytes()).expect("fixture opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app.set_option("dialog", "custom").unwrap();
         app
     });
@@ -1310,6 +1318,7 @@ fn a_custom_property_is_deleted_from_an_info_dictionary_in_the_trailer() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("doc.pdf", None, pdf.into_bytes()).expect("fixture opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app.set_option("dialog", "custom").unwrap();
         app
     });
@@ -1335,6 +1344,7 @@ fn add_stops_at_the_256_custom_properties_the_tab_lists() {
             let mut app = PdfCraftApp::new();
             app.set_option("language", "en").unwrap();
             app.open_bytes("doc.pdf", None, pdf.into_bytes()).expect("fixture opens");
+            app.fonts.installed_override = Some(support::standard_faces());
             app.set_option("dialog", "custom").unwrap();
             app
         });
@@ -1453,6 +1463,7 @@ fn pasting_pages_into_their_own_document_keeps_field_names() {
     let mut app = PdfCraftApp::new();
     app.set_option("language", "en").unwrap();
     app.open_bytes("form.pdf", None, form_pdf("Text1")).unwrap();
+    app.fonts.installed_override = Some(support::standard_faces());
     app.views[0].select_pages(&[0]);
     assert!(app.execute("page.copy"));
     assert!(app.execute("page.paste"));
@@ -2422,6 +2433,7 @@ fn save_pages_writes_what_the_grid_shows() {
     let mut app = PdfCraftApp::new();
     app.set_option("language", "en").unwrap();
     app.open_bytes("saved.pdf", None, std::fs::read(&path).unwrap()).unwrap();
+    app.fonts.installed_override = Some(support::standard_faces());
     assert_eq!(texts_of(&app, 0), ["Page 1", "Page 3"]);
 }
 
@@ -2662,6 +2674,7 @@ fn asynchronous_launch_display(explicit: bool) {
         app.set_option("language", "en").unwrap();
         app.set_option("default-layout", "continuous").unwrap();
         app.open_bytes("other.pdf", None, fixture(2)).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(2);
@@ -2716,6 +2729,7 @@ fn canceling_launch_display_override_does_not_affect_later_documents() {
     app.submit_password(None);
     assert!(app.views.is_empty() && app.password_prompt.is_none());
     app.open_bytes("next.pdf", None, fixture(2)).unwrap();
+    app.fonts.installed_override = Some(support::standard_faces());
     assert_eq!(app.views[0].layout, PageLayout::Single);
     assert!(app.views[0].continuous());
     // Reopening the same protected file normally must not resurrect the canceled override.
@@ -2882,6 +2896,7 @@ fn password_prompt_opens_and_security_tab_reports_the_details() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("secret.pdf", None, protected("pw", "owner", -1)).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -2912,6 +2927,7 @@ fn the_security_notice_wraps_beside_its_buttons_and_lines_up_with_them() {
             let mut app = PdfCraftApp::new();
             app.set_option("language", "en").unwrap();
             app.open_bytes("locked.pdf", None, protected("", "owner", 0b0100)).unwrap();
+            app.fonts.installed_override = Some(support::standard_faces());
             app.set_option("panel", "bookmarks").unwrap();
             app
         });
@@ -2938,6 +2954,7 @@ fn the_security_notice_unlocks_with_the_permissions_password() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("locked.pdf", None, protected("", "owner", 0b0100)).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -2971,6 +2988,7 @@ fn the_security_notice_can_be_turned_off_for_good() {
             }
             app.set_option("language", "en").unwrap();
             app.open_bytes("locked.pdf", None, protected("", "owner", 0b0100)).unwrap();
+            app.fonts.installed_override = Some(support::standard_faces());
             app
         });
         h.run_steps(4);
@@ -3021,6 +3039,7 @@ fn remove_security_asks_for_the_permissions_password_first() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("locked.pdf", None, protected("", "owner", 0b0100)).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -3050,6 +3069,7 @@ fn a_secured_form_shows_its_form_notice_and_its_security() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("form.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -3097,6 +3117,7 @@ fn copying_out_of_a_document_honours_its_security() {
             app.set_option("language", "en").unwrap();
             app.system_clipboard = false;
             app.open_bytes("no-copy.pdf", None, protected("pw", "owner", -1 ^ 0b1_0000)).unwrap();
+            app.fonts.installed_override = Some(support::standard_faces());
             app.submit_password(Some(password.into()));
             // One page at a time: Select All takes that page's text (scrolling continuously it would
             // take both pages', #2639; what is tested here is the security of copying it).
@@ -3170,6 +3191,7 @@ fn replace_pages_dialog_swaps_page_content() {
     let mut app = PdfCraftApp::new();
     app.set_option("language", "en").unwrap();
     app.open_bytes("doc.pdf", None, fixture(3)).unwrap();
+    app.fonts.installed_override = Some(support::standard_faces());
     app.views[0].select_pages(&[1]);
     app.start_replace("other.pdf".into(), fixture(5));
     let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| app);
@@ -3216,6 +3238,7 @@ fn replace_split_selection_keeps_the_unchecked_page() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("original.pdf", None, sized(3, 200, 300, "Original")).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app.views[0].select_pages(selected);
         app.start_replace("other.pdf".into(), sized(5, 400, 500, "Replacement"));
         if edited {
@@ -3474,6 +3497,7 @@ fn open_source_font_fixture() -> Harness<'static, PdfCraftApp> {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("fonts.pdf", None, source_font_fixture()).expect("font fixture opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     })
 }
@@ -3563,6 +3587,7 @@ fn switching_from_a_narrow_editor_keeps_one_frame_and_a_wide_heading_on_one_line
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("editor.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -3622,6 +3647,7 @@ fn opening_a_paragraph_leaves_the_page_as_it_is() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("banner.pdf", None, bytes).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -3677,6 +3703,7 @@ fn a_quick_click_into_another_paragraph_keeps_both_in_place() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("boxes.pdf", None, bytes).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -3737,6 +3764,7 @@ fn switching_straight_to_another_box_applies_the_open_paragraph() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("boxes.pdf", None, bytes).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -3782,6 +3810,7 @@ fn text_typed_into_an_open_paragraph_counts_as_unsaved_work() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("box.pdf", None, bytes).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -3832,6 +3861,7 @@ fn an_applied_paragraph_keeps_its_edited_look_until_the_page_is_redrawn() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("boxes.pdf", None, bytes).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -3886,6 +3916,7 @@ fn a_paragraph_whose_edit_fails_stays_open_with_its_typing() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("boxes.pdf", None, bytes).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -3925,6 +3956,7 @@ fn two_boxes_animated() -> (Harness<'static, PdfCraftApp>, [egui::Rect; 2]) {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("boxes.pdf", None, bytes).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.ctx.all_styles_mut(|s| s.animation_time = 0.2);
@@ -4002,6 +4034,7 @@ fn open_letter(name: &'static str, bytes: Vec<u8>) -> Harness<'static, PdfCraftA
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes(name, None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -4354,6 +4387,7 @@ fn text_tool_mixed_style_row_grows_in_the_editor_and_saved_pdf() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("mixed-row.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -4430,6 +4464,7 @@ fn editing_a_double_drawn_line_replaces_every_copy() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("bold.pdf", None, double_drawn()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -4472,6 +4507,7 @@ fn add_text_places_a_box_on_a_picture_and_beside_a_paragraph() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -4562,6 +4598,7 @@ fn dragging_the_rotate_knob_turns_a_page_image() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -4619,6 +4656,7 @@ fn dragging_rotate_knob_on_already_rotated_image_applies_delta_only() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -4715,6 +4753,7 @@ fn check_existing_artwork(name: &'static str, bytes: Vec<u8>) {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes(name, None, bytes.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -4762,6 +4801,7 @@ fn image_right_click_context_menu_items_and_actions() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -4867,6 +4907,7 @@ fn page_context_menu_items_disabled_on_protected_pdf() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("protected.pdf", None, bytes.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -4914,6 +4955,7 @@ fn image_edge_handle_stretch_and_crop_mode() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("square.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -4973,6 +5015,7 @@ fn tiny_image_crop_handle_drag_does_not_panic() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("tiny.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -5030,6 +5073,68 @@ fn text_selection_action_icons() {
     assert!(h.query_all_by_label("Strikethrough").next().is_some());
     assert!(h.query_all_by_label("Replace text").next().is_some());
     assert!(h.query_all_by_label("Copy").next().is_some());
+}
+
+/// Sintec.PDF: Format text floats over the page, just left of the right rail, only while a
+/// paragraph is open; Esc closes the paragraph and the panel with it.
+#[test]
+fn the_format_panel_floats_left_of_the_rail_while_a_paragraph_is_open() {
+    let mut h = harness(1, |_| {});
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    assert!(h.state().views[0].text_panel_rect().is_none(), "no panel before text is edited");
+    assert!(h.query_by_label("FORMAT TEXT").is_none(), "Format text left the tools panel");
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let at = egui::pos2(r.left() + 40.0 / 200.0 * r.width(), r.top() + (300.0 - 158.0) / 300.0 * r.height());
+    h.hover_at(at);
+    h.run_steps(1);
+    h.drag_at(at);
+    h.run_steps(1);
+    h.drop_at(at);
+    h.run_steps(3);
+    assert!(h.state().views[0].line_editor.is_some(), "the paragraph opens");
+    let panel = h.state().views[0].text_panel_rect().expect("the panel shows while the paragraph is open");
+    let viewport = h.state().views[0].viewport_rect();
+    assert!(viewport.contains_rect(panel), "the panel floats over the document area: {panel:?} in {viewport:?}");
+    let title = h.get_by_label("FORMAT TEXT").rect();
+    assert!(panel.contains_rect(title), "the controls are in the floating panel: {title:?} in {panel:?}");
+    // At the right edge, left of the rail (the window's last 48 points, its buttons inside).
+    let rail_button = h.get_by_label("Comments").rect();
+    assert!(rail_button.left() >= 1400.0 - 48.0, "the rail is at the window's right edge: {rail_button:?}");
+    assert!(panel.right() <= 1400.0 - 48.0, "the panel does not cover the rail: {panel:?}");
+    assert!(panel.width() <= 301.0, "the panel keeps its width: {panel:?}");
+    assert!(panel.right() > viewport.right() - 40.0, "the panel is against the right edge: {panel:?} in {viewport:?}");
+    // A visual check: PDFCRAFT_TEXT_PANEL_SNAPSHOT=out.png.
+    if let Some(path) = std::env::var_os("PDFCRAFT_TEXT_PANEL_SNAPSHOT") {
+        let _gpu = gpu();
+        h.render().unwrap().save(std::path::Path::new(&path)).unwrap();
+    }
+    // The panel takes no keyboard focus: typing still edits the paragraph.
+    h.event(egui::Event::Text("!".into()));
+    h.run_steps(2);
+    assert!(h.state().views[0].line_editor.as_ref().is_some_and(|e| e.text.contains('!')), "typing reaches the paragraph");
+    assert!(h.state().views[0].text_panel_rect().is_some());
+    h.key_press(Key::Escape);
+    h.run_steps(3);
+    assert!(h.state().views[0].line_editor.is_none(), "Esc closes the paragraph");
+    assert!(h.state().views[0].text_panel_rect().is_none(), "and the panel with it");
+    assert!(h.query_by_label("FORMAT TEXT").is_none());
+}
+
+/// Sintec.PDF: the Add text tool formats the text it adds in the same floating panel, and the
+/// panel goes with the tool.
+#[test]
+fn the_add_text_tool_shows_the_format_panel() {
+    let mut h = harness(1, |_| {});
+    assert!(h.state_mut().execute("edit.text"));
+    h.run_steps(3);
+    let panel = h.state().views[0].text_panel_rect().expect("the panel shows with the Add text tool");
+    assert!(panel.contains_rect(h.get_by_label("FORMAT TEXT").rect()));
+    assert!(h.query_by_label("SOURCE FONT").is_none(), "new text has no source font");
+    h.state_mut().set_option("quick", "select").unwrap();
+    h.run_steps(3);
+    assert!(h.state().views[0].text_panel_rect().is_none(), "the panel goes with the tool");
+    assert!(h.query_by_label("FORMAT TEXT").is_none());
 }
 
 #[test]
@@ -5212,6 +5317,11 @@ fn typed_small_coloured_text_size_survives_save_and_reopen() {
     h.run_steps(4);
     h.get_by_label("Colour").click();
     h.run_steps(2);
+    // Sintec.PDF: the swatches open over the page from the floating Format text panel; a pointer
+    // that jumps onto one and presses in the same frame isn't taken there yet, so hover it first,
+    // as a mouse does.
+    h.get_by_label("Blue").hover();
+    h.run_steps(1);
     h.get_by_label("Blue").click();
     h.run_steps(4);
     let id = h.state().views[0].id;
@@ -5359,6 +5469,7 @@ fn selected_figure() -> Harness<'static, PdfCraftApp> {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("figure.pdf", None, bytes.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -5629,6 +5740,7 @@ fn paragraph_drag_harness(bytes: Vec<u8>, view_rotation: u16) -> Harness<'static
         app.session = pdfcraft_engine::Session::new().with_clock(|| 1_700_000_000);
         app.set_option("language", "en").unwrap();
         app.open_bytes("paragraphs.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app.set_option("zoom", "75").unwrap();
         app.views[0].rotation = view_rotation;
         assert!(app.execute("edit.edit_text"));
@@ -6137,6 +6249,7 @@ fn pages_panel(pages: usize) -> Harness<'static, PdfCraftApp> {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("doc.pdf", None, fixture(pages)).expect("fixture opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app.set_option("panel", "pages").unwrap();
         app
     });
@@ -6382,6 +6495,7 @@ fn one_editor_contains_mixed_styles_and_visual_rows() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("mixed.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -6459,6 +6573,7 @@ fn the_caret_on_a_small_row_is_as_tall_as_that_row() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("mixed.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -6558,11 +6673,17 @@ fn dragging_over_a_word_selects_that_word_when_the_editor_uses_a_stand_in_face()
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("ocr-like.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
     assert!(h.state_mut().execute("edit.edit_text"));
     h.run_steps(2);
+    // Sintec.PDF: CMR10 has no similar installed face, so Edit PDF suggests replacing it first.
+    if h.query_by_label("Font substitution").is_some() {
+        h.get_by_label("Cancel").click();
+        h.run_steps(3);
+    }
     let page = h.state().views[0].page_screen_rect(0).unwrap();
     let k = page.width() / 700.0;
     let screen = |x: f64, y: f64| egui::pos2(page.left() + x as f32 * k, page.top() + (300.0 - y) as f32 * k);
@@ -6611,6 +6732,7 @@ fn private_document_regions_open_as_one_editor() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("private.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -6743,6 +6865,15 @@ fn inline_editor_preserves_source_font_and_previews_live_bounds() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("stable.pdf", None, bytes).unwrap();
+        // Inter is "installed", so Edit PDF has no font substitution to suggest over the editor.
+        app.fonts.installed_override = Some(vec![pdfcraft_engine::text_fonts::FontFile {
+            path: std::path::PathBuf::from("Inter-Regular.ttf"),
+            family: "Inter".into(),
+            face: "Inter-Regular".into(),
+            style: pdfcraft_fonts::embedding::FaceStyle { weight: 400, italic: false, monospace: false, serif: Some(false), cyrillic: true },
+            widths: Vec::new(),
+            bundled: false,
+        }]);
         app
     });
     h.run_steps(4);
@@ -6879,6 +7010,7 @@ fn cropped_images_do_not_intercept_text_and_stay_inside_each_page() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("clipped.pdf", None, clipped_artwork_with_labels()).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -6930,6 +7062,7 @@ fn cropped_image_corner_resize_keeps_opposite_corner_and_scales_crop() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("clipped.pdf", None, clipped_artwork_with_labels_drawn(true)).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -6999,6 +7132,7 @@ fn image_pixels_follow_the_frame_while_a_corner_is_dragged() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("clipped.pdf", None, clipped_artwork_with_labels_drawn(true)).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -7125,6 +7259,7 @@ fn a_resized_image_keeps_its_new_size_until_the_page_is_redrawn() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -7200,6 +7335,7 @@ fn private_cropped_image_grips_resize_without_moving_the_opposite_corner() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("private.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -7292,6 +7428,7 @@ fn private_document_cropped_artwork_does_not_block_text() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("private.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -7357,6 +7494,7 @@ fn private_new_chinese_keyboard_input_preserves_font_layout_and_saved_pixels() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("private.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -7517,6 +7655,7 @@ fn cropping_a_picture_with_its_handles() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -7582,6 +7721,7 @@ fn picture_pages_of(pdf: Vec<u8>, crop: bool) -> Harness<'static, PdfCraftApp> {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("clipped.pdf", None, pdf).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app.set_option("left", "closed").unwrap();
         app.set_option("zoom", "100").unwrap();
         app
@@ -7721,6 +7861,7 @@ fn a_drag_from_the_selected_picture_under_another_moves_the_selected_one() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("two.pdf", None, two_image_fixture()).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8094,6 +8235,7 @@ fn in_crop_mode_a_right_click_on_another_picture_selects_it() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("two.pdf", None, two_image_fixture()).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8147,6 +8289,7 @@ fn a_right_click_on_a_crop_grip_past_the_page_edge_keeps_crop_mode() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8176,6 +8319,7 @@ fn a_crop_grip_past_the_page_edge_drags() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8383,6 +8527,7 @@ fn dragging_the_rotate_knob_past_the_page_edge_turns_the_picture() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8582,6 +8727,7 @@ fn image_copy_cut_paste_keyboard_and_context_menu() {
         app.set_option("language", "en").unwrap();
         app.system_clipboard = false;
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8730,6 +8876,7 @@ fn delivered_image_with_key_releases_pastes_once() {
         app.set_option("language", "en").unwrap();
         app.system_clipboard = false;
         app.open_bytes("form.pdf", None, pdf.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8762,6 +8909,7 @@ fn win_v_does_not_paste_on_open() {
         app.set_option("language", "en").unwrap();
         app.system_clipboard = false;
         app.open_bytes("form.pdf", None, pdf.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8805,6 +8953,7 @@ fn paste_press_and_release_delivers_single_image() {
         app.set_option("language", "en").unwrap();
         app.system_clipboard = false;
         app.open_bytes("form.pdf", None, pdf.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8837,6 +8986,7 @@ fn paste_at_context_menu_point_centers_on_cursor() {
         app.set_option("language", "en").unwrap();
         app.system_clipboard = false;
         app.open_bytes("form.pdf", None, pdf.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8867,6 +9017,7 @@ fn newer_clipboard_override_beats_stale_in_app_copy() {
         app.set_option("language", "en").unwrap();
         app.system_clipboard = false;
         app.open_bytes("form.pdf", None, pdf.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8896,6 +9047,7 @@ fn rotated_image_selection_and_crop() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -8957,6 +9109,7 @@ fn test_image_8_handles_render_and_drag() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("square.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9034,6 +9187,7 @@ fn test_image_context_menu_precedence() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9074,6 +9228,7 @@ fn test_image_context_menu_in_crop_mode_and_when_moved() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9173,6 +9328,7 @@ fn test_image_context_menu_crop_overlapping_image_and_handle() {
             let mut app = PdfCraftApp::new();
             app.set_option("language", "en").unwrap();
             app.open_bytes("overlap.pdf", None, two_image_fixture()).unwrap();
+            app.fonts.installed_override = Some(support::standard_faces());
             app.views[0].rotation = rotation;
             app
         });
@@ -9211,6 +9367,7 @@ fn a_right_click_on_the_part_a_crop_cuts_away_keeps_crop_mode() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("cut.pdf", None, two_image_fixture()).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9238,6 +9395,7 @@ fn test_image_context_menu_crop_page_edge_pills() {
             let mut app = PdfCraftApp::new();
             app.set_option("language", "en").unwrap();
             app.open_bytes("edge.pdf", None, two_image_fixture()).unwrap();
+            app.fonts.installed_override = Some(support::standard_faces());
             app.views[0].rotation = rotation;
             app.views[0].fit = pdfcraft_ui_egui::canvas::Fit::Page;
             app
@@ -9290,6 +9448,7 @@ fn test_rotated_image_crop_secondary_click_in_outer_bounding_box_clears_selectio
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9352,6 +9511,7 @@ fn a_click_beside_a_turned_picture_in_its_bounds_applies_its_crop() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9415,6 +9575,7 @@ fn a_click_away_from_the_picture_applies_its_crop() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("room.pdf", None, picture_with_room_around()).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9475,6 +9636,7 @@ fn crop_action_pills_interactive_and_apply_cancel_reset() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("square.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9557,6 +9719,7 @@ fn test_cropped_image_selection_and_bounding_box() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("square.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9657,6 +9820,7 @@ fn convert_colours_from_the_dialog() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("colours.pdf", None, bytes.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9692,6 +9856,7 @@ fn fix_hairlines_from_the_dialog() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("lines.pdf", None, bytes.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9727,6 +9892,7 @@ fn fix_hairlines_notice_uses_singular_and_plural() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("lines.pdf", None, bytes.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9801,6 +9967,7 @@ fn arrange_duplicate_image_clears_selection_when_ambiguous() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("dup.pdf", None, bytes.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9859,6 +10026,7 @@ fn arrange_unique_image_preserves_selection() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("unique.pdf", None, bytes.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -9915,6 +10083,7 @@ fn undo_arrange_re_resolves_image_selection_or_clears() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("undo_arrange.pdf", None, bytes.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -10031,6 +10200,7 @@ fn a_paragraph_running_off_its_page_edits_without_covering_the_next_page() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("off-page.pdf", None, bytes).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -10242,6 +10412,7 @@ fn clicking_after_image_context_menu_action_resets_menu_state_and_updates_select
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -10377,6 +10548,7 @@ fn format_panel_shows_selection_size_and_updates_after_font_applied() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("test.pdf", None, pdf).expect("fixture opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -10694,6 +10866,7 @@ fn redo_from_the_menu_is_enabled_for_the_boxs_own_typing() {
 fn undo_after_a_round_trip_through_another_tab_takes_back_the_typing() {
     let mut h = harness(1, |app| {
         app.open_bytes("copy.pdf", None, fixture(1)).expect("the copy opens");
+        app.fonts.installed_override = Some(support::standard_faces());
     });
     let open_in = |h: &mut Harness<'static, PdfCraftApp>, tab: usize| {
         h.state_mut().active = Some(tab);
@@ -10769,6 +10942,7 @@ fn redo_after_formatting_never_brings_back_typing_undone_before_it() {
 fn undo_in_the_frame_of_the_switch_back_takes_back_the_typing() {
     let mut h = harness(1, |app| {
         app.open_bytes("copy.pdf", None, fixture(1)).expect("the copy opens");
+        app.fonts.installed_override = Some(support::standard_faces());
     });
     let open_in = |h: &mut Harness<'static, PdfCraftApp>, tab: usize| {
         h.state_mut().active = Some(tab);
@@ -10810,6 +10984,7 @@ fn undo_in_the_frame_of_the_switch_back_takes_back_the_typing() {
 fn redo_in_the_frame_of_a_tab_switch_never_brings_another_tabs_typing() {
     let mut h = harness(1, |app| {
         app.open_bytes("copy.pdf", None, fixture(1)).expect("the copy opens");
+        app.fonts.installed_override = Some(support::standard_faces());
     });
     let open_in = |h: &mut Harness<'static, PdfCraftApp>, tab: usize| {
         h.state_mut().active = Some(tab);
@@ -10847,6 +11022,7 @@ fn redo_in_the_frame_of_a_tab_switch_never_brings_another_tabs_typing() {
 fn typing_in_one_tab_never_reaches_another_tabs_paragraph() {
     let mut h = harness(1, |app| {
         app.open_bytes("copy.pdf", None, fixture(1)).expect("the copy opens");
+        app.fonts.installed_override = Some(support::standard_faces());
     });
     let open_in = |h: &mut Harness<'static, PdfCraftApp>, tab: usize| {
         h.state_mut().active = Some(tab);
@@ -10947,6 +11123,7 @@ fn duplicate_xobject_at_different_rects_arrange_and_delete_keeps_other_instance_
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("dup.pdf", None, two_image_fixture()).expect("opens fixture");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -11069,6 +11246,7 @@ fn ungroup_in_the_artwork_menu_makes_a_forms_text_editable() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("table.pdf", None, pdf.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -11145,6 +11323,7 @@ fn one_click_on_grouped_text_opens_it_for_editing() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("grouped.pdf", None, pdf.clone()).expect("opens");
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -11194,6 +11373,7 @@ fn outward_image_grip_drags_grow_on_rotated_pages() {
                     let mut app = PdfCraftApp::new();
                     app.set_option("language", "en").unwrap();
                     app.open_bytes("grips.png", None, png.clone()).unwrap();
+                    app.fonts.installed_override = Some(support::standard_faces());
                     app
                 });
                 h.run_steps(4);
@@ -11263,6 +11443,7 @@ fn author_image_clip_is_not_offered_as_a_removable_editor_crop() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("author-clip.pdf", None, clipped_artwork_with_labels()).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -11334,6 +11515,7 @@ fn affine_review_harness(bytes: Vec<u8>) -> Harness<'static, PdfCraftApp> {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("affine-review.pdf", None, bytes.clone()).unwrap();
+        app.fonts.installed_override = Some(support::standard_faces());
         app
     });
     h.run_steps(4);
@@ -11670,6 +11852,7 @@ fn a_modified_click_away_from_a_cropped_picture_applies_its_crop() {
             let mut app = PdfCraftApp::new();
             app.set_option("language", "en").unwrap();
             app.open_bytes("room.pdf", None, picture_with_room_around()).unwrap();
+            app.fonts.installed_override = Some(support::standard_faces());
             app
         });
         h.run_steps(4);

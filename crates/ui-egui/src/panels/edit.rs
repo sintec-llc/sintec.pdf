@@ -252,8 +252,38 @@ pub(super) fn stamp_palette(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens
 }
 
 /// Edit a PDF ▸ Format text: for the selected added text (one undoable change), or the style
-/// new text gets.
+/// new text gets. Sintec.PDF: while the Format text panel floats over the page
+/// ([`crate::text_panel`]) the text controls are there, and this panel keeps the image ones.
 fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
+    let floating = app.active.is_some_and(|i| crate::text_panel::floats(app, i));
+    if !floating && text_format(app, ui, t) {
+        return;
+    }
+    let image = app.active_ids().and_then(|(i, id)| {
+        let (page, index) = app.views[i].content.selected?;
+        let doc = app.session.get(id)?;
+        match &doc.added().iter().filter(|a| a.page == page).nth(index)?.content {
+            pdfcraft_engine::AddedContent::Image(img) => Some((page, index, img.clone())),
+            _ => None,
+        }
+    });
+    if let Some((page, index, img)) = image {
+        match crate::content_ui::image_panel(ui, t, &img) {
+            Some(crate::content_ui::ImageAction::Update(content)) => {
+                app.apply_edit(pdfcraft_engine::Edit::UpdateContent { page, index, content });
+            }
+            Some(crate::content_ui::ImageAction::Replace) => app.replace_image_dialog(page, index),
+            None => {}
+        }
+        ui.add_space(6.0);
+        ui.separator();
+    }
+}
+
+/// Format text for what text is being edited or added in the active document: a paragraph open in
+/// the line editor, added text being typed, a selected added text box, or the Add text tool's
+/// style for new text. Whether there was any (and so controls were shown).
+pub(crate) fn text_format(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) -> bool {
     // Editing a paragraph of existing text: its formatting, applied as it changes.
     if let Some((i, _)) = app.active_ids()
         && let Some(ed) = app.views[i].line_editor.clone()
@@ -312,7 +342,7 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
         if changed {
             app.apply_line_format(i, ed, Some(ui.ctx()));
         }
-        return;
+        return true;
     }
     // Typing added text: the box's formatting, and alignment for the lines a selection touches.
     if let Some(i) = app.active_ids().map(|(i, _)| i)
@@ -333,27 +363,11 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
         if style != draft.style {
             app.restyle_draft(i, style);
         }
-        return;
+        return true;
     }
-    let image = app.active_ids().and_then(|(i, id)| {
-        let (page, index) = app.views[i].content.selected?;
-        let doc = app.session.get(id)?;
-        match &doc.added().iter().filter(|a| a.page == page).nth(index)?.content {
-            pdfcraft_engine::AddedContent::Image(img) => Some((page, index, img.clone())),
-            _ => None,
-        }
-    });
-    if let Some((page, index, img)) = image {
-        match crate::content_ui::image_panel(ui, t, &img) {
-            Some(crate::content_ui::ImageAction::Update(content)) => {
-                app.apply_edit(pdfcraft_engine::Edit::UpdateContent { page, index, content });
-            }
-            Some(crate::content_ui::ImageAction::Replace) => app.replace_image_dialog(page, index),
-            None => {}
-        }
-        ui.add_space(6.0);
-        ui.separator();
-        return;
+    // A selected image has its own controls (Edit image), not these.
+    if app.active_ids().is_some_and(|(i, _)| image_selected(app, i)) {
+        return false;
     }
     let selected = app.active_ids().and_then(|(i, id)| {
         let (page, index) = app.views[i].content.selected?;
@@ -374,15 +388,27 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
                     app.text_style = pdfcraft_engine::AddedText { text: String::new(), rect: [0.0; 4], aligns: Vec::new(), ..style };
                 }
             }
+            true
         }
         None if app.quick_tool == crate::QuickTool::AddText => {
             crate::content_ui::hint(ui, t);
             let mut style = app.text_style.clone();
             added_text_format(ui, t, &mut style, None);
             app.text_style = style;
+            true
         }
-        None => {}
+        None => false,
     }
+}
+
+/// Whether an added image is selected in view `index`.
+pub(crate) fn image_selected(app: &PdfCraftApp, index: usize) -> bool {
+    let Some(view) = app.views.get(index) else { return false };
+    let Some((page, i)) = view.content.selected else { return false };
+    app.session
+        .get(view.id)
+        .and_then(|doc| doc.added().iter().filter(|a| a.page == page).nth(i).map(|a| matches!(a.content, pdfcraft_engine::AddedContent::Image(_))))
+        .unwrap_or(false)
 }
 
 /// Format text for added text: the standard families, size, colour, style and alignment
@@ -449,7 +475,8 @@ impl PdfCraftApp {
             {
                 ed.refresh_source(block, doc.text_lines(ed.page));
                 if let Some(ctx) = ctx {
-                    ed.fonts = crate::edit_text_ui::install_source_fonts(ctx, doc, ed.page);
+                    // Sintec.PDF: the stand-ins are found again for the rewritten paragraph too.
+                    ed.reload_fonts(ctx, doc);
                 }
             }
         }

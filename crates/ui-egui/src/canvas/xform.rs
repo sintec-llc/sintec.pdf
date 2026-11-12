@@ -12,6 +12,12 @@ impl DocView {
         self.presentation.is_none() || self.presenter.settled_on(self.current)
     }
 
+    /// Sintec.PDF: the floating Format text panel on screen last frame, if it showed (tests and
+    /// automation).
+    pub fn text_panel_rect(&self) -> Option<Rect> {
+        self.text_panel.is_positive().then_some(self.text_panel)
+    }
+
     /// The document area on screen.
     pub fn viewport_rect(&self) -> Rect {
         self.viewport_screen

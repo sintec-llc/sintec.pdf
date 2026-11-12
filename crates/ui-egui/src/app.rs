@@ -355,6 +355,7 @@ impl PdfCraftApp {
             print_draft: PrintDraft::default(),
             link_draft: None,
             text_style: content_ui::default_style(),
+            fonts: Default::default(),
             replace_draft: None,
             number_draft: NumberDraft { from: 1, to: 1, style: pdfcraft_engine::LabelStyle::Decimal, prefix: String::new(), start: 1 },
             word_count_draft: word_count_ui::Draft::default(),
@@ -914,6 +915,18 @@ impl PdfCraftApp {
         // FitWindow and CenterWindow, once the document just opened is laid out.
         self.window_preferences_frame(&ctx);
         self.process_pending_edits();
+        // Sintec.PDF: the open paragraph previews typed characters its fonts lack in their stand-ins.
+        self.preview_substitutes(&ctx);
+        // Edit PDF's text editing shows a page: suggest a font of it with no similar installed
+        // face, once per font (`FontSubstitutes::suggested`; the analysis is cached per version).
+        if self.quick_tool == QuickTool::EditText
+            && !self.modal_open()
+            && let Some((index, id)) = self.active_ids()
+            && let Some(page) = self.views.get(index).map(|v| v.current)
+            && self.session.get(id).is_some_and(|d| d.allows_modification())
+        {
+            self.suggest_fonts(id, page);
+        }
         palette::show(self, &ctx);
         dialogs::show(self, &ctx);
         self.show_progress(&ctx);

@@ -7,6 +7,7 @@ use pdfcraft_platform::staging::{StagingName, staging_suffixes};
 use crate::PdfCraftApp;
 
 mod close;
+pub(crate) mod font_substitute;
 mod save;
 
 pub use close::CloseRequest;
@@ -153,9 +154,24 @@ fn form_edit_pages(
 }
 
 impl PdfCraftApp {
+    /// Sintec.PDF: a paragraph rewrite with the faces it needs loaded ([`Self::prepare_text_edit`]);
+    /// `None` while it waits for the Font substitution dialog. Other edits pass through.
+    fn with_substitutes(&mut self, id: pdfcraft_engine::DocId, edit: Edit) -> Option<Edit> {
+        if !matches!(edit, Edit::EditTextBlock { .. }) {
+            return Some(edit);
+        }
+        match self.prepare_text_edit(id, edit) {
+            font_substitute::Prepared::Apply(edit) => Some(edit),
+            font_substitute::Prepared::Wait => None,
+        }
+    }
+
     /// Apply an edit to the active document. Returns `true` on success; failures are shown.
     pub fn apply_edit(&mut self, edit: Edit) -> bool {
         let Some((i, id)) = self.active_ids() else { return false };
+        // Sintec.PDF: text that needs glyphs the document's font lacks gets a substitute first,
+        // or waits for the Font substitution dialog.
+        let Some(edit) = self.with_substitutes(id, edit) else { return false };
         let label = edit.label();
         let target_arrange_image = match &edit {
             Edit::EditPageImage { page, index, change: pdfcraft_engine::ImageEdit::Arrange(_) } => {
@@ -292,6 +308,10 @@ impl PdfCraftApp {
                     }
                 }
                 let message = if matches!(edit, Edit::MoveObjects { .. }) { crate::object_ui::move_error(&e) } else { e.to_string() };
+                // Sintec.PDF: a paragraph its font can't draw asks for a substitute instead.
+                if self.offer_after_failure(id, &edit, &message) {
+                    return false;
+                }
                 self.notify_fmt("{label} failed: {e}", &[("label", &crate::i18n::edit_label(&label)), ("e", &message)]);
                 false
             }

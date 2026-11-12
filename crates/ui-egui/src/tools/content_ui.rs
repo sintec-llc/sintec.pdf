@@ -729,7 +729,8 @@ pub(crate) fn editor(ctx: &egui::Context, keys: PageKeys, view: &mut DocView, in
     // paragraph being edited open.
     // Where the click that took the focus was: the pointer itself may be gone by then (a touch, a
     // pen lifted away). The keyboard moving there (Tab, a screen reader) keeps it open too.
-    let away = |p: egui::Pos2| !view.viewport_rect().contains(p);
+    // Sintec.PDF: the Format text panel floating over the page counts as away too.
+    let away = |p: egui::Pos2| !view.viewport_rect().contains(p) || crate::text_panel::owns(ctx, view, p);
     let outside = ctx.input(|i| i.pointer.interact_pos()).is_some_and(away) || crate::edit_text_ui::focus_pos(ctx).is_some_and(away);
     // Shown at once, like the paragraph editor: a fade-in shows the page's copy through it. Over
     // the page, so only where the document shows: text scrolled under the mode bar or a side

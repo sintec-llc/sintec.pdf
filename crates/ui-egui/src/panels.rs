@@ -19,6 +19,7 @@ mod pages;
 mod right;
 pub(super) mod search_ui;
 pub mod side_panels;
+pub(super) mod text_panel;
 mod tools;
 
 pub use bookmarks::BmAction;

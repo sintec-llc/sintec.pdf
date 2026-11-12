@@ -81,6 +81,8 @@ pub use editing::download_mime_type;
 /// 1440-wide screen at 150 % scaling, the tightest common half-screen split on Windows; the mode
 /// bar, tab strip and notice bars adapt below the old 820 minimum (#1913).
 pub const MIN_WINDOW_SIZE: [f32; 2] = [480.0, 520.0];
+use editing::font_substitute;
+pub use editing::font_substitute::{FontChoice as SubstituteChoice, FontOffer, FontReport, FontSubstitutes};
 pub use editing::{CloseRequest, SaveTarget};
 pub use files::{ExtractDraft, FilePurpose, FileRequest, RotateDraft, SplitDraft, SplitMode, SplitPlan};
 pub use recovery::{AUTOSAVE_SECS, RecoveryMeta, RecoveryStore, default_dictionary_dir};
@@ -140,6 +142,7 @@ use panels::organize_panel;
 use panels::page_selection_ui;
 use panels::search_ui;
 pub use panels::side_panels;
+use panels::text_panel;
 pub use persist::last_session;
 pub use persist::last_view;
 pub use persist::paper;
@@ -842,6 +845,8 @@ pub struct PdfCraftApp {
     pub link_draft: Option<LinkDraft>,
     /// The style new text gets (Edit a PDF ▸ Format text).
     pub text_style: pdfcraft_engine::AddedText,
+    /// Sintec.PDF: substitute fonts for edited text, and the Font substitution dialog.
+    pub fonts: font_substitute::FontSubstitutes,
     /// The Replace Pages dialog's state.
     pub replace_draft: Option<files::ReplaceDraft>,
     /// The last web link the app asked the system to open (tests and automation).

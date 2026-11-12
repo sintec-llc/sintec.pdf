@@ -47,6 +47,7 @@ mod field_triggers;
 mod fill_sign;
 mod find_replace;
 mod folders;
+mod font_substitute;
 mod fonts;
 mod forms;
 mod identity;

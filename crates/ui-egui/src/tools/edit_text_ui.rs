@@ -31,7 +31,7 @@ pub(crate) use image::{
 use image::{rotate_knob, turn_degrees, turn_degrees_delta};
 #[cfg(test)]
 use layout::{DARK_EDITOR_FILL, contrast};
-pub(crate) use layout::{caret_color_on, editor_fill, editor_font, install_source_fonts};
+pub(crate) use layout::{caret_color_on, editor_fill, editor_font, install_source_fonts, install_source_fonts_with};
 use layout::{color32, editor_galley, editor_job, look_of, luminance, source_look, unseen};
 
 const ACCENT: Color32 = Color32::from_rgb(0x14, 0x73, 0xE6);
@@ -63,6 +63,45 @@ pub(crate) fn toggle_script(text: &mut String, selection: &mut Option<std::ops::
     true
 }
 
+/// Sintec.PDF (task 033): how many typed characters per font the editor remembers the engine's
+/// answer for (see [`SubstitutePreview::chars`]).
+pub(crate) const MAX_CLASSIFIED: usize = 4096;
+
+/// Sintec.PDF (task 033): a source font's stand-in, to install in the editor's fonts: the installed
+/// face's program, its fit to the font, and whether the face is italic.
+pub(crate) struct SubstituteFace {
+    pub path: std::path::PathBuf,
+    pub bytes: Arc<Vec<u8>>,
+    pub fit: pdfcraft_engine::SubstituteFit,
+    pub italic: bool,
+}
+
+/// Sintec.PDF (task 033): a source font's stand-in in the editor: the egui family that starts with
+/// it, its fit to the font (the edit's own), and which typed characters the edit draws in it.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SubstitutePreview {
+    /// The installed face's file, as [`crate::font_substitute`] resolved it.
+    pub path: std::path::PathBuf,
+    pub family: String,
+    pub fit: pdfcraft_engine::SubstituteFit,
+    pub italic: bool,
+    /// Per character typed: whether the edit draws it in the stand-in (asked of the engine,
+    /// `Document::substitute_chars`). A character not yet asked shows through the font stack.
+    pub chars: BTreeMap<char, bool>,
+}
+
+impl SubstitutePreview {
+    /// Whether the edit draws `c` in the stand-in, as far as is known yet.
+    pub fn draws(&self, c: char) -> bool {
+        self.chars.get(&c).copied().unwrap_or(false)
+    }
+}
+
+/// The standard family Format text shows for a font named `name`.
+pub(crate) fn family_of(name: &str) -> pdfcraft_engine::FontFamily {
+    source_look(name, 12.0, [0.0; 3], false, false).family
+}
+
 /// A paragraph being edited.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LineEditor {
@@ -79,6 +118,12 @@ pub struct LineEditor {
     multiline: bool,
     source: Option<(pdfcraft_engine::TextBlock, Vec<pdfcraft_engine::TextLine>)>,
     pub(crate) fonts: BTreeMap<String, String>,
+    /// Sintec.PDF: the document version whose installed stand-ins are in [`LineEditor::fonts`]'
+    /// stacks (see `PdfCraftApp::preview_substitutes`), so typed characters a source subset lacks
+    /// show in the face the edit will use.
+    pub(crate) substitutes_for: Option<u64>,
+    /// Sintec.PDF (task 033): per source font resource, its stand-in as the editor shows it.
+    pub(crate) substitutes: BTreeMap<String, SubstitutePreview>,
     /// The draft extends outside the source container; its frame follows the live draft bounds.
     pub overflow: bool,
     /// The initial source container width in screen pixels.
@@ -358,6 +403,30 @@ impl LineEditor {
     /// or none once the page has its text.
     pub(crate) fn claim_typing(&mut self, ctx: &egui::Context, doc: pdfcraft_engine::DocId, place: crate::panes::Place) {
         forget_typing_before(ctx, input_id(place), doc, &mut self.typing_from, &self.original);
+    }
+
+    /// Install the editor's page's source fonts again (a face was loaded or the paragraph was
+    /// rewritten). Their stand-ins are found again too (`PdfCraftApp::preview_substitutes`).
+    pub(crate) fn reload_fonts(&mut self, ctx: &egui::Context, doc: &pdfcraft_engine::Document) {
+        self.fonts = install_source_fonts(ctx, doc, self.page);
+        self.substitutes.clear();
+        self.substitutes_for = None;
+    }
+
+    /// Sintec.PDF (task 033): the font resources whose stand-ins the editor shows: the
+    /// paragraph's own fonts first (embedded or not, a face loaded earlier included), then the
+    /// page's other programs, less the faces the app loaded itself (`PCFull…`, `PCApproved…`),
+    /// which stand in for fonts rather than need a stand-in.
+    pub(crate) fn preview_resources(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let own = self.source.iter().flat_map(|(block, lines)| block.lines.iter().filter_map(|i| lines.get(*i)).map(|l| l.font.clone()));
+        let others = self.fonts.keys().filter(|r| !r.starts_with("PCFull") && !r.starts_with("PCApproved")).cloned();
+        for resource in own.chain(others) {
+            if !out.contains(&resource) {
+                out.push(resource);
+            }
+        }
+        out
     }
 
     /// Adopt the rewritten paragraph's current geometry before the next overlay frame.
@@ -640,6 +709,10 @@ fn open_editor(cx: PageToolContext<'_>, lines: &[pdfcraft_engine::TextBlock], bo
     view.pending_text_open = None;
     let (Some(l), Some(b)) = (lines.get(block), boxes.get(block)) else { return };
     view.image_selection = None;
+    // Sintec.PDF: start looking for installed fonts now, so a substitute is ready if the
+    // typed text needs one (see `font_substitute`).
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = crate::files::installed_font_files(ui.ctx(), false);
     let source_lines = doc.text_lines(page);
     let text = l.editor_text.clone();
     // Screen pixels per point, from the box's width.
@@ -660,6 +733,8 @@ fn open_editor(cx: PageToolContext<'_>, lines: &[pdfcraft_engine::TextBlock], bo
         multiline: l.rows.len() > 1,
         source: Some((l.clone(), source_lines)),
         fonts: install_source_fonts(ui.ctx(), doc, page),
+        substitutes_for: None,
+        substitutes: BTreeMap::new(),
         overflow: false,
         max_width,
         size: (l.size as f32 * scale).clamp(8.0, 72.0),
@@ -868,10 +943,11 @@ pub(crate) fn page_input(cx: PageToolContext<'_>, lines: &[pdfcraft_engine::Text
 /// The inline editor; returns the edit once the text is applied.
 pub(crate) fn overlay(ctx: &egui::Context, keys: PageKeys, view: &mut DocView, info: &DocInfo) -> Option<Edit> {
     let view_id = view.id;
-    // Clicks outside the document (the Format text panel) keep the paragraph open, as does the
+    // Clicks outside the document (on the Format text panel) keep the paragraph open, as does the
     // keyboard moving there. Where the click landed is `interact_pos`: `latest_pos` is gone on the
     // frame a tap lifts.
-    let away = |p: egui::Pos2| !view.viewport_rect().contains(p);
+    // Sintec.PDF: the Format text panel floating over the page counts as away too.
+    let away = |p: egui::Pos2| !view.viewport_rect().contains(p) || crate::text_panel::owns(ctx, view, p);
     let outside = ctx.input(|i| i.pointer.interact_pos()).is_some_and(away) || focus_pos(ctx).is_some_and(away);
     let page = view.line_editor.as_ref()?.page;
     // Keyed by view: split view can show an editor in each pane.
@@ -1293,6 +1369,8 @@ C", &picked
             multiline: block.rows.len() > 1,
             source: None,
             fonts: BTreeMap::new(),
+            substitutes_for: None,
+            substitutes: BTreeMap::new(),
             overflow: false,
             max_width: 400.0,
             size: block.size as f32,
@@ -1565,6 +1643,8 @@ C", &picked
             selection: None,
             font_resource: None,
             fonts: std::collections::BTreeMap::new(),
+            substitutes_for: None,
+            substitutes: BTreeMap::new(),
             source: None,
             multiline: false,
             size: 12.0,
