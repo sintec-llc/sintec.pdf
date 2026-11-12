@@ -1,3 +1,4 @@
+use super::super::font_facts::{Fit, SourceFace, loaded_fit, registered_substitute, source_face};
 use super::super::interp::TextState;
 use super::grouping::{across, is_centred, row_rect};
 use super::{
@@ -33,6 +34,14 @@ struct FontResolver<'a> {
     metrics: &'a mut std::collections::BTreeMap<String, Metrics>,
     full_faces: HashMap<String, String>,
     programs: HashMap<String, Option<std::sync::Arc<Vec<u8>>>>,
+    /// Sintec.PDF: the page, and per source font the loaded face the editor previewed for it
+    /// ([`BlockStyle::substitutes`]).
+    page: usize,
+    substitutes: &'a [(String, String)],
+    /// Sintec.PDF: each source font as it really is, read once.
+    faces: HashMap<String, SourceFace>,
+    /// Sintec.PDF: per (source font, substitute resource), how the substitute is fitted to it.
+    fits: HashMap<(String, String), Fit>,
 }
 
 impl FontResolver<'_> {
@@ -67,7 +76,7 @@ impl FontResolver<'_> {
             .clone()
             .filter(|bytes| pdfcraft_fonts::embedding::covers(bytes, text))
         else {
-            return Ok(None);
+            return Ok(self.loaded_substitute(source, text));
         };
         let key = format!("source {}", source.font);
         if let Some(name) = self.full_faces.get(&key) {
@@ -75,6 +84,29 @@ impl FontResolver<'_> {
         }
         let family = pdfcraft_fonts::embedding::names(&bytes).map_or_else(|_| source.base_font.clone(), |(family, _)| family);
         self.embed_face(key, &bytes, &family, "the source font could not be loaded").map(Some)
+    }
+
+    /// Sintec.PDF: a face loaded for this page (an installed font chosen as the substitute) that
+    /// shows `text` for `source`, before any generated fallback: the face the editor previewed
+    /// for this font ([`BlockStyle::substitutes`]) first, else the loaded face that matches it
+    /// best. Its fit to the source font's letter height, widths and weight is noted.
+    fn loaded_substitute(&mut self, source: &TextLine, text: &str) -> Option<String> {
+        let name = self
+            .substitutes
+            .iter()
+            .find(|(font, name)| *font == source.font && self.metrics.get(name).is_some_and(|m| source_encodes(m, text)))
+            .map(|(_, name)| name.clone())
+            .or_else(|| {
+                let (doc, page) = (&*self.doc, self.page);
+                let face = self.faces.entry(source.font.clone()).or_insert_with(|| source_face(doc, page, source));
+                registered_substitute(self.metrics, face, text)
+            })?;
+        let key = (source.font.clone(), name.clone());
+        if !self.fits.contains_key(&key) && self.fits.len() < 64 {
+            let fit = loaded_fit(self.doc, self.page, self.fonts, &source.font, &name);
+            self.fits.insert(key, fit);
+        }
+        Some(name)
     }
 
     fn embed_face(&mut self, key: String, bytes: &[u8], family: &str, missing_message: &str) -> Result<String, EditError> {
@@ -127,6 +159,8 @@ struct PreparedCharacters {
     values: Vec<StyledChar>,
     substituted: Option<String>,
     thai: ThaiShaping,
+    /// Sintec.PDF: how each loaded substitute is fitted to the source font it stands in for.
+    fits: HashMap<(String, String), Fit>,
 }
 
 /// How the Thai spans of an edit are shaped, by the font name their characters carry.
@@ -151,6 +185,7 @@ enum ThaiSpan {
 
 struct CharacterPreparation<'a> {
     doc: &'a mut Document,
+    page: usize,
     first: &'a TextLine,
     lines: &'a [TextLine],
     draft: &'a str,
@@ -164,14 +199,24 @@ struct CharacterPreparation<'a> {
 
 impl CharacterPreparation<'_> {
     fn prepare(self) -> Result<PreparedCharacters, EditError> {
-        let Self { doc, first, lines, draft, spans, style, overrides, fonts, metrics, max_glyphs } = self;
+        let Self { doc, page, first, lines, draft, spans, style, overrides, fonts, metrics, max_glyphs } = self;
         let thai_choice = builtin_thai_choice(fonts);
         let mut thai = ThaiShaping::default();
         let mut thai_programs = pdfcraft_cos::DecodeBudget::new(MAX_THAI_PROGRAMS, 0);
         let mut chars = Vec::new();
         let mut substituted = None;
         let mut fallback = FallbackBuilder::new(max_glyphs);
-        let mut resolver = FontResolver { doc, fonts, metrics, full_faces: HashMap::new(), programs: HashMap::new() };
+        let mut resolver = FontResolver {
+            doc,
+            fonts,
+            metrics,
+            full_faces: HashMap::new(),
+            programs: HashMap::new(),
+            page,
+            substitutes: &style.substitutes,
+            faces: HashMap::new(),
+            fits: HashMap::new(),
+        };
         for (range, index) in spans {
             let source = lines.get(index).unwrap_or(first);
             let span = draft.get(range.clone()).unwrap_or_default();
@@ -282,6 +327,7 @@ impl CharacterPreparation<'_> {
                 chars.push((ch, index, name));
             }
         }
+        let fits = std::mem::take(&mut resolver.fits);
         drop(resolver);
         for group in fallback.groups {
             let written = write_type3_glyphs(doc, fonts, group.face, false, group.glyphs, fallback.per_font);
@@ -299,7 +345,7 @@ impl CharacterPreparation<'_> {
             }
             substituted = Some(written.family.to_owned());
         }
-        Ok(PreparedCharacters { values: chars, substituted, thai })
+        Ok(PreparedCharacters { values: chars, substituted, thai, fits })
     }
 }
 
@@ -636,7 +682,7 @@ fn replacement_text<'a>(block: &'a TextBlock, text: Option<&'a str>) -> Result<&
 }
 
 fn has_no_effective_style_change(block: &TextBlock, draft: &str, style: &BlockStyle) -> bool {
-    draft == block.editor_text && *style == BlockStyle::default()
+    draft == block.editor_text && style.is_plain()
 }
 
 fn page_font_metrics(
@@ -671,7 +717,13 @@ fn page_font_metrics(
     (fonts, metrics)
 }
 
-fn paragraph_geometry(doc: &Document, page: &pdfcraft_model::Page, block: &TextBlock, style: &BlockStyle) -> Result<(f64, f64, f64), EditError> {
+fn paragraph_geometry(
+    doc: &Document,
+    page: &pdfcraft_model::Page,
+    block: &TextBlock,
+    style: &BlockStyle,
+    auto_width: Option<f64>,
+) -> Result<(f64, f64, f64), EditError> {
     if [style.size, style.line_spacing, style.char_spacing, style.scale, style.width].iter().flatten().any(|value| !value.is_finite())
         || style.color.is_some_and(|color| color.iter().any(|value| !value.is_finite()))
     {
@@ -681,7 +733,9 @@ fn paragraph_geometry(doc: &Document, page: &pdfcraft_model::Page, block: &TextB
     if !dx.is_finite() || !dy.is_finite() || style.width.is_some_and(|width| !width.is_finite()) {
         return Err(EditError::Invalid("the paragraph's position and width must be finite".into()));
     }
-    let natural = if block.invisible || block.rows.len() == 1 {
+    let natural = if let Some(auto) = auto_width.filter(|w| w.is_finite()) {
+        auto
+    } else if block.invisible || block.rows.len() == 1 {
         (page.crop(doc)[2] - 36.0 - (block.rect[0] + dx)).max(block.rect[2] - block.rect[0])
     } else {
         block.rect[2] - block.rect[0]
@@ -1611,6 +1665,8 @@ fn draft_sources(block: &TextBlock, draft: &str, style: &BlockStyle) -> Result<V
 
 /// Rewrite visual rows while keeping the source style on each surviving character. Resource
 /// names may differ between Unicode subsets of the same face; encoding searches those subsets.
+// Sintec.PDF: `auto_width` (from the paragraph's neighbours) is the eighth argument.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn rewrite_styled_block(
     doc: &mut Document,
     page: usize,
@@ -1619,6 +1675,9 @@ pub(crate) fn rewrite_styled_block(
     text: Option<&str>,
     style: &BlockStyle,
     max_glyphs: usize,
+    // Sintec.PDF: the width a rewrite without an explicit one wraps at ([`auto_wrap`]); `None`
+    // for the page's margin.
+    auto_width: Option<f64>,
 ) -> Result<LineEdit, EditError> {
     let first = block.lines.first().and_then(|i| lines.get(*i)).ok_or_else(|| EditError::Invalid("the paragraph has no source runs".into()))?;
     let draft = replacement_text(block, text)?;
@@ -1636,9 +1695,10 @@ pub(crate) fn rewrite_styled_block(
     let p = page_dict(doc, page)?;
     let mut res = p.dict.get(b"Resources").and_then(|resource| doc.resolve(resource).as_dict().cloned()).unwrap_or_default();
     let (mut fonts, mut metrics) = page_font_metrics(doc, &res, block, lines);
-    let (dx, dy, width) = paragraph_geometry(doc, &p, block, style)?;
+    let (dx, dy, width) = paragraph_geometry(doc, &p, block, style, auto_width)?;
     let prepared = CharacterPreparation {
         doc,
+        page,
         first,
         lines,
         draft,
@@ -1653,6 +1713,8 @@ pub(crate) fn rewrite_styled_block(
     let thai = prepared.thai;
     let chars = prepared.values;
     let substituted = prepared.substituted;
+    let fits = prepared.fits;
+    let fit_of = |source: &TextLine, name: &str| fits.get(&(source.font.clone(), name.to_string())).copied().unwrap_or(Fit::NONE);
     let phrase_size = block.phrase_size();
     let size_of = |source: &TextLine, index: usize| {
         overrides.get(&index).and_then(|r| r.size).or(style.size).or(phrase_size).unwrap_or(source.size).max(0.1) / source.origin.k.max(1e-6)
@@ -1678,18 +1740,21 @@ pub(crate) fn rewrite_styled_block(
     let advance = |item: &(char, usize, String)| -> f64 {
         let source = lines.get(item.1).unwrap_or(first);
         let Some(m) = metrics.get(&item.2) else { return 0.0 };
-        source_width(
-            m,
-            &item.0.to_string(),
-            size_of(source, item.1),
-            space_of(&item.2, m),
-            overrides
-                .get(&item.1)
-                .and_then(|r| r.char_spacing)
-                .or(style.char_spacing)
-                .map_or(source.origin.state.char_spacing, |c| c / source.origin.k.max(1e-6)),
-            source.origin.state.word_spacing,
-        ) * overrides.get(&item.1).and_then(|r| r.scale).or(style.scale).map_or(source.origin.state.scale, |s| (s / 100.0).clamp(0.1, 10.0))
+        let fit = fit_of(source, &item.2);
+        fit.scale
+            * source_width(
+                m,
+                &item.0.to_string(),
+                size_of(source, item.1) * fit.size,
+                space_of(&item.2, m),
+                overrides
+                    .get(&item.1)
+                    .and_then(|r| r.char_spacing)
+                    .or(style.char_spacing)
+                    .map_or(source.origin.state.char_spacing, |c| c / source.origin.k.max(1e-6)),
+                source.origin.state.word_spacing,
+            )
+            * overrides.get(&item.1).and_then(|r| r.scale).or(style.scale).map_or(source.origin.state.scale, |s| (s / 100.0).clamp(0.1, 10.0))
             * across(source)
             * calibration.get(&item.1).copied().unwrap_or(1.0)
     };
@@ -1730,7 +1795,7 @@ pub(crate) fn rewrite_styled_block(
     // A row the edit doesn't reach keeps its source operators, so its kerning, TJ word gaps and
     // glyph widths stay exactly as they were instead of being rebuilt from the text state. A row
     // aligned on its own is reached; the rows around it are not.
-    let plain = BlockStyle { ranges: Vec::new(), sources: Vec::new(), aligns: Vec::new(), ..style.clone() } == BlockStyle::default();
+    let plain = BlockStyle { ranges: Vec::new(), sources: Vec::new(), aligns: Vec::new(), ..style.clone() }.is_plain();
     let mut kept = if plain {
         untouched_rows(block, draft, &row_ranges)
             .into_iter()
@@ -1874,13 +1939,27 @@ pub(crate) fn rewrite_styled_block(
                 };
                 segment_width = drawing.draw(&mut block_ops, &mut state)? * state.scale * source.origin.k;
             } else {
+                // Sintec.PDF: a loaded substitute takes the source font's letter height and
+                // widths, and is stroked in the fill colour when it stands in, regular, for a
+                // bold font (the run has its own graphics state, so the stroke ends with it).
+                let fit = fit_of(source, &item.2);
+                state.font = Some((item.2.clone(), size_of(source, item.1) * fit.size));
+                state.scale *= fit.scale;
                 block_ops.push(Op::new("BT", vec![]));
                 block_ops.extend(state.ops());
+                if fit.stroke > 0.0 && state.render_mode == 0 {
+                    // The line width is in user space: the stroke per em times the em there.
+                    let em = size_of(source, item.1) * fit.size * tm[2].hypot(tm[3]);
+                    block_ops.push(Op::new("Tr", vec![Object::Int(2)]));
+                    block_ops.push(Op::new("w", vec![n(fit.stroke * em)]));
+                    block_ops.push(Op::new("j", vec![Object::Int(1)]));
+                    block_ops.extend(stroke_like(&state.fill));
+                }
                 block_ops.push(Op::new("Tm", tm.iter().map(|v| n(*v)).collect()));
                 block_ops.extend(source_show(
                     m,
                     &string,
-                    size_of(source, item.1),
+                    size_of(source, item.1) * fit.size,
                     spaces.borrow().get(&item.2).copied().unwrap_or_else(|| source_space(doc, &fonts, m)),
                     state.char_spacing,
                     state.word_spacing,
@@ -1942,6 +2021,24 @@ pub(crate) fn rewrite_styled_block(
     })?;
     crate::draw_on_top(doc, &p, o.ctm, &on_top)?;
     Ok(LineEdit { substituted })
+}
+
+/// The stroke colour operator matching fill colour operators `fill` (`rg` → `RG`, `g` → `G`, …).
+fn stroke_like(fill: &[Op]) -> Vec<Op> {
+    fill.iter()
+        .filter_map(|op| {
+            let name = match op.op.as_slice() {
+                b"g" => "G",
+                b"rg" => "RG",
+                b"k" => "K",
+                b"cs" => "CS",
+                b"sc" => "SC",
+                b"scn" => "SCN",
+                _ => return None,
+            };
+            Some(Op::new(name, op.operands.clone()))
+        })
+        .collect()
 }
 
 #[cfg(test)]

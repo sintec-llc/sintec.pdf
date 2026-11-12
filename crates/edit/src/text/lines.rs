@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use super::fallback::{same_font, same_paint};
-use super::interp::{Carry, Clip, Origin, Pen, Shown, TextState, Ts, clip_shows, clip_within, direction, interpret, region, to_frame, union};
+use super::interp::{
+    Carry, Clip, Origin, Pen, Shown, TextState, Ts, WIDE_GAP, clip_shows, clip_within, direction, interpret, region, to_frame, union,
+};
 use super::{DecodeBudget, Dict, Document, EditError, HashMap, Matrix, Object, Op, Pieces, Stream, TextLine, parse, serialize_ops};
 
 impl TextLine {
@@ -429,15 +431,28 @@ fn fill_color(fill: &[Op]) -> [f64; 3] {
     }
 }
 
-/// The lines of text on a page (0-based), in content order.
+/// The lines of text on a page (0-based), in content order, as editing sees them.
+///
+/// Sintec.PDF: a TJ with wide gaps (a table row exported as one TJ, see [`WIDE_GAP`]) is one line
+/// per piece, the runs an edit splits it into first ([`split_wide_runs`]). Runs more than 1.5 em
+/// apart (1 em when in separate text objects), or with a rule between them (a table's column
+/// border), are separate lines: a form's fields and a table's cells are edited one by one. Line
+/// indexes here are the ones [`replace_line`](super::replace_line) and [`TextBlock::lines`](super::TextBlock::lines) use.
 pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError> {
-    text_lines_in(doc, &page_dict(doc, page)?, true, false)
+    text_lines_in(doc, &page_dict(doc, page)?, true, false, Some(super::ruled::page_segments(doc, page)))
+}
+
+/// Sintec.PDF: the lines of text on a page (0-based) as its content streams draw them, a TJ
+/// being one run however wide its gaps (upstream PdfCraft's `text_lines`). For readers that
+/// measure what a line covers rather than edit it. Its indexes are not [`text_lines`]'s.
+pub fn drawn_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError> {
+    text_lines_in(doc, &page_dict(doc, page)?, true, false, None)
 }
 
 /// [`text_lines`] with every show of invisible text a line of its own, however alike its
 /// neighbours: an OCR layer's words, which an edit can keep or change one by one.
 pub(crate) fn word_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError> {
-    text_lines_in(doc, &page_dict(doc, page)?, true, true)
+    text_lines_in(doc, &page_dict(doc, page)?, true, true, Some(super::ruled::page_segments(doc, page)))
 }
 
 /// The lines `page`'s glyphs show, in content order, without `/ActualText` replacements: what the
@@ -445,12 +460,20 @@ pub(crate) fn word_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, E
 /// not trust that metadata (the redaction audit). Takes the page itself, so a caller going
 /// through every page doesn't walk the page tree again for each.
 pub fn glyph_text_lines(doc: &Document, page: &pdfcraft_model::Page) -> Result<Vec<TextLine>, EditError> {
-    text_lines_in(doc, page, false, false)
+    text_lines_in(doc, page, false, false, None)
 }
 
 /// [`text_lines`] of `p`; with `actual_text`, `/ActualText` replaces the glyphs it spans, and with
-/// `invisible_apart`, no show of invisible text joins the one before it.
-fn text_lines_in(doc: &Document, p: &pdfcraft_model::Page, actual_text: bool, invisible_apart: bool) -> Result<Vec<TextLine>, EditError> {
+/// `invisible_apart`, no show of invisible text joins the one before it. With `split` (editing:
+/// the page's rules), wide TJ runs are split at their gaps and runs farther apart, or with one of
+/// the rules between them, are separate lines (see [`text_lines`]).
+fn text_lines_in(
+    doc: &Document,
+    p: &pdfcraft_model::Page,
+    actual_text: bool,
+    invisible_apart: bool,
+    split: Option<Vec<super::ruled::Segment>>,
+) -> Result<Vec<TextLine>, EditError> {
     let res = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
     let mut cache = HashMap::new();
     let mut lines: Vec<TextLine> = Vec::new();
@@ -458,9 +481,18 @@ fn text_lines_in(doc: &Document, p: &pdfcraft_model::Page, actual_text: bool, in
     // The streams are one stream in pieces (§7.8.2), split between any two tokens: parse them
     // joined, so an operator whose operands end one piece still has them.
     let pieces = joined(&content_streams(doc, &p.dict)?);
-    let ops = pieces.parse().ops;
+    // As editing will see them: wide TJ runs split at their gaps (see `split_wide_runs`). The
+    // pieces keep the operator's span, so `pieces_of` still finds where they start.
+    let raw = pieces.parse().ops;
+    let mut splits = if split.is_some() { wide_run_splits(doc, &raw, &res, &mut cache)? } else { HashMap::new() };
+    let ops: Vec<Op> = raw.into_iter().enumerate().flat_map(|(i, o)| splits.remove(&i).unwrap_or_else(|| vec![o])).collect();
     let properties = res.get(b"Properties").and_then(|o| doc.dict(o)).unwrap_or_default();
     let shown = interpret(doc, &ops, &res, &mut cache, &mut carry, None, actual_text.then_some(&properties))?;
+    // Editing keeps a form's fields and a table's cells apart: runs farther apart than a word gap
+    // or two, or on either side of a rule (a cell border), are separate lines. As drawn, a line
+    // runs on across them.
+    let (reach_in_object, reach_across_objects) = if split.is_some() { (1.5, 1.0) } else { (3.0, 1.5) };
+    let rules = split.unwrap_or_default();
     let mut last: Option<(usize, Pen)> = None; // the stream piece and where its last run ended
     for mut s in shown {
         // A single RTL glyph's ActualText (e.g. lam-alef) is an inline ligature, not a
@@ -476,7 +508,7 @@ fn text_lines_in(doc: &Document, p: &pdfcraft_model::Page, actual_text: bool, in
         let si = ops.get(s.op).map_or(0, |op| pieces.pieces_of(op).0);
         let joins = last.is_some_and(|(piece, pen)| {
             let bt = pen.bt;
-            let (near, gap) = pen.continues(&s, if bt == s.bt { 3.0 } else { 1.5 });
+            let (near, gap) = pen.continues(&s, if bt == s.bt { reach_in_object } else { reach_across_objects });
             piece == si
                 && lines.last().is_some_and(|l| l.scope == s.scope && l.paint == s.paint && l.logical_order == s.logical_order)
                 && (bt == s.bt || lines.last().is_some_and(|l| compatible_word(l, &s)))
@@ -493,6 +525,8 @@ fn text_lines_in(doc: &Document, p: &pdfcraft_model::Page, actual_text: bool, in
                 // An OCR layer is one text object over the whole scan: its words continue a line
                 // only across a word space, not across a table cell or a tab stop.
                 && (s.state.render_mode != 3 || (gap < pen.size * 0.6 && !invisible_apart))
+                // Sintec.PDF: a table's column border between them: two cells, however close.
+                && !pen.ruled_from(&s, &rules)
         });
         if joins && let Some(l) = lines.last_mut() {
             let gap = last.map_or(0.0, |(_, pen)| pen.continues(&s, 0.0).1);
@@ -573,6 +607,90 @@ fn text_lines_in(doc: &Document, p: &pdfcraft_model::Page, actual_text: bool, in
     // Lines of only spaces aren't editable text.
     lines.retain(|l| !l.text.trim().is_empty());
     Ok(lines)
+}
+
+/// Sintec.PDF: the operators that replace each TJ with wide gaps (by index in `ops`, read from
+/// the start of the page): the TJ cut at its gaps, every piece after the first placed with its
+/// own `Tm`, then the text line matrix and pen restored (`Tm`, and a TJ of one adjustment) so
+/// what follows draws exactly as before. Each piece then stands on its own: rewriting one cell of
+/// a row doesn't move the next.
+fn wide_run_splits(
+    doc: &Document,
+    ops: &[Op],
+    resources: &Dict,
+    cache: &mut HashMap<Vec<u8>, super::interp::CachedFont>,
+) -> Result<HashMap<usize, Vec<Op>>, EditError> {
+    // Most pages have no such gap: don't read their text twice.
+    let wide = |o: &Object| o.as_f64().is_some_and(|n| -n >= WIDE_GAP);
+    if !ops.iter().any(|op| op.is("TJ") && op.operands.last().and_then(Object::as_array).is_some_and(|a| a.iter().any(wide))) {
+        return Ok(HashMap::new());
+    }
+    let shown = interpret(doc, ops, resources, cache, &mut Carry::new(), None, None)?;
+    Ok(shown.iter().filter(|s| !s.cuts.is_empty()).filter_map(|s| Some((s.op, split_run(ops.get(s.op)?, s)?))).collect())
+}
+
+/// The operators that draw TJ `op` (shown as `s`) as separate runs, cut at `s.cuts`. The wide
+/// adjustment at each cut is left out: the next piece's own `Tm` puts it where it was.
+fn split_run(op: &Op, s: &Shown) -> Option<Vec<Op>> {
+    if !op.is("TJ") || s.state.vertical.is_some() {
+        return None;
+    }
+    let items = op.operands.last().and_then(Object::as_array)?;
+    let [a, b, _, _, e, f] = s.tlm.0;
+    let norm = a * a + b * b;
+    let unit = s.state.size * s.state.scale;
+    if !norm.is_finite() || norm < 1e-12 || !unit.is_finite() || unit.abs() < 1e-9 || !s.advance.is_finite() {
+        return None;
+    }
+    let matrix = |m: Matrix| Op::new("Tm", m.0.iter().map(|v| pdfcraft_content::num(*v)).collect());
+    let tj = |items: &[Object]| Op::new("TJ", vec![Object::Array(items.to_vec())]);
+    let mut out = Vec::new();
+    let mut from = 0;
+    for &(cut, x) in &s.cuts {
+        out.push(tj(items.get(from..cut)?));
+        out.push(matrix(Matrix([1.0, 0.0, 0.0, 1.0, x, 0.0]).then(&s.tm)));
+        from = cut.checked_add(1)?;
+    }
+    out.push(tj(items.get(from..)?));
+    // Back to the line's matrix, and the pen where the whole TJ left it.
+    let after = Matrix([1.0, 0.0, 0.0, 1.0, s.advance, 0.0]).then(&s.tm).0;
+    let d = ((after[4] - e) * a + (after[5] - f) * b) / norm;
+    let n = -d * 1000.0 / unit;
+    if !n.is_finite() {
+        return None;
+    }
+    out.push(matrix(s.tlm));
+    out.push(Op::new("TJ", vec![Object::Array(vec![pdfcraft_content::num(n)])]));
+    Some(out.into_iter().map(|o| Op { span: op.span.clone(), ..o }).collect())
+}
+
+/// Sintec.PDF: before an edit, split the page's wide TJ runs in its content streams (see
+/// [`wide_run_splits`]), so the operators an edit works on are the runs [`text_lines`] reports.
+/// The page draws the same. Nothing changes on a page without them; says whether it split any.
+pub(crate) fn split_wide_runs(doc: &mut Document, page: usize) -> Result<bool, EditError> {
+    let p = page_dict(doc, page)?;
+    let res = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
+    let streams = content_streams(doc, &p.dict)?;
+    let pieces = joined(&streams);
+    let ops = pieces.parse().ops;
+    let mut splits = wide_run_splits(doc, &ops, &res, &mut HashMap::new())?;
+    if splits.is_empty() {
+        return Ok(false);
+    }
+    let new = splice(&pieces, &ops, |i| match splits.remove(&i) {
+        Some(pieces) => (pieces, false),
+        None => (Vec::new(), true),
+    });
+    let contents = rewritten_contents(doc, &streams, new)?;
+    doc.update_dict(p.obj, |d| d.set(b"Contents".to_vec(), contents))?;
+    Ok(true)
+}
+
+/// Sintec.PDF: `doc` with page `page`'s wide TJ runs split ([`split_wide_runs`]), for readers that
+/// take operators by the indexes [`text_lines`] gives: borrowed when there are none to split.
+pub(crate) fn split_view(doc: &Document, page: usize) -> Result<std::borrow::Cow<'_, Document>, EditError> {
+    let mut copy = doc.clone();
+    Ok(if split_wide_runs(&mut copy, page)? { std::borrow::Cow::Owned(copy) } else { std::borrow::Cow::Borrowed(doc) })
 }
 
 /// Joining independent text objects is safe only when they use the same text and graphics

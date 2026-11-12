@@ -477,6 +477,11 @@ pub(super) struct Shown {
     pub(super) italic: bool,
     pub(super) visual_order: bool,
     pub(super) decodable: bool,
+    /// Sintec.PDF: for a TJ, where it can be split into separate runs (its wide gaps, see
+    /// [`WIDE_GAP`]): the index of the gap in the array and the pen position after it (text
+    /// space, unscaled by the text matrix). How far the whole TJ moves the pen is
+    /// [`Shown::advance`].
+    pub(super) cuts: Vec<(usize, f64)>,
     pub(super) scope: Option<usize>,
     pub(super) paint: Paint,
     pub(super) logical_order: bool,
@@ -534,6 +539,17 @@ impl Pen {
         // A column continues a column (along which the pen moves), a baseline a baseline.
         let same_dir = same_dir && self.vertical == s.state.vertical.is_some();
         (same_dir && (across - self.across).abs() < self.size * 0.3 && gap > -self.size && gap < self.size * reach, gap)
+    }
+
+    /// Sintec.PDF: whether one of `rules` stands between where this run ended and where `s`
+    /// starts, through the letters of both (a table's column border between two cells).
+    pub(super) fn ruled_from(&self, s: &Shown, rules: &[super::ruled::Segment]) -> bool {
+        if rules.is_empty() {
+            return false;
+        }
+        let (dir, start, _, across) = s.span();
+        let heights = [self.across + self.size * 0.3, across + s.size * 0.3];
+        super::ruled::ruled_apart_along(rules, dir, self.end, start, 0.1 * self.size.min(s.size), heights)
     }
 }
 
@@ -608,9 +624,16 @@ fn positioned_tracking(shown: &mut [Shown]) {
     }
 }
 
+/// Sintec.PDF: a TJ adjustment this wide (in thousandths of an em, i.e. 3 em) separates two runs
+/// of text, not two words: table rows exported as one TJ per row put each cell after such a jump.
+/// It matches the gap at which [`super::drawn_lines`] stops joining a text object's runs into one
+/// line ([`super::text_lines`] stops at half of it, and at a rule between them).
+pub(super) const WIDE_GAP: f64 = 3000.0;
+
 /// The graphics state carried from one of a page's content streams to the next: the streams
 /// are one stream in pieces (§7.8.2), so a `cm` (AutoCAD scales the whole page in the first
 /// stream), an unbalanced `q`, the font and the colour still apply in the streams after it.
+#[derive(Clone)]
 pub(super) struct Carry {
     pub(super) ts: Ts,
     /// Each saved state with the text and text line matrices: inside a text object `q`/`Q`
@@ -662,7 +685,7 @@ impl Carry {
 
 /// A font resource's metrics, fallback face and vertical advance (see [`Ts`]), read once per page.
 /// The advance is an error message when the font's writing mode can't be read.
-type CachedFont = (Rc<Metrics>, Option<String>, Result<Option<f64>, String>);
+pub(super) type CachedFont = (Rc<Metrics>, Option<String>, Result<Option<f64>, String>);
 
 #[cfg(test)]
 thread_local! {
@@ -801,9 +824,14 @@ fn show_text(op: &Op, i: usize, state: &mut TextRunState<'_>) -> Result<(), Edit
     // before may have ended in one: a justified line can be split over `TJ` and `Tj`.
     let mut gap_space = std::mem::take(&mut carry.gap_space);
     let mut glyph_count = 0_usize;
-    for p in &pieces {
+    // Sintec.PDF: where the TJ may be cut into separate runs, and whether text came before the
+    // gap being looked at (since the last cut).
+    let mut cuts = Vec::new();
+    let mut text_before = false;
+    for (k, p) in pieces.iter().enumerate() {
         match p {
             Object::String(s) => {
+                text_before |= !s.bytes.is_empty();
                 for (code, len) in m.codes(&s.bytes) {
                     glyph_count = glyph_count.saturating_add(1);
                     let shown = m.text_of(code);
@@ -879,6 +907,11 @@ fn show_text(op: &Op, i: usize, state: &mut TextRunState<'_>) -> Result<(), Edit
                         in_word = false;
                     }
                     x_text += dx;
+                    let text_after = || pieces.get(k + 1..).unwrap_or_default().iter().any(|o| matches!(o, Object::String(s) if !s.bytes.is_empty()));
+                    if -n >= WIDE_GAP && text_before && text_after() {
+                        cuts.push((k, x_text));
+                        text_before = false;
+                    }
                 }
             }
         }
@@ -957,6 +990,7 @@ fn show_text(op: &Op, i: usize, state: &mut TextRunState<'_>) -> Result<(), Edit
         italic: m.italic,
         visual_order: m.visual_order,
         decodable,
+        cuts,
         scope: marked.regions.last().copied().flatten(),
         paint: Paint { layers: marked.layers.iter().flatten().cloned().collect(), gs: ts.gs.clone() },
         logical_order: false,

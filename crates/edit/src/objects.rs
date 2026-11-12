@@ -126,6 +126,7 @@ pub fn move_objects(doc: &mut Document, page: usize, targets: &[ObjectTarget], o
     }
     let indexes = |kind| targets.iter().filter(|t| t.kind == kind).map(|t| t.index).collect::<Vec<_>>();
     let mut work = doc.clone();
+    crate::text::split_wide_runs(&mut work, page)?;
     crate::text::translate_blocks(&mut work, page, &indexes(ObjectKind::Text), offset)?;
     crate::images::translate_images(&mut work, page, &indexes(ObjectKind::Image), offset)?;
     translate_added(&mut work, page, &indexes(ObjectKind::Added), offset)?;

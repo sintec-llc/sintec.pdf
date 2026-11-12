@@ -1,4 +1,4 @@
-use super::blocks::{BlockStyle, TextBlock, paragraph_separator, row_break, wrap};
+use super::blocks::{BlockStyle, TextBlock, page_blocks, paragraph_separator, row_break, wrap};
 use super::fallback::{
     Encoder, MAX_TYPE3_GLYPHS, Type3Fallback, Type3Run, drop_unused_fallback_fonts, is_variation_selector, needs_type3, no_japanese_font,
     source_character_advance, source_encodes, source_fallback_runs, source_family, source_program_completes, source_show, source_space, source_width,
@@ -10,8 +10,8 @@ use super::lines::{
     text_lines,
 };
 use super::{
-    Dict, Document, EditError, HashMap, HashSet, Matrix, Metrics, Object, Op, PdfString, TextLine, TextSession, alignment_frame, group_blocks,
-    is_centred, parse, rewrite_changed_words, rewrite_styled_block,
+    Dict, Document, EditError, HashMap, HashSet, Matrix, Metrics, Object, Op, PdfString, TextLine, TextSession, alignment_frame, is_centred, parse,
+    rewrite_changed_words, rewrite_styled_block,
 };
 
 /// What replacing a line did.
@@ -47,6 +47,8 @@ fn refuse_clipping_text(lines: &[TextLine], dropped: &std::collections::HashSet<
 /// [`replace_line`] with the most unique characters one generated font may hold (tests lower it).
 pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usize, text: &str, max_glyphs: usize) -> Result<LineEdit, EditError> {
     let text = text.replace(row_break, " ");
+    // Sintec.PDF: the operators edited are the runs `text_lines` reports (wide TJs split).
+    super::split_wide_runs(doc, page)?;
     let lines = text_lines(doc, page)?;
     let target = lines.get(line).cloned().ok_or_else(|| EditError::Invalid(format!("page {} has no line {}", page + 1, line + 1)))?;
     target.ensure_editable()?;
@@ -296,17 +298,17 @@ fn paragraph_text(text: &str) -> String {
 struct ParaGeometry {
     rect: [f64; 4],
     frame: [f64; 4],
-    crop: [f64; 4],
     upright: bool,
     /// The text-to-user scale.
     k: f64,
     /// The size in text space.
     size: f64,
-    /// The requested horizontal move, in points.
-    dx: f64,
+    /// Sintec.PDF: one row (of one run or several).
     single_line: bool,
     anchored_right: bool,
     centred: bool,
+    /// Sintec.PDF: the width [`auto_wrap`](super::regions::auto_wrap) gives a single row.
+    auto_width: f64,
 }
 
 impl ParaGeometry {
@@ -322,9 +324,9 @@ impl ParaGeometry {
             Some(_) => return Err(EditError::Invalid("the paragraph's width must be a number".into())),
             // Turned text: the page's margins are along another axis. A single line grows (below).
             None if !self.upright => (self.frame[2] - self.frame[0]).max(self.size * self.k),
-            None if self.anchored_right => own.max(right + self.dx - (self.crop[0] + 36.0)),
+            None if self.anchored_right => own.max(self.auto_width),
             // A centred line is not stretched to the margin: its own box is the frame it is centred in.
-            None if self.single_line && !self.centred => own.max(self.crop[2] - 36.0 - (left + self.dx)),
+            None if self.single_line && !self.centred => own.max(self.auto_width),
             None => own,
         };
         if width.is_finite() { Ok(width) } else { Err(EditError::Invalid("the paragraph's width must be a number".into())) }
@@ -858,7 +860,10 @@ pub(crate) fn rewrite_block_from(
     style: &BlockStyle,
     max_glyphs: usize,
 ) -> Result<LineEdit, EditError> {
-    let blocks = group_blocks(&lines);
+    // Sintec.PDF: `lines` are `text_lines`, which reads wide TJs as split: make the page's
+    // operators match before they are taken by index.
+    super::split_wide_runs(doc, page)?;
+    let blocks = page_blocks(doc, page, &lines);
     let b = blocks.get(block).cloned().ok_or_else(|| EditError::Invalid(format!("page {} has no paragraph {}", page + 1, block + 1)))?;
     // Existing PDF paragraphs do not yet persist selected-row alignment intent. Refuse
     // that operation before writing anything; whole-paragraph `align` remains supported.
@@ -900,7 +905,11 @@ pub(crate) fn rewrite_block_from(
         return Err(EditError::Invalid("justification of mixed-style existing paragraphs is not supported".into()));
     }
     if dispatch.use_styled_path {
-        return rewrite_styled_block(doc, page, &b, &lines, text, style, max_glyphs);
+        // Sintec.PDF: the styled path lays rows out from their left edge, right to left or not,
+        // and a single row stops before the next paragraph on its row.
+        let [left, right] =
+            super::regions::auto_wrap(&blocks, block, p.crop(doc), style.offset.unwrap_or([0.0, 0.0]), style.size.unwrap_or(b.size), false);
+        return rewrite_styled_block(doc, page, &b, &lines, text, style, max_glyphs, Some(right - left));
     }
     let upright = dispatch.upright;
     let streams = content_streams(doc, &p.dict)?;
@@ -942,7 +951,8 @@ pub(crate) fn rewrite_block_from(
     // Right-to-left text (more Hebrew or Arabic letters than Latin) is right-aligned unless an
     // alignment is asked for, and a single right-to-left line keeps its right edge as it grows.
     let rtl = crate::bidi::rtl_base(&flat);
-    let anchored_right = rtl && upright && style.width.is_none() && members.len() == 1;
+    // Sintec.PDF: a single row of several runs is anchored too.
+    let anchored_right = rtl && upright && style.width.is_none() && b.rows.len() <= 1;
     // The paragraph's width along its lines: in user space unless it is turned.
     let frame = if upright {
         b.rect
@@ -954,7 +964,20 @@ pub(crate) fn rewrite_block_from(
     // Turned text is left alone: its centre lives along its own baseline, not in page space.
     let crop = p.crop(doc);
     let centred = upright && !rtl && style.width.is_none() && style.align.is_none() && is_centred(&b, &lines, (crop[0] + crop[2]) / 2.0, first.size);
-    let geometry = ParaGeometry { rect: b.rect, frame, crop, upright, k, size, dx, single_line: members.len() == 1, anchored_right, centred };
+    // Sintec.PDF: a single row grows up to the margin or the next paragraph on its row (the
+    // rule `text_blocks` reports as `TextBlock::wrap`).
+    let [auto_left, auto_right] = super::regions::auto_wrap(&blocks, block, crop, [dx, dy], size * k, anchored_right);
+    let geometry = ParaGeometry {
+        rect: b.rect,
+        frame,
+        upright,
+        k,
+        size,
+        single_line: b.rows.len() <= 1,
+        anchored_right,
+        centred,
+        auto_width: auto_right - auto_left,
+    };
     let width = geometry.width(style.width)?;
     let align = if centred { Some(crate::added::Align::Center) } else { style.align.or(rtl.then_some(crate::added::Align::Right)) };
     // Where a right-aligned line ends, from the paragraph's left edge (user space).
@@ -1135,7 +1158,7 @@ pub(crate) fn selectable_blocks(
     let p = page_dict(doc, page)?;
     let streams = content_streams(doc, &p.dict)?;
     let lines = text_lines(doc, page)?;
-    Ok(group_blocks(&lines)
+    Ok(page_blocks(doc, page, &lines)
         .into_iter()
         .enumerate()
         .filter(|(_, b)| {
@@ -1222,7 +1245,7 @@ pub(crate) fn paragraph_ops(doc: &Document, page: usize, indexes: &[usize], edit
         return Ok(selected);
     }
     let lines = text_lines(doc, page)?;
-    let blocks = group_blocks(&lines);
+    let blocks = page_blocks(doc, page, &lines);
     for index in indexes {
         let b = blocks.get(*index).ok_or_else(|| EditError::Invalid("a selected paragraph no longer exists".into()))?;
         for line in &b.lines {
@@ -1251,6 +1274,7 @@ pub(crate) fn translate_blocks(doc: &mut Document, page: usize, indexes: &[usize
     if indexes.is_empty() {
         return Ok(());
     }
+    super::split_wide_runs(doc, page)?;
     let p = page_dict(doc, page)?;
     let streams = content_streams(doc, &p.dict)?;
     let selected = paragraph_ops(doc, page, indexes, true)?;

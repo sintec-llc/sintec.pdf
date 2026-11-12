@@ -28,10 +28,27 @@ fn index(items: &[Vec<u8>]) -> Vec<u8> {
     }
     out
 }
+#[allow(dead_code)]
 pub fn cff_font() -> Vec<u8> {
+    cff_font_styled_with(None, "Regular", "RectFont-Regular", 700, &[' ', 'A'])
+}
+/// Sintec.PDF: the same font with an OS/2 table saying `weight` (the program's own weight class).
+#[allow(dead_code)]
+pub fn cff_font_with_weight(weight: u16) -> Vec<u8> {
+    cff_font_styled_with(Some(weight), "Regular", "RectFont-Regular", 700, &[' ', 'A'])
+}
+/// Sintec.PDF: a Rect Font face named `postscript` (style `subfamily`, OS/2 weight `weight`)
+/// whose rectangles are `height` units (per 1000) tall and which maps only `chars` (a space to
+/// the empty glyph, the others to the rectangle): a stand-in for a PDF's subset or an installed
+/// face.
+#[allow(dead_code)]
+pub fn cff_font_styled(postscript: &str, subfamily: &str, weight: u16, height: i16, chars: &[char]) -> Vec<u8> {
+    cff_font_styled_with(Some(weight), subfamily, postscript, height, chars)
+}
+fn cff_font_styled_with(weight: Option<u16>, subfamily: &str, postscript: &str, height: i16, chars: &[char]) -> Vec<u8> {
     let name = index(&[b"RectFont".to_vec()]);
     let mut dict = Vec::new();
-    for n in [0, 0, 500, 700] {
+    for n in [0, 0, 500, height] {
         dict.extend(number(n));
     }
     dict.push(5);
@@ -41,7 +58,7 @@ pub fn cff_font() -> Vec<u8> {
     dict.push(17);
     let mut rectangle = number(600);
     rectangle.extend([139, 139, 21]);
-    for n in [500, 0, 0, 700, -500, 0, 0, -700] {
+    for n in [500, 0, 0, height, -500, 0, 0, -height] {
         rectangle.extend(number(n));
     }
     rectangle.extend([5, 14]);
@@ -80,15 +97,18 @@ pub fn cff_font() -> Vec<u8> {
     be32(&mut cmap, 12);
     be16(&mut cmap, 12);
     be16(&mut cmap, 0);
-    be32(&mut cmap, 40);
+    be32(&mut cmap, (16 + 12 * chars.len()) as u32);
     be32(&mut cmap, 0);
-    be32(&mut cmap, 2);
-    for (cp, gid) in [(32, 1), (65, 2)] {
+    be32(&mut cmap, chars.len() as u32);
+    // Groups must be in code order: a space maps to the empty glyph, the rest to the rectangle.
+    let mut codes: Vec<u32> = chars.iter().map(|c| u32::from(*c)).collect();
+    codes.sort_unstable();
+    for cp in codes {
         be32(&mut cmap, cp);
         be32(&mut cmap, cp);
-        be32(&mut cmap, gid);
+        be32(&mut cmap, if cp == 32 { 1 } else { 2 });
     }
-    let names = [(1, "Rect Font"), (2, "Regular"), (6, "RectFont-Regular"), (13, "MIT License")];
+    let names = [(1, "Rect Font"), (2, subfamily), (6, postscript), (13, "MIT License")];
     let mut name = Vec::new();
     be16(&mut name, 0);
     be16(&mut name, names.len() as u16);
@@ -102,12 +122,20 @@ pub fn cff_font() -> Vec<u8> {
         data.extend(bytes);
     }
     name.extend(data);
-    let tables = [(*b"CFF ", cff), (*b"cmap", cmap), (*b"head", head), (*b"hhea", hhea), (*b"hmtx", hmtx), (*b"maxp", maxp), (*b"name", name)];
+    let mut tables =
+        vec![(*b"CFF ", cff), (*b"cmap", cmap), (*b"head", head), (*b"hhea", hhea), (*b"hmtx", hmtx), (*b"maxp", maxp), (*b"name", name)];
+    if let Some(weight) = weight {
+        let mut os2 = vec![0; 78];
+        os2[4..6].copy_from_slice(&weight.to_be_bytes());
+        tables.insert(1, (*b"OS/2", os2));
+    }
+    let count = tables.len() as u16;
+    let entry = count.ilog2() as u16;
     let mut out = b"OTTO".to_vec();
-    be16(&mut out, 7);
-    be16(&mut out, 64);
-    be16(&mut out, 2);
-    be16(&mut out, 48);
+    be16(&mut out, count);
+    be16(&mut out, 16 << entry);
+    be16(&mut out, entry);
+    be16(&mut out, count * 16 - (16 << entry));
     let mut payload = Vec::new();
     let mut offset = 12 + 16 * tables.len();
     for (tag, bytes) in tables {

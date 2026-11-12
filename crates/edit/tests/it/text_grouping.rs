@@ -5,8 +5,7 @@
 use std::sync::Arc;
 
 use pdfcraft_cos::Document;
-
-use super::*;
+use pdfcraft_edit::text;
 
 /// One page drawing `content`, with Courier as /F1 and Courier-Bold as /F2.
 fn page(content: &str) -> Document {

@@ -119,7 +119,7 @@ pub(crate) fn layout_draft(
     text: &str,
     style: &BlockStyle,
 ) -> Result<TextEditLayout, EditError> {
-    if text == source.editor_text && *style == BlockStyle::default() {
+    if text == source.editor_text && style.is_plain() {
         return Ok(TextEditLayout { source_rect: source.rect, draft_rect: Some(source.rect), overflow: false });
     }
     // Subtract the untouched runs by value, rather than by operator offsets: a rewrite may

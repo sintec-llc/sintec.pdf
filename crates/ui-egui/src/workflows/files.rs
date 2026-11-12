@@ -1253,6 +1253,7 @@ mod font_scan_tests {
             path: "installed.ttf".into(),
             family: "Installed".into(),
             face: "Installed".into(),
+            ..Default::default()
         }]);
         assert!(cache.begin(true), "a populated scan can discover newly installed fonts");
         assert!(cache.files.is_none());

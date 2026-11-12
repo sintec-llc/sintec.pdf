@@ -132,6 +132,7 @@ fn stretch(phrase: &TextBlock, lines: &[TextLine], indices: &[usize]) -> Result<
         text,
         spans,
         rect,
+        wrap: [rect[0], rect[2]],
         base_font: first.base_font.clone(),
         size: phrase.size,
         bold: first.bold,
@@ -220,7 +221,7 @@ fn apply(
             edge(change.runs.start.checked_sub(1)).map_or(f64::NEG_INFINITY, |rect| rect[2]),
             edge(Some(change.runs.end)).map_or(f64::INFINITY, |rect| rect[0]),
         ]);
-        let edit = rewrite_styled_block(doc, page, &part, &before, Some(&change.text), &style, max_glyphs)?;
+        let edit = rewrite_styled_block(doc, page, &part, &before, Some(&change.text), &style, max_glyphs, None)?;
         substituted = substituted.or(edit.substituted);
         let right = drawn_right(&before, indices, &word_lines(doc, page)?)?;
         if right.is_none() && !change.text.is_empty() {

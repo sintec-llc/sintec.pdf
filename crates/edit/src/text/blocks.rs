@@ -9,7 +9,13 @@ use super::{Document, EditError, HashMap, Object, Op, TextLine, group_blocks, re
 pub struct TextBlock {
     /// The lines' text joined with spaces (lines that ended in a hyphen are joined directly).
     pub text: String,
+    /// The text's ink extent (user space).
     pub rect: [f64; 4],
+    /// Sintec.PDF (task 015): where a rewrite without an explicit width
+    /// ([`BlockStyle::width`]) wraps the text: its left and right edges in user space, along x.
+    /// PDFs store no wrap width, so [`text_blocks`] derives it from the layout by the rule the
+    /// rewrite uses; readers that don't ([`reading_blocks`]) leave the text's extent here.
+    pub wrap: [f64; 2],
     pub base_font: String,
     pub size: f64,
     pub bold: bool,
@@ -346,18 +352,42 @@ pub fn block_overlapping(blocks: &[TextBlock], rect: [f64; 4]) -> Option<usize> 
     blocks.iter().enumerate().map(|(i, b)| (i, area(b))).filter(|(_, a)| *a > 0.0).max_by(|(_, a), (_, b)| a.total_cmp(b)).map(|(i, _)| i)
 }
 
+/// Sintec.PDF: page `page`'s paragraphs from its [`text_lines`] `lines`, kept apart at the table
+/// borders and other rules it draws. Every reader and writer of paragraph indexes goes through
+/// here, so an index means the same paragraph to all of them.
+pub(crate) fn page_blocks(doc: &Document, page: usize, lines: &[TextLine]) -> Vec<TextBlock> {
+    group_blocks(lines, &super::ruled::page_segments(doc, page))
+}
+
 /// The paragraphs on a page (0-based).
 pub fn text_blocks(doc: &Document, page: usize) -> Result<Vec<TextBlock>, EditError> {
     let lines = text_lines(doc, page)?;
-    Ok(group_blocks(&lines))
+    let mut blocks = page_blocks(doc, page, &lines);
+    let crop = page_dict(doc, page)?.crop(doc);
+    let wraps: Vec<[f64; 2]> = (0..blocks.len())
+        .map(|i| blocks.get(i).map_or([0.0, 0.0], |b| regions::auto_wrap(&blocks, i, crop, [0.0, 0.0], b.size, anchored_rtl(&b.text))))
+        .collect();
+    for (b, wrap) in blocks.iter_mut().zip(wraps) {
+        b.wrap = wrap;
+    }
+    Ok(blocks)
+}
+
+/// Sintec.PDF: does a rewrite of a single row of `text` keep its right edge and grow to the left?
+/// Hebrew text is written back by the single-style path, which anchors right-to-left rows on the
+/// right; other right-to-left scripts (Arabic) need shaping and are laid out left-anchored by the
+/// styled path.
+pub(crate) fn anchored_rtl(text: &str) -> bool {
+    crate::bidi::rtl_base(text) && text.chars().any(crate::bidi::is_hebrew)
 }
 
 /// Remove a paragraph's glyphs for a temporary editor background. Numeric TJ adjustments
 /// preserve the text matrix, so unselected text positioned relative to it stays in place.
 /// Call this on a clone: it is a preview operation, not a document edit.
 pub fn clear_block(doc: &mut Document, page: usize, block: usize) -> Result<(), EditError> {
+    super::split_wide_runs(doc, page)?;
     let lines = text_lines(doc, page)?;
-    let blocks = group_blocks(&lines);
+    let blocks = page_blocks(doc, page, &lines);
     let target = blocks.get(block).ok_or_else(|| EditError::Invalid("the paragraph no longer exists".into()))?;
     let targets: Vec<&TextLine> = target.lines.iter().filter_map(|i| lines.get(*i)).collect();
     targets.iter().try_for_each(|line| line.ensure_editable())?;
@@ -540,6 +570,19 @@ pub struct BlockStyle {
     /// How far across [`BlockStyle::cover`] may reach, whatever its padding: the edges of the words
     /// on either side that stay (user space).
     pub cover_between: Option<[f64; 2]>,
+    /// Sintec.PDF (task 033): per source font resource, the loaded face (a `PCFull…` resource from
+    /// [`register_text_font`](super::register_text_font)) that draws what that font can't show:
+    /// the face the inline editor previewed it in. A font not listed here gets the loaded face
+    /// that matches it best. Only says which face; it changes nothing by itself.
+    pub substitutes: Vec<(String, String)>,
+}
+
+impl BlockStyle {
+    /// No formatting at all: a rewrite with this style and the paragraph's own text changes
+    /// nothing. [`BlockStyle::substitutes`] only says which face draws missing characters.
+    pub(crate) fn is_plain(&self) -> bool {
+        BlockStyle { substitutes: Vec::new(), ..self.clone() } == BlockStyle::default()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

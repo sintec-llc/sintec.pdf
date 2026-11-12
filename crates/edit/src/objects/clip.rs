@@ -57,6 +57,10 @@ pub fn copy_objects(doc: &Document, page: usize, targets: &[ObjectTarget]) -> Re
     if targets.is_empty() || targets.len() > MAX_MOVE_OBJECTS {
         return Err(EditError::Invalid("select between 1 and 1000 objects to copy".into()));
     }
+    // Sintec.PDF: paragraphs' operators are taken by the indexes `text_lines` gives, which reads
+    // wide TJs as split: read a copy split the same way (it draws the same).
+    let split = crate::text::split_view(doc, page)?;
+    let doc: &Document = &split;
     let mut inventory: BTreeMap<_, _> = editable_objects(doc, page)?.into_iter().map(|o| (o.target, o)).collect();
     let mut objects = Vec::with_capacity(targets.len());
     for target in targets.iter().collect::<BTreeSet<_>>() {

@@ -25,16 +25,19 @@ mod regions;
 #[path = "text_session.rs"]
 mod session;
 pub use fallback::strip_subset_tag;
+pub use font_facts::{Fit as SubstituteFit, FontFacts, StyleSource, first_unencodable, font_facts, substitute_chars, substitute_fit};
 use regions::{alignment_frame, group_blocks, is_centred, rewrite_changed_words, rewrite_styled_block};
 pub use session::TextSession;
 
 mod blocks;
 mod editor;
 mod fallback;
+mod font_facts;
 pub mod forms;
 mod interp;
 mod lines;
 mod rewrite;
+mod ruled;
 
 #[cfg(test)]
 use blocks::wrap;
@@ -42,7 +45,7 @@ pub use blocks::{
     BlockKey, BlockStyle, RangeStyle, ReadingBlocks, RunSources, TextBlock, block_overlapping, clear_block, reading_blocks, reading_blocks_checked,
     replace_block, text_blocks,
 };
-use blocks::{kept_words, paragraph_separator, row_break};
+use blocks::{kept_words, page_blocks, paragraph_separator, row_break};
 pub use editor::{TextEditLayout, TextEditorFont, register_text_font, text_edit_layout, text_editor_fonts};
 use editor::{builtin_thai_choice, layout_draft};
 use fallback::{
@@ -63,8 +66,9 @@ pub(crate) use lines::{
     ContentStream, FormBudget, Read, content_streams, content_streams_within, dict_in_place, drawn_before_damage, dropped_advances,
     dropped_side_effects, first_op_after_damage, form_call, joined, reopen_text_object, resource_dict, rewritten_contents, splice,
 };
-pub use lines::{MAX_FORM_DEPTH, MAX_FORM_VISITS, glyph_text_lines, text_lines};
+pub use lines::{MAX_FORM_DEPTH, MAX_FORM_VISITS, drawn_lines, glyph_text_lines, text_lines};
 use lines::{page_dict, word_lines};
+pub(crate) use lines::{split_view, split_wide_runs};
 pub use rewrite::{LineEdit, replace_line, rewrite_block};
 use rewrite::{coincident_ops, rewrite_block_from};
 pub(crate) use rewrite::{paragraph_ops, reveal_ops, selectable_blocks, show_starts, translate_blocks};
@@ -223,6 +227,7 @@ mod tests {
         TextBlock {
             text: text.into(),
             rect,
+            wrap: [rect[0], rect[2]],
             base_font: String::new(),
             size: 12.0,
             bold: false,

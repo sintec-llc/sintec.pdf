@@ -125,6 +125,25 @@ impl Document {
         self.editor.as_ref().and_then(|e| pdfcraft_edit::text::text_editor_fonts(&e.cos, page).ok()).unwrap_or_default()
     }
 
+    /// Sintec.PDF: what the font of page `page`'s resource `resource` is (see
+    /// [`pdfcraft_edit::text::FontFacts`]); `None` when it can't be read.
+    pub fn font_facts(&self, page: usize, resource: &str) -> Option<pdfcraft_edit::text::FontFacts> {
+        self.editor.as_ref().and_then(|e| pdfcraft_edit::text::font_facts(&e.cos, page, resource).ok())
+    }
+
+    /// Sintec.PDF: the first character of `text` that page `page`'s font `resource` can't show
+    /// (see [`pdfcraft_edit::text::first_unencodable`]).
+    pub fn first_unencodable(&self, page: usize, resource: &str, text: &str) -> Option<char> {
+        self.editor.as_ref().and_then(|e| pdfcraft_edit::text::first_unencodable(&e.cos, page, resource, text).ok()).flatten()
+    }
+
+    /// Sintec.PDF (task 033): the characters of `text` a rewrite of a run in page `page`'s font
+    /// `resource` draws in a substitute face (see [`pdfcraft_edit::text::substitute_chars`]);
+    /// empty when the font can't be read.
+    pub fn substitute_chars(&self, page: usize, resource: &str, text: &str) -> Vec<char> {
+        self.editor.as_ref().and_then(|e| pdfcraft_edit::text::substitute_chars(&e.cos, page, resource, text).ok()).unwrap_or_default()
+    }
+
     /// Preparing the background never changes working bytes, dirty state or undo history.
     pub fn text_edit_preview(&self, page: usize, block: usize) -> Result<TextEditPreview, String> {
         guard(|| {

@@ -1,3 +1,4 @@
+use super::super::ruled::{Segment, rule_in_frame, ruled_apart_along};
 use super::{BlockStyle, HashMap, Matrix, TextBlock, TextLine, paragraph_separator, same_base_font, same_font, strip_subset_tag, union};
 
 fn same_plane(a: &TextLine, b: &TextLine) -> bool {
@@ -111,8 +112,37 @@ pub(crate) fn is_centred(block: &TextBlock, lines: &[TextLine], page_centre: f64
         .is_some_and(|left| (centre - page_centre).abs() < size && neighbour_left(lines, block).is_none_or(|edge| (*left - edge).abs() > size * 0.5))
 }
 
-pub(crate) fn group_blocks(lines: &[TextLine]) -> Vec<TextBlock> {
-    group_layout(lines, true)
+/// The paragraphs editing sees. Sintec.PDF: `rules` are the page's rules
+/// ([`super::super::ruled::page_segments`]): text on either side of a table border or another rule
+/// is never one paragraph.
+pub(crate) fn group_blocks(lines: &[TextLine], rules: &[Segment]) -> Vec<TextBlock> {
+    group_layout(lines, true, rules)
+}
+
+/// Sintec.PDF: whether a rule stands between `prev` and `line` on one row (a table's column
+/// border between two cells).
+fn ruled_apart_on_row(prev: &TextLine, line: &TextLine, rules: &[Segment]) -> bool {
+    let em = prev.size.min(line.size).max(0.0);
+    let heights = [prev.frame_origin().1 + prev.size * 0.3, line.frame_origin().1 + line.size * 0.3];
+    ruled_apart_along(rules, prev.direction(), prev.frame_rect()[2], line.frame_rect()[0], 0.1 * em, heights)
+}
+
+/// Sintec.PDF: whether a rule runs between row `prev_row` (its first run `prev`) and the row below
+/// it, `row` (its first run `first`), both given by their frame boxes: a line along the
+/// baselines, under the descenders of the upper row and over the x-height of the lower, that
+/// reaches over both rows, as a table's row border does. An underline (closer to its baseline)
+/// or a strike-through (through the letters) keeps them together.
+fn ruled_apart_between_rows(prev: &TextLine, prev_row: [f64; 4], first: &TextLine, row: [f64; 4], rules: &[Segment]) -> bool {
+    let dir = prev.direction();
+    let (top, bottom) = (prev.frame_origin().1 - prev.size * 0.2, first.frame_origin().1 + first.size * 0.5);
+    if bottom > top {
+        return false;
+    }
+    let reaches = |r: [f64; 4], lo: f64, hi: f64| lo < r[2] && hi > r[0];
+    rules
+        .iter()
+        .filter_map(|s| rule_in_frame(dir, s))
+        .any(|(crossing, at, [lo, hi])| !crossing && at >= bottom && at <= top && reaches(prev_row, lo, hi) && reaches(row, lo, hi))
 }
 
 /// Exporters currently represent a block with one style. Keep their style boundaries until
@@ -138,16 +168,16 @@ pub(crate) fn group_reading_blocks(lines: &[TextLine]) -> Vec<TextBlock> {
         {
             // Tab leaders are a single reading row, even when the title, dots and page
             // number are separate text objects far apart. Do not merge neighbouring entries.
-            blocks.extend(group_layout(lines.get(start..offset).unwrap_or_default(), false));
+            blocks.extend(group_layout(lines.get(start..offset).unwrap_or_default(), false, &[]));
             let mut line = first.clone();
             line.text = text;
             line.rect = row.iter().map(|line| line.rect).reduce(union).unwrap_or(first.rect);
-            blocks.extend(group_layout(std::slice::from_ref(&line), false));
+            blocks.extend(group_layout(std::slice::from_ref(&line), false, &[]));
             start = offset + row.len();
         }
         offset += row.len();
     }
-    blocks.extend(group_layout(lines.get(start..).unwrap_or_default(), false));
+    blocks.extend(group_layout(lines.get(start..).unwrap_or_default(), false, &[]));
     blocks
 }
 
@@ -234,7 +264,7 @@ fn starts_list_item(row: &[usize], lines: &[TextLine]) -> bool {
     row.iter().filter_map(|i| lines.get(*i)).map(|l| l.text.trim_start()).find(|t| !t.is_empty()).is_some_and(opens_with_marker)
 }
 
-fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
+fn group_layout(lines: &[TextLine], mixed: bool, rules: &[Segment]) -> Vec<TextBlock> {
     let mut rows: Vec<Vec<usize>> = Vec::new();
     for (i, line) in lines.iter().enumerate() {
         let joins = rows.last().and_then(|r| r.last()).and_then(|i| lines.get(*i)).is_some_and(|prev| {
@@ -242,6 +272,11 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
             // OCR words (invisible text over a scan) join only across a word space: a wider gap
             // is a table cell or a tab stop, which a rewrite would close up.
             let scanned = !mixed || (invisible(prev) == invisible(line) && (!invisible(line) || gap < prev.size.max(line.size) * 0.6));
+            // Sintec.PDF: one text object's runs in one style (the words of a justified line
+            // positioned one by one) may stand up to 1.5 em apart; another object or style that
+            // far off is the next field of a form or the next cell of a table. Reading keeps the
+            // old reach.
+            let reach = if !mixed || (prev.origin.bt_op == line.origin.bt_op && same_style(prev, line)) { 1.5 } else { 1.0 };
             scanned
                 && (mixed || same_style(prev, line))
                 && same_plane(prev, line)
@@ -258,7 +293,7 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
                         && prev.size.min(line.size) < prev.size.max(line.size) * 0.9
                         && (prev.frame_origin().1 - line.frame_origin().1).abs() < prev.size.max(line.size) * 0.5))
                 && gap >= -prev.size.min(line.size) * 0.2
-                && gap < prev.size.max(line.size) * 1.5
+                && gap < prev.size.max(line.size) * reach
                 // Separate same-style text objects that merely touch or overlap, with no space
                 // between them, are separate labels (for example a paragraph dragged against
                 // another, #594). Style runs and words separated by a space or gap still join.
@@ -267,6 +302,8 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
                     || !same_style(prev, line)
                     || prev.text.ends_with(char::is_whitespace)
                     || line.text.starts_with(char::is_whitespace))
+                // Sintec.PDF: a table's column border between them: two cells, however close.
+                && !ruled_apart_on_row(prev, line, rules)
         });
         if joins && let Some(row) = rows.last_mut() {
             row.push(i);
@@ -354,6 +391,8 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
                 && first.size.min(prev.size) >= first.size.max(prev.size) * 0.4
                 && gap > first.size.min(prev.size) * 0.8
                 && gap < max_gap
+                // Sintec.PDF: a table's row border between them: two cells, however close.
+                && !ruled_apart_between_rows(prev, pr, first, frame, rules)
         });
         if !joins {
             blocks.push(TextBlock {
@@ -362,6 +401,7 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
                 reflow_text: String::new(),
                 spans: Vec::new(),
                 rect,
+                wrap: [rect[0], rect[2]],
                 base_font: first.base_font.clone(),
                 size: first.size,
                 bold: first.bold,
@@ -409,6 +449,7 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
         }
         block.text.push_str(row_text.trim_matches(paragraph_separator));
         block.rect = union(block.rect, rect);
+        block.wrap = [block.rect[0], block.rect[2]];
         block.rows.push(row.clone());
     }
     for block in &mut blocks {
@@ -489,4 +530,41 @@ fn median_size(sizes: impl Iterator<Item = f64>) -> Option<f64> {
     let middle = sizes.len() / 2;
     let upper = sizes.get(middle).copied()?;
     if sizes.len().is_multiple_of(2) { sizes.get(middle.saturating_sub(1)).map(|lower| (lower + upper) / 2.0) } else { Some(upper) }
+}
+
+/// Sintec.PDF (task 015): the free space a rewrite without an explicit width lets paragraph
+/// `index` wrap in: its left and right edges in user space (x), with the paragraph moved by
+/// `offset`. `em` is the text size (the narrowest a paragraph wraps at) and `rtl` says the text
+/// keeps its right edge (see [`anchored_rtl`](super::super::blocks::anchored_rtl)).
+///
+/// - A paragraph of several rows keeps its width: it rewraps at its extent.
+/// - A single row grows towards the page's right margin (36 pt in from the crop box), to the left
+///   when right to left, stopping half an em before the next paragraph on its row (a table's next
+///   cell), so typing into one cell wraps instead of running over its neighbour.
+/// - An OCR line (invisible text over a scan) grows to the margin: its words are separate
+///   paragraphs, and wrapping would put the new text over the scanned line below.
+///
+/// Never narrower than the text's own extent. Only text stops a row, not rules.
+pub(crate) fn auto_wrap(blocks: &[TextBlock], index: usize, crop: [f64; 4], offset: [f64; 2], em: f64, rtl: bool) -> [f64; 2] {
+    let Some(b) = blocks.get(index) else { return [0.0, 0.0] };
+    let [dx, dy] = offset.map(|v| if v.is_finite() { v } else { 0.0 });
+    let r = [b.rect[0] + dx, b.rect[1] + dy, b.rect[2] + dx, b.rect[3] + dy];
+    let extent = (r[2] - r[0]).max(0.0);
+    let em = if em.is_finite() && em > 0.0 { em } else { 0.0 };
+    let own = extent.max(em);
+    if b.rows.len() > 1 {
+        return [r[0], r[0] + own];
+    }
+    let gap = em * 0.5;
+    // Paragraphs beside this one: they share some of its height.
+    let beside = blocks.iter().enumerate().filter(|(j, o)| *j != index && !b.invisible && o.rect[1] < r[3] && o.rect[3] > r[1]).map(|(_, o)| o.rect);
+    let width = if rtl {
+        let limit = beside.filter(|o| o[2] <= r[0] + 0.5).map(|o| o[2] + gap).fold(crop[0] + 36.0, f64::max);
+        own.max(r[2] - limit)
+    } else {
+        let limit = beside.filter(|o| o[0] >= r[2] - 0.5).map(|o| o[0] - gap).fold(crop[2] - 36.0, f64::min);
+        own.max(limit - r[0])
+    };
+    let width = if width.is_finite() { width.min(14_400.0) } else { own };
+    if rtl { [r[2] - width, r[2]] } else { [r[0], r[0] + width] }
 }

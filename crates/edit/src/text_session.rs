@@ -4,7 +4,7 @@
 //! that document has changed since.
 
 use super::{
-    BlockStyle, Document, EditError, LineEdit, MAX_TYPE3_GLYPHS, TextBlock, TextEditLayout, TextLine, group_blocks, layout_draft, rewrite_block_from,
+    BlockStyle, Document, EditError, LineEdit, MAX_TYPE3_GLYPHS, TextBlock, TextEditLayout, TextLine, layout_draft, page_blocks, rewrite_block_from,
     text_lines,
 };
 
@@ -22,7 +22,7 @@ impl TextSession {
     /// Opens paragraph `block` on `page` (both 0-based) of `doc`.
     pub fn open(doc: &Document, page: usize, block: usize) -> Result<Self, EditError> {
         let lines = text_lines(doc, page)?;
-        let source = group_blocks(&lines)
+        let source = page_blocks(doc, page, &lines)
             .get(block)
             .cloned()
             .ok_or_else(|| EditError::Invalid(format!("page {} has no paragraph {}", page + 1, block + 1)))?;

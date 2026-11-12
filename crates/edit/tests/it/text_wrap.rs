@@ -4,8 +4,7 @@
 use std::sync::Arc;
 
 use pdfcraft_cos::Document;
-
-use super::*;
+use pdfcraft_edit::text;
 
 const PARAGRAPH: &str = "the quick brown fox jumps over the lazy dog while seven bold zebras quietly graze near a calm river bank";
 
@@ -165,37 +164,13 @@ fn a_single_line_stops_before_text_on_its_row_only() {
 }
 
 #[test]
-fn rewrap_text_keeps_a_heading_apart_and_joins_soft_wrapped_rows() {
-    let doc = table(0);
-    let lines = text::text_lines(&doc, 0).unwrap();
-    let (_, heading, _) = block(&doc, "Name:");
-    assert_eq!(heading.rewrap_text(&lines), "Name:\nJohn Smith Junior");
-    let (_, para, _) = block(&doc, "the quick");
-    assert_eq!(para.text, PARAGRAPH);
-    assert_eq!(para.rewrap_text(&lines), para.text);
-    let (_, cell, _) = block(&doc, "alpha");
-    assert_eq!(cell.rewrap_text(&lines), "alpha beta gamma");
-    // Lines that don't match the block's rows (another page's) change nothing.
-    assert_eq!(heading.rewrap_text(&[]), heading.text);
-}
-
-#[test]
-fn an_explicit_width_rewraps_rows_but_keeps_a_heading_apart() {
-    // Narrowing the paragraph: its soft-wrapped rows rewrap at the new width.
-    let mut doc = table(0);
-    let lines = text::text_lines(&doc, 0).unwrap();
-    let (i, para, _) = block(&doc, "the quick");
-    let style = text::BlockStyle { width: Some(120.0), ..Default::default() };
-    text::rewrite_block(&mut doc, 0, i, Some(&para.rewrap_text(&lines)), &style).unwrap();
-    let (_, _, rows) = block(&doc, "the quick");
-    assert!(rows.len() > para.rows.len(), "{rows:?}");
-    assert_wraps_at(&rows, [20.0, 140.0], &(0..rows.len() - 1).collect::<Vec<_>>());
+fn an_explicit_width_keeps_a_heading_apart() {
+    // Rows are rejoined for a new width by upstream's `TextBlock::reflow_text`.
     // Widening the heading block: its value doesn't join the heading.
     let mut doc = table(0);
-    let lines = text::text_lines(&doc, 0).unwrap();
     let (i, heading, _) = block(&doc, "Name:");
     let style = text::BlockStyle { width: Some(300.0), ..Default::default() };
-    text::rewrite_block(&mut doc, 0, i, Some(&heading.rewrap_text(&lines)), &style).unwrap();
+    text::rewrite_block(&mut doc, 0, i, Some(&heading.reflow_text), &style).unwrap();
     let (_, _, rows) = block(&doc, "Name:");
     assert_eq!(rows.iter().map(|r| r.0.as_str()).collect::<Vec<_>>(), ["Name:", "John Smith Junior"]);
 }
