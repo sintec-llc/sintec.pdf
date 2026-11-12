@@ -724,13 +724,13 @@ mod tests {
             return;
         }
         let previous = crate::i18n::current();
-        for (code, expected) in [("en", "Ctrl+K"), ("de", "Strg+K")] {
+        for (code, expected) in [("en", "Ctrl+K"), ("ru", "Ctrl+K")] {
             crate::i18n::set_current(crate::i18n::Lang::from_code(code).unwrap());
             for width in [260.0, 160.0, 90.0] {
                 let ctx = egui::Context::default();
                 ctx.set_os(egui::os::OperatingSystem::Nix);
                 ctx.set_fonts(theme::font_definitions());
-                let placeholder = "Werkzeuge und Befehle suchen";
+                let placeholder = "Поиск инструментов и команд";
                 let output = ctx.run_ui(egui::RawInput::default(), |ui| {
                     search_box(ui, placeholder, width);
                 });

@@ -1,5 +1,5 @@
-//! Bake the contributor credits into the binary as static Rust tables, and embed the craft-i18n
-//! interface catalogs. Nothing is read at run time.
+//! Bake the contributor credits into the binary as static Rust tables, and embed the interface
+//! catalogs. Nothing is read at run time.
 //!
 //! - contributors/contributors.json: commit stats per GitHub username, with a mark for whose people.toml
 //!   entry is verified.
@@ -8,11 +8,9 @@
 //!
 //! A missing or malformed file gives empty tables (or no names) and a warning.
 //!
-//! - `CRAFT_I18N_DIR`, a craft-i18n checkout (storytold/craft-i18n, at the SHA in
-//!   `craft-i18n.rev`): `craft_i18n.rs` holds `CRAFT_I18N`, one (locale, shared catalog, PdfCraft
-//!   catalog) entry per locale that has a `pdfcraft.tsv`. Unset, or not a checkout (a warning),
-//!   it is empty and the interface is English only; with `CRAFT_I18N_REQUIRED=1` (CI and releases)
-//!   that is an error instead. Recipe: craft-i18n's `docs/integration.md`.
+//! - `i18n/locales/<locale>/{common,pdfcraft}.tsv` (in this repository, craft-i18n's format):
+//!   `craft_i18n.rs` holds `CRAFT_I18N`, one (locale, shared catalog, PdfCraft catalog) entry per
+//!   locale that has a `pdfcraft.tsv`. A missing directory is a build error.
 
 use std::fmt::Write as _;
 
@@ -36,32 +34,24 @@ fn main() {
     }
 }
 
-/// The catalog this app reads in each locale: `locales/<locale>/pdfcraft.tsv`.
+/// The catalogs of each locale: `i18n/locales/<locale>/common.tsv` (strings shared with the other
+/// Crafting Apps) and `pdfcraft.tsv` (this app's own, which win over the shared ones).
+const SHARED_CATALOG: &str = "common.tsv";
 const APP_CATALOG: &str = "pdfcraft.tsv";
 
-/// `CRAFT_I18N` from `CRAFT_I18N_DIR`: the `Embedded` list the craft-i18n crate reads.
+/// `CRAFT_I18N` from the repository's `i18n/locales/`: the `Embedded` list the craft-i18n crate
+/// reads. A missing or unreadable directory is a build error: a build without the translations
+/// would quietly ship an English-only interface.
 fn craft_i18n() -> String {
-    println!("cargo::rerun-if-env-changed=CRAFT_I18N_DIR");
-    println!("cargo::rerun-if-env-changed=CRAFT_I18N_REQUIRED");
-    let required = std::env::var("CRAFT_I18N_REQUIRED").is_ok_and(|v| v.trim() == "1");
-    let entries = match std::env::var_os("CRAFT_I18N_DIR").filter(|d| !d.is_empty()) {
-        // Not canonicalized: on Windows that gives `\\?\C:\…`, which `include_str!` can't read.
-        Some(dir) => match locales(&std::path::PathBuf::from(dir).join("locales")) {
-            Ok(entries) => entries,
-            Err(e) => {
-                let level = if required { "error" } else { "warning" };
-                println!("cargo::{level}=CRAFT_I18N_DIR: {e}; the interface is English only");
-                Vec::new()
-            }
-        },
-        None => {
-            if required {
-                println!("cargo::error=CRAFT_I18N_REQUIRED=1 but CRAFT_I18N_DIR is unset: a release must embed the translations");
-            }
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../i18n/locales");
+    let entries = match locales(&dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            println!("cargo::error={e}");
             Vec::new()
         }
     };
-    let mut o = String::from("/// (locale, shared catalog, PdfCraft's catalog), one entry per locale; `\"\"` for a missing file.\n");
+    let mut o = String::from("/// (locale, shared catalog, Sintec.PDF's catalog), one entry per locale; `\"\"` for a missing file.\n");
     o.push_str("pub static CRAFT_I18N: &craft_i18n::Embedded = &[\n");
     for (code, shared, app) in entries {
         // `{:?}` escapes the path (Windows backslashes) as a Rust string literal.
@@ -75,27 +65,22 @@ fn craft_i18n() -> String {
 /// One embedded locale: its code, its `common.tsv` if it has one, and its PdfCraft catalog.
 type Locale = (String, Option<std::path::PathBuf>, std::path::PathBuf);
 
-/// Every locale under `dir` with PdfCraft's catalog, by code. An error when `dir` isn't a
-/// craft-i18n `locales/` directory.
+/// Every locale under `dir` with PdfCraft's catalog, by code. English is the source language and
+/// has no catalog. An error when `dir` can't be read or holds no catalog.
 fn locales(dir: &std::path::Path) -> Result<Vec<Locale>, String> {
-    // Build scripts run in the crate's directory and `include_str!` resolves against the
-    // generated file, so a relative path would mean two different places.
-    if !dir.is_absolute() {
-        return Err(format!("{} is not an absolute path", dir.display()));
-    }
-    // Before read_dir, so a checkout that appears later reruns the script.
+    // Before read_dir, so a locale added later reruns the script.
     println!("cargo::rerun-if-changed={}", dir.display());
-    let list = std::fs::read_dir(dir).map_err(|e| format!("{} is not a craft-i18n checkout ({e})", dir.display()))?;
+    let list = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}; the interface translations are missing", dir.display()))?;
     let mut out = Vec::new();
     for entry in list.flatten() {
         let path = entry.path();
         let Some(code) = path.file_name().and_then(|n| n.to_str()).map(str::to_string) else { continue };
         let app = path.join(APP_CATALOG);
-        if !app.is_file() {
+        if code == "en" || !app.is_file() {
             continue;
         }
         println!("cargo::rerun-if-changed={}", app.display());
-        let shared = Some(path.join("common.tsv")).filter(|p| p.is_file());
+        let shared = Some(path.join(SHARED_CATALOG)).filter(|p| p.is_file());
         if let Some(p) = &shared {
             println!("cargo::rerun-if-changed={}", p.display());
         }

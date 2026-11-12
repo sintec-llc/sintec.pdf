@@ -364,7 +364,7 @@ fn type3_font(clusters: &[&ShapedCluster], outlines: &HashMap<(ShapedScript, u32
             },
             |f| f.family,
         ),
-        None => "PdfCraft Shaped Text",
+        None => "Sintec.PDF Shaped Text",
     };
     let mut descriptor = Dict::new();
     descriptor.set(b"Type".to_vec(), Object::name("FontDescriptor"));

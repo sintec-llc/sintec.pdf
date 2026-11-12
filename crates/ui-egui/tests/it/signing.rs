@@ -672,7 +672,8 @@ fn stamped(path: &std::path::Path) -> String {
 }
 
 /// A signature signed in German is stamped with German labels. In Simplified Chinese, whose
-/// labels the signature's font can't draw, it is stamped with English ones and the dialog says
+/// labels the signature's font can't draw (Russian: Helvetica has no Cyrillic; the translated case
+/// is `sign_ui`'s unit test, as Sintec.PDF ships no Latin-script catalog), it is stamped with English ones and the dialog says
 /// so under the preview: signing neither fails nor writes `?` for them.
 #[test]
 fn the_signature_labels_follow_the_interface_language() {
@@ -683,7 +684,7 @@ fn the_signature_labels_follow_the_interface_language() {
     let p12 = concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12");
     let cert = pdfcraft_engine::sign::pkcs12::open(&std::fs::read(p12).unwrap(), "test").unwrap().certificate;
     let note = "The labels are in English: the signature's font can't draw them in this language.";
-    for (code, labels, in_english) in [("de", ["(Digital", "(Grund:", "(Datum:"], false), ("zh-hans", ["(Digitally", "(Reason:", "(Date:"], true)] {
+    for (code, labels, in_english) in [("ru", ["(Digitally", "(Reason:", "(Date:"], true)] {
         let dir = dir().join(code);
         std::fs::create_dir_all(&dir).unwrap();
         let mut h = harness(dir.clone());
@@ -756,7 +757,7 @@ fn windows_store_identity_does_not_ask_for_a_file_password() {
     h.run_steps(3);
     h.get_by_label("Sign as \"Store signer\"");
     assert_eq!(h.query_all_by_label("Digital ID password").count(), 0);
-    h.get_by_label("The key is in the Windows certificate store, which may ask to allow PdfCraft to use it.");
+    h.get_by_label("The key is in the Windows certificate store, which may ask to allow Sintec.PDF to use it.");
     support::outside_menus(&h, "Sign").click();
     h.run_steps(3);
     assert_eq!(h.state().dialog, Some(Dialog::Sign));

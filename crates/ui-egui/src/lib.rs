@@ -10,9 +10,12 @@
 #![recursion_limit = "256"]
 
 /// PdfCraft as craft-update knows it, with its 128 px icon and accent colour: the update
-/// prompt shows both, and an AppImage's menu entry gets the icon.
+/// prompt shows both, and an AppImage's menu entry gets the icon. The prompt names the app and
+/// its developer, so those are Sintec.PDF's (the ArtCraft name stays out, AGENTS.md §1.2).
 #[cfg(not(target_arch = "wasm32"))]
 pub const UPDATE_APP: craft_update::app::App = craft_update::app::App {
+    name: "Sintec.PDF",
+    developer: "Sintec LLC",
     icon_png: Some(include_bytes!("../../../assets/app-icon/hicolor/128x128/apps/ai.storyteller.pdfcraft.png")),
     accent: Some([0xb7, 0x02, 0x28]),
     ..craft_update::suite::PDFCRAFT

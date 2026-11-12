@@ -34,7 +34,7 @@ fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, P
 #[test]
 fn home_shows_welcome_and_tools() {
     let h = harness(|_| {});
-    h.get_by_label_contains("Welcome to PdfCraft");
+    h.get_by_label_contains("Welcome to Sintec.PDF");
     assert!(h.query_all_by_label("Organize pages").count() >= 2, "tool list + home card");
     h.get_by_label("Open file");
 }
@@ -111,7 +111,7 @@ fn home_removes_one_recent_file_or_clears_them_all() {
     h.get_by_label("Clear Recent Files").click();
     h.run_steps(2);
     assert!(h.state().recent.is_empty(), "Clear empties the list");
-    h.get_by_label_contains("Files you open in PdfCraft appear here");
+    h.get_by_label_contains("Files you open in Sintec.PDF appear here");
     assert!(h.query_by_label("Clear Recent Files").is_none(), "and goes away with nothing left to clear");
 }
 
@@ -238,7 +238,7 @@ fn another_tab_coming_forward_puts_the_expanded_all_tools_away() {
     h.state_mut().set_option("home", "").unwrap();
     h.run_steps(3);
     assert!(!h.state().all_tools_full);
-    h.get_by_label_contains("Welcome to PdfCraft");
+    h.get_by_label_contains("Welcome to Sintec.PDF");
     // Another document's tab.
     let mut h = harness(|app| {
         app.open_bytes("one.pdf", None, FIXTURE.to_vec()).expect("fixture opens");
@@ -258,7 +258,7 @@ fn going_home_with_no_document_puts_the_expanded_all_tools_away() {
     h.state_mut().set_option("home", "").unwrap();
     h.run_steps(3);
     assert!(!h.state().all_tools_full);
-    h.get_by_label_contains("Welcome to PdfCraft");
+    h.get_by_label_contains("Welcome to Sintec.PDF");
 }
 
 #[test]
@@ -1648,7 +1648,7 @@ fn closing_the_last_active_tab_selects_the_previous_one_then_home() {
         assert!(app.session.get(ids[removed]).is_none());
     }
     assert_eq!(h.state().active, None);
-    h.get_by_label_contains("Welcome to PdfCraft");
+    h.get_by_label_contains("Welcome to Sintec.PDF");
 }
 
 #[test]
@@ -1682,26 +1682,24 @@ fn cancelling_then_discarding_an_earlier_dirty_tab_preserves_the_selected_docume
 }
 
 #[test]
-fn long_german_tool_labels_stay_within_the_sidebar() {
-    if crate::support::skip_without_catalogs("long_german_tool_labels_stay_within_the_sidebar") {
+fn long_russian_tool_labels_stay_within_the_sidebar() {
+    if crate::support::skip_without_catalogs("long_russian_tool_labels_stay_within_the_sidebar") {
         return;
     }
     use pdfcraft_ui_egui::{LeftPanel, Mode};
     let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
-    h.state_mut().set_option("language", "de").unwrap();
+    h.state_mut().set_option("language", "ru").unwrap();
     h.state_mut().mode = Mode::AllTools;
     h.state_mut().left_open = true;
     // The tool heading has to leave room for Back and Close even when translated.
     h.state_mut().left = LeftPanel::Tool("fill_sign");
     h.run_steps(4);
-    let heading =
-        painted_text(&h).into_iter().find(|(s, ..)| s.starts_with("Ausfüllen und")).expect("translated heading is painted, whole or elided");
+    let heading = painted_text(&h).into_iter().find(|(s, ..)| s.starts_with("Заполнить и")).expect("translated heading is painted, whole or elided");
     assert!(heading.2.right() <= 272.0, "translated heading runs past the sidebar: {:?}", heading.2);
     // A long sub-tool name must stop before its status chip, not paint over the PDF.
     h.state_mut().left = LeftPanel::Tool("protect");
     h.run_steps(4);
-    let item =
-        painted_text(&h).into_iter().find(|(s, ..)| s == "Ausgeblendete Informationen entfernen").expect("long translated sub-tool is painted");
+    let item = painted_text(&h).into_iter().find(|(s, ..)| s == "Удалить скрытые сведения").expect("long translated sub-tool is painted");
     assert!(item.2.right() <= 272.0, "translated tool item runs past the sidebar: {:?}", item.2);
 }
 

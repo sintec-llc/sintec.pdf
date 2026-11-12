@@ -16,8 +16,9 @@ Not stashed because they were resolved in place:
   `crates/engine/src/ocr.rs` (`paddle_engine`); our old `lib.rs`/`Cargo.toml` are here for reference.
 - `crates/cos`: `SaveOptions::best_compression` and `Stream::flate_best` kept (feature 4 needs them).
 - `crates/create`: our `picture.rs` (signature pictures) and `unicode_text.rs` kept beside upstream's modules.
-- `ATTRIBUTION.toml`: ours plus upstream's new records; the `ru.tsv` record was dropped with the file
-  (it is here, see feature 5).
+- `ATTRIBUTION.toml`: ours plus upstream's new records. The Russian catalog (feature 5) is re-applied as
+  `i18n/locales/ru/` (task 052), with `dates.rs`, the guard and the en+ru language list; `i18n/mod.rs`
+  stays here for its platform shortcut text (`keys`), not yet re-applied.
 
 | File | Feature (report 038) | Commits |
 |---|---|---|
@@ -52,7 +53,6 @@ Not stashed because they were resolved in place:
 | `crates/engine/src/commands.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | 0.2.5: Export a PDF to Excel (.xlsx); Scan into document: Windows' scanner dialog, pages in after the select; Pages between documents by dragging; Extract and save as |
 | `crates/engine/src/compare.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | 0.2.6: export ruled tables to Excel, Word, PowerPoint, HTML and RTF as; 0.2.5: Pages panel > Export to: the selected pages as Word, Excel, HTM; 0.2.5: Export a PDF to Excel (.xlsx) |
 | `crates/engine/src/convert.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | «Преобразовать в PDF»: review the pages first, save only when asked; «Преобразовать в PDF»: Word, Excel and PowerPoint documents; Explorer «Преобразовать в PDF»: selected files become one PDF |
-| `crates/engine/src/dates.rs` | 5. Russian localisation, English+Russian only, OCR in 46 languages | Languages: English and Russian only |
 | `crates/engine/src/lib.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | 033: Text edit field: preview of a substituted font differs from the f; 027: Text editing: exact font match (family, weight, style, size) and ; 024: PDF compression: effective algorithms + Strong/Medium/Light menu  |
 | `crates/engine/src/links.rs` | 7. Packaging, release, versioning, updater, rebrand | Rebrand as Sintec.PDF |
 | `crates/engine/src/ocr.rs` | 5. Russian localisation, English+Russian only, OCR in 46 languages | OCR in 46 languages; Ukrainian and Kazakh systems get the Russian inte; Russian UI and Cyrillic OCR, bundled in the Windows installer |
@@ -118,9 +118,7 @@ Not stashed because they were resolved in place:
 | `crates/ui-egui/src/fill_sign.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | 023: Upstream sync 2c/4: port v0.9.0 print, forms, files, chrome and d; UI polish: no auto side panels, document buttons left, Save menu, dial; Picture signatures: the dialog describes Sintec.PDF's preparation |
 | `crates/ui-egui/src/font_substitute.rs` | 1. Text editing (001-003, 011, 013-015, 025, 027, 033, 034) | 033: Text edit field: preview of a substituted font differs from the f; 027: Text editing: exact font match (family, weight, style, size) and ; 025: Fix 5 failing tests after the 0.9.0 sync + 024 (audit, ui-egui) |
 | `crates/ui-egui/src/home.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | Languages: English and Russian only; Home: no logo before the welcome heading; Bug check, memory and a design pass; version 0.1.7 |
-| `crates/ui-egui/src/i18n/catalog.rs` | 5. Russian localisation, English+Russian only, OCR in 46 languages | Languages: English and Russian only |
 | `crates/ui-egui/src/i18n/mod.rs` | 5. Russian localisation, English+Russian only, OCR in 46 languages | 018: Upstream sync 3/4: regression check of our features on the 0.9.0 ; 023: Upstream sync 2c/4: port v0.9.0 print, forms, files, chrome and d; OCR in 46 languages; Ukrainian and Kazakh systems get the Russian inte |
-| `crates/ui-egui/src/i18n/ru.tsv` | 5. Russian localisation, English+Russian only, OCR in 46 languages | 028: Linux port: CI + release jobs (AppImage/deb), Linux-specific code; 027: Text editing: exact font match (family, weight, style, size) and ; 026: Compression: quality-targeted, near-lossless presets (Light/Mediu |
 | `crates/ui-egui/src/image_pick.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | (only in merge commits: earlier syncs or rebrand) |
 | `crates/ui-egui/src/jobs.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | 008: Stability audit: find and fix crashes, panics, hangs and leaks |
 | `crates/ui-egui/src/js_ui.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | 023: Upstream sync 2c/4: port v0.9.0 print, forms, files, chrome and d; 009: Print: automatic paper matching to PDF size becomes an option, of; 0.2.5: automatic update checks; the pointing hand over clickables |
@@ -179,7 +177,6 @@ Not stashed because they were resolved in place:
 | `crates/ui-egui/tests/save_menu.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | UI polish: no auto side panels, document buttons left, Save menu, dial |
 | `crates/ui-egui/tests/scan.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | 018: Upstream sync 3/4: regression check of our features on the 0.9.0 ; Scan into document: Windows' scanner dialog, pages in after the select |
 | `crates/ui-egui/tests/signing.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | 018: Upstream sync 3/4: regression check of our features on the 0.9.0 ; 023: Upstream sync 2c/4: port v0.9.0 print, forms, files, chrome and d; UI polish: no auto side panels, document buttons left, Save menu, dial |
-| `crates/ui-egui/tests/sintec_guard.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | Bug check, memory and a design pass; version 0.1.7 |
 | `crates/ui-egui/tests/stamps.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | 035: Flaky ui-egui tests on Windows: d3d10warp.dll access violation wh |
 | `crates/ui-egui/tests/support/mod.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | M-task-020: make ui-egui tests independent of installed fonts and the  |
 | `crates/ui-egui/tests/support/render.rs` | 8. Other fork features (Office export/Excel, Scan, Convert to PDF, picture signatures, pages panel, stability/CI fixes) | 035: Flaky ui-egui tests on Windows: d3d10warp.dll access violation wh |

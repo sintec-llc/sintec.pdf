@@ -323,7 +323,7 @@ mod tests {
         app.updates.updater.offer(craft_update::Release {
             tag: "v99.0.0".into(),
             version: craft_update::parse_version("99.0.0"),
-            name: "PdfCraft 99.0.0".into(),
+            name: "Sintec.PDF 99.0.0".into(),
             html_url: "https://github.com/storytold/pdfcraft/releases/tag/v99.0.0".into(),
             ..Default::default()
         });

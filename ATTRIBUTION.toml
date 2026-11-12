@@ -1,13 +1,24 @@
 [[asset]]
-path = ".sync041/ours/crates/ui-egui/src/i18n/ru.tsv"
-title = "Russian interface translation catalog"
-author = "PdfCraft contributors"
-source = "Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources"
+path = "i18n/locales/ru/common.tsv"
+title = "Russian interface translation catalog: strings shared by the Crafting Apps"
+author = "The craft-i18n translators (ArtCraft Team and the craft-i18n contributors)"
+source = "https://github.com/storytold/craft-i18n locales/ru/common.tsv at commit 575cfdef63227b14daf173b8cc87928bfdfa325e, rows naming ArtCraft removed"
 licence = "MIT OR Apache-2.0"
-licence_file = "LICENSE-MIT"
+licence_file = "licenses/craft-i18n-LICENSE-MIT.txt"
 kind = "translation"
-usage = "Russian UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "c243101a0014c9dde3df3f93c8b562a417e7ed7c3930a8beb7e749d64148a269"
+usage = "Russian UI strings shared with the other Crafting Apps, embedded by crates/ui-egui/build.rs and looked up through craft-libs' craft-i18n crate (Sintec.PDF's own catalog wins over it)"
+sha256 = "5e89562493576895d205788017a9990d83b29235dd96f13985d35f67a1b0d13e"
+
+[[asset]]
+path = "i18n/locales/ru/pdfcraft.tsv"
+title = "Russian interface translation catalog: Sintec.PDF's own strings"
+author = "Sintec.PDF contributors and the craft-i18n translators"
+source = "Sintec.PDF's clean-room Russian catalog (formerly crates/ui-egui/src/i18n/ru.tsv) merged over https://github.com/storytold/craft-i18n locales/ru/pdfcraft.tsv at commit 575cfdef63227b14daf173b8cc87928bfdfa325e; Sintec.PDF's wording wins where the two differ, product name rebranded"
+licence = "MIT OR Apache-2.0"
+licence_file = "licenses/craft-i18n-LICENSE-MIT.txt"
+kind = "translation"
+usage = "Russian UI strings, embedded by crates/ui-egui/build.rs and looked up through craft-libs' craft-i18n crate"
+sha256 = "f1c610fa4383cd0862301151be5363a336eb372795fde382f4eca9be5fbeb9f2"
 
 [[asset]]
 path = "assets/icons/accessibility.svg"
@@ -3670,17 +3681,6 @@ licence_sha256 = "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1c
 kind = "model"
 usage = "Scan & OCR: reads the words it finds (cargo xtask models)"
 sha256 = "86c145c2edb96c8caed5b1ebb8f44d706408922211451c309c625157dd6061c5"
-
-[[build_input]]
-name = "craft-i18n"
-option = "CRAFT_I18N_DIR"
-title = "Interface translations: the craft-i18n catalogs (locales/<code>/common.tsv and pdfcraft.tsv) of the 34 languages PdfCraft offers besides English"
-author = "The craft-i18n translators, including every translator of PdfCraft's former in-repo catalogs (crates/ui-egui/src/i18n/*.tsv, migrated at pdfcraft@ecdd1e6)"
-source = "https://github.com/storytold/craft-i18n (pinned by commit in craft-i18n.rev, which CI, releases and the flatpak manifests read)"
-licence = "MIT OR Apache-2.0"
-attribution = "https://github.com/storytold/craft-i18n/blob/main/ATTRIBUTION.md"
-kind = "translation"
-usage = "Interface text in languages other than English, embedded by crates/ui-egui/build.rs and looked up through craft-libs' craft-i18n crate; a build without CRAFT_I18N_DIR is English only. Clean-room translations from PdfCraft's English interface labels"
 
 [[build_input]]
 name = "craft-fonts"

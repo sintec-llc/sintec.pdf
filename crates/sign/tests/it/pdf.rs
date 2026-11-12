@@ -855,7 +855,7 @@ fn tsa_id() -> DigitalId {
 /// [`tsa_id`] with these extended key usages.
 fn tsa_id_with(ekus: &[&str]) -> DigitalId {
     let key = pdfcraft_sign::PrivateKey::generate_p256().unwrap();
-    let name = Name::build("Test TSA", "", "PdfCraft Tests", "", "US");
+    let name = Name::build("Test TSA", "", "Sintec.PDF Tests", "", "US");
     let alg = key.preferred_digest();
     let sig_alg = key.signature_algorithm(alg);
     let from = Time { year: 2026, month: 10, day: 2, hour: 0, minute: 0, second: 0 };

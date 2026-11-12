@@ -108,7 +108,7 @@ Anything else is forbidden, including assets whose licence you cannot prove from
   - SPDX licence, and the licence file in the repo;
   - SHA-256;
   - how it is used.
-- **Translations** live in craft-i18n (`locales/<code>/common.tsv` and `pdfcraft.tsv`), embedded at build time from the checkout pinned in `craft-i18n.rev`; PdfCraft keeps no catalogs. `ATTRIBUTION.toml` records them as one `[[build_input]]` (`kind = "translation"`); craft-i18n's own `ATTRIBUTION.md` credits the translators. Every `[[asset]]` (fonts, images, data) is hashed.
+- **Translations** live in this repository, in craft-i18n's format: `i18n/locales/ru/common.tsv` and `pdfcraft.tsv`, embedded at build time by `crates/ui-egui/build.rs` (Sintec.PDF ships English and Russian only; there is no craft-i18n checkout or `craft-i18n.rev`). Each catalog is an `[[asset]]` in `ATTRIBUTION.toml` (`kind = "translation"`), hashed like every other asset (fonts, images, data).
 - **`ATTRIBUTION.md`** is generated from it (`cargo xtask assets --write`). Never edit it by hand.
 - **`NOTICE`** keeps the licence notices that the licences require.
 - **`cargo xtask assets`** runs in `cargo xtask ci`. It fails if:

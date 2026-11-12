@@ -188,7 +188,7 @@ fn note_skipped(doc: &mut pdfcraft_cos::Document, report: &pdfcraft_xfdf::Report
     let more = report.skipped.len().saturating_sub(shown.len());
     let more = if more > 0 { format!("; and {more} more") } else { String::new() };
     doc.note_repair(format!(
-        "imported {} comment{} without the appearance the file gave {} (PdfCraft draws it where it can; it may look different or not show): {}{more}",
+        "imported {} comment{} without the appearance the file gave {} (Sintec.PDF draws it where it can; it may look different or not show): {}{more}",
         report.skipped.len(),
         if report.skipped.len() == 1 { "" } else { "s" },
         if report.skipped.len() == 1 { "it" } else { "them" },

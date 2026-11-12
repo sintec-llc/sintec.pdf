@@ -204,7 +204,7 @@ fn sign_inner(
         }
     }
     let mut app = Dict::new();
-    app.set(b"Name".to_vec(), Object::name("PdfCraft"));
+    app.set(b"Name".to_vec(), Object::name("Sintec.PDF"));
     let mut build = Dict::new();
     build.set(b"App".to_vec(), Object::Dict(app));
     v.set(b"Prop_Build".to_vec(), Object::Dict(build));
@@ -319,7 +319,7 @@ fn sign_inner(
             // signature would be listed as unread fields, and its name could repeat an unread one.
             if !walk_sig_fields(&doc).1 {
                 return Err(SignError::Pdf(
-                    "this form has too many fields, or a field name too long, for PdfCraft to read them all, so it can't add a signature field"
+                    "this form has too many fields, or a field name too long, for Sintec.PDF to read them all, so it can't add a signature field"
                         .into(),
                 ));
             }
@@ -425,7 +425,7 @@ pub fn timestamp_document(doc: &Document, tsa: &dyn crate::timestamp::TimestampA
     v.set(b"Contents".to_vec(), Object::String(PdfString { bytes: vec![0; TOKEN_RESERVE], hex: true }));
     v.set(b"M".to_vec(), PdfString::literal(date.as_bytes().to_vec()));
     let mut app = Dict::new();
-    app.set(b"Name".to_vec(), Object::name("PdfCraft"));
+    app.set(b"Name".to_vec(), Object::name("Sintec.PDF"));
     let mut build = Dict::new();
     build.set(b"App".to_vec(), Object::Dict(app));
     v.set(b"Prop_Build".to_vec(), Object::Dict(build));

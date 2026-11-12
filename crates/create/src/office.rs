@@ -591,7 +591,7 @@ mod tests {
                 eprintln!("skipped: LibreOffice isn't installed");
                 return;
             };
-            let rtf = b"{\\rtf1\\ansi{\\fonttbl\\f0\\fswiss Helvetica;}\\f0\\pard Hello from PdfCraft.\\par}";
+            let rtf = b"{\\rtf1\\ansi{\\fonttbl\\f0\\fswiss Helvetica;}\\f0\\pard Hello from Sintec.PDF.\\par}";
             let pdf = convert_with(&program, "hello.rtf", rtf, super::super::TIMEOUT).unwrap();
             assert!(pdf.starts_with(b"%PDF-"));
         }

@@ -1,20 +1,20 @@
 use super::*;
 
-/// Arabic and Kurdish switch stock chrome to mirror from the right; English switches it
-/// back. This is the `Style::right_to_left` half of the explicit RTL policy.
+/// Sintec.PDF's languages (English and Russian) are left to right, so stock chrome never mirrors;
+/// `sync_direction` follows `Lang::rtl` (the `Style::right_to_left` half of the explicit RTL
+/// policy), which no offered language sets.
 #[test]
-fn arabic_chrome_is_right_to_left_after_the_language_changes() {
-    if !crate::i18n::needs_catalogs() {
-        return;
-    }
+fn the_offered_languages_keep_chrome_left_to_right() {
     let previous = crate::i18n::current();
     let ctx = egui::Context::default();
-    crate::i18n::set_current(crate::i18n::Lang::from_code("ar").expect("registered language"));
-    apply(&ctx, ThemeKind::Light);
-    assert!(ctx.global_style().right_to_left);
-    crate::i18n::set_current(crate::i18n::Lang::EN);
-    sync_direction(&ctx);
-    assert!(!ctx.global_style().right_to_left);
+    for lang in crate::i18n::Lang::all() {
+        assert!(!lang.rtl(), "{}", lang.code());
+        crate::i18n::set_current(lang);
+        apply(&ctx, ThemeKind::Light);
+        assert!(!ctx.global_style().right_to_left, "{}", lang.code());
+        sync_direction(&ctx);
+        assert!(!ctx.global_style().right_to_left, "{}", lang.code());
+    }
     crate::i18n::set_current(previous);
 }
 

@@ -24,10 +24,10 @@ File names and document titles in other scripts (Japanese, Chinese, Arabic, Hebr
 
 ## How translations work
 
-The system is the one PhotoCraft uses (`crates/ui-egui/src/i18n/`):
+The lookup is craft-libs' `craft-i18n` crate (`crates/ui-egui/src/i18n.rs`); the catalogs are in this repository, in craft-i18n's format (`i18n/locales/`, embedded by `crates/ui-egui/build.rs`):
 
 - Strings in the code stay in English and serve as lookup keys. At draw time, `tl!("Save")` returns the text in the current language, and falls back to English when there is no entry.
-- The Russian catalog is `crates/ui-egui/src/i18n/ru.tsv`, with one entry per line: `context<TAB>English<TAB>translation`. An empty context marks a plain string. `@id` keys an entry by command id (for example `file.saveAs`), so one menu item can read differently from another with the same English label. `@plural` holds plural forms. Any other context disambiguates an English word with several meanings (`tl_ctx!` in UI code, for example `date` for month names inside a date). The header of `ru.tsv` documents the format and escapes.
+- The Russian catalogs are `i18n/locales/ru/common.tsv` (strings shared by the Crafting Apps, from craft-i18n) and `i18n/locales/ru/pdfcraft.tsv` (Sintec.PDF's own rows, which win), with one entry per line: `context<TAB>English<TAB>translation`. An empty context marks a plain string. `@id` keys an entry by command id (for example `file.saveAs`), so one menu item can read differently from another with the same English label. `@plural` holds plural forms. Any other context disambiguates an English word with several meanings (`tl_ctx!` in UI code, for example `date` for month names inside a date). The header of `pdfcraft.tsv` documents the format and escapes. English is the source language and has no catalog.
 - Placeholders (`{name}`) must appear in both columns. A trailing `…` must be kept. `i18n::fmt` fills placeholders in one pass, so a value such as a file name containing `{n}` is inserted as written.
 - Catalogs are validated strictly: unknown escapes, unknown `@` contexts, placeholder or ellipsis mismatches, wrong plural form counts and duplicates are errors. The tests require the bundled catalog to have none; at run time a bad line is skipped (and logged) and that string shows in English.
 - Catalogs are assets: each `.tsv` has an `ATTRIBUTION.toml` entry with `kind = "translation"` and its SHA-256, checked by `cargo xtask assets`.
@@ -37,8 +37,8 @@ The system is the one PhotoCraft uses (`crates/ui-egui/src/i18n/`):
 
 Sintec.PDF ships English and Russian only. Should another language be needed:
 
-1. Copy the header of `ru.tsv` into `xx.tsv` and translate entries.
-2. Add one row to `LANGUAGES` in `crates/ui-egui/src/i18n/mod.rs` (code, native name, catalog and plural rule) and the language's month and weekday names to `DATE_LANGUAGES` in `crates/engine/src/dates.rs`.
+1. Create `i18n/locales/xx/pdfcraft.tsv` (and `common.tsv`) with the header of the Russian one and an `@id language.name` row, and translate entries.
+2. Add one row to `LANGUAGES` in `crates/ui-egui/src/i18n.rs` (code, right to left) and its English name to `Lang::english_name`, and the language's month and weekday names to `DATE_LANGUAGES` in `crates/engine/src/dates.rs`.
 3. Add an `ATTRIBUTION.toml` entry for the catalog (`kind = "translation"`), then run `cargo xtask assets --write` and `cargo xtask assets`.
 
 The Preferences dropdown, the system-language match and the translation gaps report then pick it up.

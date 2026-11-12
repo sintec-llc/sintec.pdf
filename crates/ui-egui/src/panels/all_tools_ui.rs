@@ -185,12 +185,9 @@ mod tests {
 
     #[test]
     fn right_to_left_labels_match_a_query_typed_in_logical_order() {
-        if !crate::i18n::needs_catalogs() {
-            return;
-        }
-        let arabic = crate::i18n::Lang::from_code("ar").expect("Arabic is registered");
-        let translated = crate::i18n::tr(arabic, "Organize pages");
-        assert_eq!(translated, "تنظيم الصفحات", "the catalogue keeps logical text");
+        // Sintec.PDF ships no right-to-left catalog, so the label is given as a catalog would hold
+        // it: in logical order.
+        let translated = "تنظيم الصفحات";
         assert!(label_hit("Organize pages", translated, "تنظيم الصفحات", true));
         assert!(label_hit("Organize pages", translated, "الصفحات", true), "one word");
         assert!(label_hit("Organize pages", translated, "الصفحات تنظيم", true), "RTL word-order fallback");

@@ -1,9 +1,9 @@
 use super::*;
 
-const JA: fn() -> Lang = || Lang::from_code("ja").expect("ja registered");
+const RU: fn() -> Lang = || Lang::from_code("ru").expect("ru registered");
 
-/// Skips a test that needs the embedded catalogs when none were embedded (`CRAFT_I18N_DIR`
-/// unset): the interface is then English only.
+/// Skips a test that needs the embedded catalogs when none were embedded: the interface is then
+/// English only. (`build.rs` fails without `i18n/locales/`, so this is a safety net.)
 macro_rules! needs_catalogs {
     () => {
         if !needs_catalogs() {
@@ -30,13 +30,6 @@ fn rows(text: &str) -> Vec<(String, String, String)> {
 /// The embedded PdfCraft catalog of `code` (not the shared one), `""` without one.
 fn app_catalog(code: &str) -> &'static str {
     CRAFT_I18N.iter().find(|(c, ..)| *c == code).map_or("", |(_, _, app)| *app)
-}
-
-/// Every translation `code`'s embedded catalogs hold, each plural form on its own: the fonts must
-/// draw all of them.
-fn translations(code: &str) -> String {
-    let lang = Lang::from_code(code).expect("registered");
-    lang.catalog_texts().flat_map(rows).flat_map(|(_, _, t)| t.split('|').map(str::to_owned).collect::<Vec<_>>()).collect()
 }
 
 #[test]
@@ -70,9 +63,8 @@ fn keyboard_key_names_have_a_separate_context_and_english_fallback() {
 fn picker_names_fall_back_to_english_when_their_script_has_no_face() {
     assert_eq!(Lang::EN.picker_name(|_| false), "English");
     needs_catalogs!();
-    let hi = Lang::from_code("hi").expect("hi registered");
-    assert_eq!(hi.picker_name(|_| true), "हिन्दी", "the native name is kept when it can be drawn");
-    assert_eq!(hi.picker_name(|_| false), "Hindi", "no Devanagari face: an English name, not an unrenderable label");
+    assert_eq!(RU().picker_name(|_| true), "Русский", "the native name is kept when it can be drawn");
+    assert_eq!(RU().picker_name(|_| false), "Russian", "no Cyrillic face: an English name, not an unrenderable label");
     for language in Lang::all() {
         assert!(!language.english_name().is_empty(), "{}", language.code());
         assert_ne!(language.english_name(), language.code(), "{} needs an English picker fallback", language.code());
@@ -87,38 +79,27 @@ fn tags_map_to_languages() {
     assert_eq!(lang_from_tag(""), None);
     assert_eq!(lang_from_tag("_"), None);
     needs_catalogs!();
-    assert_eq!(lang_from_tag("ja_JP.UTF-8"), Some(JA()));
-    assert_eq!(lang_from_tag("ja-JP"), Some(JA()));
-    assert_eq!(lang_from_tag("fr_FR"), Lang::from_code("fr"));
-    assert_eq!(lang_from_tag("fr_CA.UTF-8"), Lang::from_code("fr"));
-    assert_eq!(lang_from_tag("fr-BE"), Lang::from_code("fr"));
-    assert_eq!(lang_from_tag("zh-TW"), Lang::from_code("zh-hant"));
-    assert_eq!(lang_from_tag("zh_CN.UTF-8"), Lang::from_code("zh-hans"));
-    assert_eq!(lang_from_tag("zh"), Lang::from_code("zh-hans"));
-    assert_eq!(lang_from_tag("zh_HK.UTF-8"), Lang::from_code("zh-hant"));
-    assert_eq!(lang_from_tag("zh-Hant-MO"), Lang::from_code("zh-hant"));
-    assert_eq!(lang_from_tag("lo_LA.UTF-8"), Lang::from_code("lo"));
-    assert_eq!(lang_from_tag("lo-LA"), Lang::from_code("lo"));
-    assert_eq!(lang_from_tag("lo"), Lang::from_code("lo"));
+    assert_eq!(lang_from_tag("ru_RU.UTF-8"), Some(RU()));
+    assert_eq!(lang_from_tag("ru-BY"), Some(RU()));
+    // Ukrainian and Kazakh systems get Russian rather than English (`RUSSIAN_FALLBACK`).
+    assert_eq!(lang_from_tag("uk-UA"), Some(RU()));
+    assert_eq!(lang_from_tag("kk"), Some(RU()));
+    assert_eq!(lang_from_tag("ja_JP.UTF-8"), None, "Sintec.PDF offers English and Russian only");
+    assert_eq!(lang_from_tag("fr-FR"), None);
 }
 
 #[test]
 fn candidates_walk_from_specific_to_general() {
-    assert_eq!(candidates("pt_BR.UTF-8"), ["pt-br", "pt"]);
-    assert_eq!(candidates("pt_PT.UTF-8"), ["pt-pt", "pt-br", "pt"]);
-    assert_eq!(candidates("pt"), ["pt-br", "pt"]);
-    assert_eq!(candidates("zh_TW"), ["zh-tw", "zh-hant", "zh"]);
-    assert_eq!(candidates("zh-CN"), ["zh-cn", "zh-hans", "zh"]);
+    assert_eq!(candidates("ru_RU.UTF-8"), ["ru-ru", "ru"]);
+    assert_eq!(candidates("uk_UA"), ["uk-ua", "uk", "ru"]);
+    assert_eq!(candidates("kk-KZ"), ["kk-kz", "kk", "ru"]);
     assert_eq!(candidates("zh-Hant-HK"), ["zh-hant-hk", "zh-hant", "zh"]);
-    assert_eq!(candidates("lo_LA.UTF-8"), ["lo-la", "lo"]);
-    assert_eq!(candidates("nb_NO.UTF-8"), ["nb-no", "nb"]);
-    assert_eq!(candidates("no_NO.UTF-8"), ["no-no", "no", "nb"]);
-    assert_eq!(candidates("nn-NO"), ["nn-no", "nn", "nb"]);
+    assert_eq!(candidates("de@euro"), ["de"]);
+    assert!(candidates("").is_empty());
 }
 
 /// The locale variables, the first detection step: `LC_ALL` over `LC_MESSAGES` over `LANG`, an
-/// unsupported value passed over, and PdfCraft's own mappings (`no`/`nn` → Bokmål, Portuguese →
-/// Brazilian, Chinese by region), which the crate's matching doesn't all make.
+/// unsupported value passed over, and Sintec.PDF's own mapping (Ukrainian and Kazakh → Russian).
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn locale_variables_pick_the_language_with_pdfcraft_mappings() {
@@ -126,28 +107,22 @@ fn locale_variables_pick_the_language_with_pdfcraft_mappings() {
     assert_eq!(env_lang(env(&[])), None);
     assert_eq!(env_lang(env(&[("LANG", "en_US.UTF-8")])), Some(Lang::EN));
     needs_catalogs!();
-    let nb = Lang::from_code("nb");
-    assert_eq!(env_lang(env(&[("LC_MESSAGES", "nn_NO.UTF-8"), ("LANG", "en_US.UTF-8")])), nb);
-    assert_eq!(env_lang(env(&[("LANG", "no_NO.UTF-8")])), nb);
-    assert_eq!(env_lang(env(&[("LC_ALL", "pt_PT.UTF-8"), ("LANG", "ja_JP.UTF-8")])), Lang::from_code("pt-br"));
-    assert_eq!(env_lang(env(&[("LC_ALL", "xx_YY.UTF-8"), ("LC_MESSAGES", "zh_HK.UTF-8")])), Lang::from_code("zh-hant"));
+    assert_eq!(env_lang(env(&[("LC_MESSAGES", "uk_UA.UTF-8"), ("LANG", "en_US.UTF-8")])), Some(RU()));
+    assert_eq!(env_lang(env(&[("LC_ALL", "xx_YY.UTF-8"), ("LC_MESSAGES", "ru_RU.UTF-8")])), Some(RU()));
     if cfg!(not(target_os = "windows")) {
         // Outside Windows a neutral locale means English and ends the search.
-        assert_eq!(env_lang(env(&[("LC_ALL", "C"), ("LANG", "ja_JP.UTF-8")])), Some(Lang::EN));
+        assert_eq!(env_lang(env(&[("LC_ALL", "C"), ("LANG", "ru_RU.UTF-8")])), Some(Lang::EN));
     }
 }
 
-/// The macOS preferred-languages list (`defaults read -g AppleLanguages`), the second step, with
-/// the mappings it relies on: Chinese by region, other Portuguese to Brazilian, Norwegian.
+/// The macOS preferred-languages list (`defaults read -g AppleLanguages`), the second step.
 #[test]
 fn macos_language_list_is_parsed() {
     assert_eq!(first_supported("("), None);
     needs_catalogs!();
-    assert_eq!(first_supported("(\n    \"ja-JP\",\n    \"en-US\"\n)\n"), Some(JA()));
-    assert_eq!(first_supported("(\n    \"fr-FR\",\n    \"en-US\"\n)\n"), Lang::from_code("fr"));
-    assert_eq!(first_supported("(\n    \"xx-YY\",\n    \"zh-HK\"\n)\n"), Lang::from_code("zh-hant"));
-    assert_eq!(first_supported("(\n    \"pt-PT\",\n    \"en-US\"\n)\n"), Lang::from_code("pt-br"));
-    assert_eq!(first_supported("(\n    \"nn-NO\",\n    \"en-US\"\n)\n"), Lang::from_code("nb"));
+    assert_eq!(first_supported("(\n    \"ru-RU\",\n    \"en-US\"\n)\n"), Some(RU()));
+    assert_eq!(first_supported("(\n    \"xx-YY\",\n    \"kk-KZ\"\n)\n"), Some(RU()));
+    assert_eq!(first_supported("(\n    \"fr-FR\",\n    \"en-US\"\n)\n"), Some(Lang::EN));
 }
 
 /// #2954: the web build's Auto language follows the browser's preferred languages in order,
@@ -157,47 +132,34 @@ fn browser_language_list_is_followed_in_order() {
     assert_eq!(first_supported_tag(["", "xx"]), None);
     assert_eq!(first_supported_tag(Vec::<String>::new()), None);
     needs_catalogs!();
-    assert_eq!(first_supported_tag(["it-IT", "en-US"]), Lang::from_code("it"));
-    assert_eq!(first_supported_tag(["xx-YY", "ja", "fr-FR"]), Some(JA()));
-    assert_eq!(first_supported_tag(["zh-TW"]), Lang::from_code("zh-hant"));
-    assert_eq!(first_supported_tag(["en-GB", "fr-FR"]), Some(Lang::EN));
-    assert_eq!(first_supported_tag([" pt-PT "]), Lang::from_code("pt-br"));
-    let long = std::iter::repeat_n("xx", 10_000).chain(["fr"]);
+    assert_eq!(first_supported_tag(["xx-YY", "ru", "en-US"]), Some(RU()));
+    assert_eq!(first_supported_tag(["en-GB", "ru-RU"]), Some(Lang::EN));
+    assert_eq!(first_supported_tag([" uk-UA "]), Some(RU()));
+    let long = std::iter::repeat_n("xx", 10_000).chain(["ru"]);
     assert_eq!(first_supported_tag(long), None, "only the first tags are read");
 }
 
-/// The Windows display languages (`sys_locale`), the last step: one tag per line, with the same
-/// mappings.
+/// The Windows display languages (`sys_locale`), the last step: one tag per line.
 #[test]
-fn windows_display_language_resolves_chinese_scripts() {
+fn windows_display_language_list_is_read_in_order() {
     assert_eq!(first_supported("\r\n"), None);
     needs_catalogs!();
-    for tag in ["zh-CN", "zh-SG", "zh-Hans", "zh-Hans-CN"] {
-        assert_eq!(first_supported(&format!("{tag}\r\n")), Lang::from_code("zh-hans"));
-    }
-    for tag in ["zh-TW", "zh-HK", "zh-MO", "zh-Hant", "zh-Hant-HK"] {
-        assert_eq!(first_supported(&format!("{tag}\r\n")), Lang::from_code("zh-hant"));
-    }
+    assert_eq!(first_supported("ru-RU\r\n"), Some(RU()));
     assert_eq!(first_supported("en-US\r\n"), Some(Lang::EN));
-    assert_eq!(first_supported("fr-FR\r\n"), Lang::from_code("fr"));
-    assert_eq!(first_supported("lo-LA\r\n"), Lang::from_code("lo"));
-    assert_eq!(first_supported("pt-PT\r\nen-US\r\n"), Lang::from_code("pt-br"));
-    assert_eq!(first_supported("no-NO\r\nen-US\r\n"), Lang::from_code("nb"));
+    assert_eq!(first_supported("zh-CN\r\n"), None);
+    assert_eq!(first_supported("xx-YY\r\nuk-UA\r\nen-US\r\n"), Some(RU()));
 }
 
 #[cfg(target_os = "windows")]
 #[test]
 fn neutral_locale_does_not_override_display_language() {
     needs_catalogs!();
-    let fr = Lang::from_code("fr").unwrap();
     for tag in ["C", "C.UTF-8", "POSIX", "posix.UTF-8", "", "  C.UTF-8  ", "unsupported"] {
         assert_eq!(language_override(tag), None, "{tag}");
-        assert_eq!(language_override(tag).or_else(|| first_supported("unsupported-XY\nfr-FR\nen-US")), Some(fr));
+        assert_eq!(language_override(tag).or_else(|| first_supported("unsupported-XY\nru-RU\nen-US")), Some(RU()));
     }
-    assert_eq!(["C.UTF-8", "POSIX", "fr_FR.UTF-8"].into_iter().find_map(language_override), Some(fr));
-    assert_eq!(language_override("fr_FR.UTF-8"), Some(fr));
+    assert_eq!(["C.UTF-8", "POSIX", "ru_RU.UTF-8"].into_iter().find_map(language_override), Some(RU()));
     assert_eq!(language_override("en_US.UTF-8"), Some(Lang::EN));
-    assert_eq!(language_override("ja_JP.UTF-8"), Some(JA()));
 }
 
 #[cfg(target_os = "windows")]
@@ -222,9 +184,9 @@ fn preferences_resolve_with_fallback() {
     assert_eq!(normalize_pref("Auto"), Some(AUTO));
     assert_eq!(normalize_pref("xx"), None);
     needs_catalogs!();
-    assert_eq!(Lang::from_pref("ja"), JA());
-    assert_eq!(Lang::from_pref("JA"), JA());
-    assert_eq!(normalize_pref("JA"), Some("ja"));
+    assert_eq!(Lang::from_pref("ru"), RU());
+    assert_eq!(Lang::from_pref("RU"), RU());
+    assert_eq!(normalize_pref("RU"), Some("ru"));
 }
 
 /// PdfCraft offers exactly the languages in `LANGUAGES` when craft-i18n is embedded, and English
@@ -241,11 +203,11 @@ fn the_languages_offered_are_the_embedded_ones_of_the_list() {
         return;
     }
     let listed: Vec<&str> = LANGUAGES.iter().map(|l| l.code).collect();
-    assert_eq!(all, listed, "every language PdfCraft lists has its catalog in craft-i18n");
+    assert_eq!(all, listed, "every language Sintec.PDF lists has its catalog in craft-i18n");
     assert!(Lang::from_code("pseudo").is_none(), "the pseudo locale is never a setting");
     // craft-i18n has catalogs PdfCraft doesn't offer (yet); they are never offered here.
     for code in CRAFT_I18N.iter().map(|(c, ..)| *c).filter(|c| !listed.contains(c)) {
-        assert_eq!(Lang::from_code(code), None, "{code} is not one of PdfCraft's languages");
+        assert_eq!(Lang::from_code(code), None, "{code} is not one of Sintec.PDF's languages");
     }
 }
 
@@ -254,12 +216,12 @@ fn lookups_fall_back_to_english() {
     assert_eq!(tr(Lang::EN, "File"), "File");
     assert!(!has(Lang::EN, "Save"));
     needs_catalogs!();
-    assert_eq!(tr(JA(), "no such label"), "no such label");
-    assert_eq!(tr(JA(), "File"), "ファイル");
-    assert_eq!(tr(JA(), "日本語の文書.pdf"), "日本語の文書.pdf");
-    assert_eq!(tr_id(JA(), "no.such.id", "File"), "ファイル");
-    assert_eq!(tr_ctx(JA(), "no such context", "File"), "ファイル");
-    assert!(has(JA(), "Save"));
+    assert_eq!(tr(RU(), "no such label"), "no such label");
+    assert_eq!(tr(RU(), "File"), "Файл");
+    assert_eq!(tr(RU(), "Документ.pdf"), "Документ.pdf");
+    assert_eq!(tr_id(RU(), "no.such.id", "File"), "Файл");
+    assert_eq!(tr_ctx(RU(), "no such context", "File"), "Файл");
+    assert!(has(RU(), "Save"));
 }
 
 #[test]
@@ -396,41 +358,15 @@ fn signature_appearance_labels_keep_their_separator() {
     }
 }
 
-/// With craft-fonts, every Japanese translation has glyphs: with all interface faces (desktop)
-/// and with BIZ UDPGothic Regular alone (the web build's only Japanese face).
-#[test]
-fn japanese_labels_have_glyphs() {
-    let craft = pdfcraft_fonts::ui_japanese_fonts();
-    let Some(web) = craft.iter().find(|f| f.family == "BIZ UDPGothic" && f.style == "Regular") else {
-        eprintln!("skipping Japanese glyph checks: build with CRAFT_FONTS_DIR to run them");
-        return;
-    };
-    needs_catalogs!();
-    let labels: String = translations("ja").chars().chain(JA().name().chars()).filter(|c| !c.is_control()).collect();
-    let web_name = web.name();
-    let mut web_only = crate::theme::font_definitions();
-    for family in web_only.families.values_mut() {
-        family.retain(|name| !pdfcraft_fonts::CRAFT_FONTS.iter().any(|face| face.name() == *name) || *name == web_name);
-    }
-    use egui::epaint::text::{Fonts, TextOptions};
-    for (build, defs) in [("desktop", crate::theme::font_definitions()), ("web", web_only)] {
-        let mut fonts = Fonts::new(TextOptions::default(), defs);
-        for id in [egui::FontId::proportional(13.0), egui::FontId::monospace(13.0), crate::theme::medium(13.0), crate::theme::semibold(17.0)] {
-            assert!(fonts.has_glyphs(&id, &labels), "{build}: {id:?} lacks a Japanese label glyph");
-        }
-    }
-}
-
 #[test]
 fn history_labels_keep_captured_names() {
     set_current(Lang::EN);
     assert_eq!(command_label("Undo Fill in Save {e}"), "Undo Fill in Save {e}");
     needs_catalogs!();
-    set_current(JA());
-    assert_eq!(action_label("Insert pages from Save {e}.pdf"), "Save {e}.pdf からページを挿入");
-    assert_eq!(command_label("Undo Insert pages from Save {e}.pdf"), "取り消し Save {e}.pdf からページを挿入");
+    set_current(RU());
     assert_eq!(action_label("Untranslated custom action"), "Untranslated custom action");
-    assert_eq!(menu_label("file.open", "Open…"), "開く…");
+    assert_eq!(command_label("Undo Untranslated {e} action"), "Отменить: Untranslated {e} action", "a captured name is never read as a placeholder");
+    assert_eq!(menu_label("file.open", "Open…"), "Открыть…");
     set_current(Lang::EN);
 }
 
@@ -476,7 +412,7 @@ fn command_ids_and_undo_phrases_come_from_pdfcraft_s_own_rows() {
     assert_eq!(command_label("Redo Something"), "FX-redo: Something");
     set_current(Lang::EN);
     needs_catalogs!();
-    for code in ["bg", "id"] {
+    for code in ["ru"] {
         let lang = Lang::from_code(code).expect("registered");
         if lang.has_own("@id", "file.close") {
             continue;
@@ -485,7 +421,7 @@ fn command_ids_and_undo_phrases_come_from_pdfcraft_s_own_rows() {
         set_current(lang);
         assert_eq!(menu_label("file.close", "Close file"), command_label("Close file"), "{code}");
     }
-    for code in ["ja", "zh-hans", "zh-hant", "ru"] {
+    for code in ["ru"] {
         let lang = Lang::from_code(code).expect("registered");
         if has(lang, "Redo {action}") {
             continue;
@@ -515,8 +451,8 @@ fn plurals_and_placeholders() {
     assert_eq!(fmt("{b} before {a}", &[("a", "x"), ("b", "y"), ("c", "z")]), "y before x");
     assert_eq!(fmt("{missing}", &[]), "{missing}");
     needs_catalogs!();
-    // No catalog has this `@plural` entry: Japanese falls back to the English forms.
-    assert_eq!(trn(JA(), 7, "{n} test item", "{n} test items"), "7 test items");
+    // No catalog has this `@plural` entry: Russian falls back to the English forms.
+    assert_eq!(trn(RU(), 7, "{n} test item", "{n} test items"), "7 test items");
 }
 
 /// PdfCraft's plural rules before craft-i18n (form index by count), kept to show the crate's
@@ -632,7 +568,7 @@ fn plural_forms_follow_the_rules_pdfcraft_had() {
             (1..=6).map(|f| (f, fixture(f))).find(|(_, l)| trn(*l, 5, "{n} x", "{n} xs").starts_with('F')).expect("a form count loads");
         if forms != pdfcraft_forms {
             split.push((info.code, pdfcraft_forms, forms));
-            assert_eq!(pdfcraft_forms, 1, "{}: PdfCraft listed {pdfcraft_forms} forms, CLDR {forms}", info.code);
+            assert_eq!(pdfcraft_forms, 1, "{}: Sintec.PDF listed {pdfcraft_forms} forms, CLDR {forms}", info.code);
             continue;
         }
         for n in plural_counts() {
@@ -640,7 +576,7 @@ fn plural_forms_follow_the_rules_pdfcraft_had() {
         }
     }
     let codes: Vec<&str> = split.iter().map(|(c, ..)| *c).collect();
-    assert_eq!(codes, ["tr", "hi"], "the languages CLDR gives more forms than PdfCraft had");
+    assert!(codes.is_empty(), "the languages CLDR gives more forms than Sintec.PDF had: {codes:?}");
     if !needs_catalogs() {
         return;
     }
@@ -649,7 +585,7 @@ fn plural_forms_follow_the_rules_pdfcraft_had() {
         for (_, source, forms) in lang.catalog_texts().flat_map(rows).filter(|(c, ..)| c == "@plural") {
             let distinct: std::collections::BTreeSet<&str> = forms.split('|').collect();
             if distinct.len() > 1 {
-                println!("{code}: {source:?} has forms that differ, so PdfCraft's single form is no longer the only text: {forms:?}");
+                println!("{code}: {source:?} has forms that differ, so Sintec.PDF's single form is no longer the only text: {forms:?}");
             }
         }
     }
@@ -665,181 +601,36 @@ fn language_persists_and_invalid_input_keeps_current_language() {
     legacy.restore("{}");
     assert_eq!(legacy.language, AUTO);
     needs_catalogs!();
-    app.set_option("language", "JA").unwrap();
-    assert_eq!(app.language, "ja");
+    app.set_option("language", "RU").unwrap();
+    assert_eq!(app.language, "ru");
     assert!(app.set_option("language", "xx").is_err());
-    assert_eq!(app.language, "ja");
+    assert_eq!(app.language, "ru");
+    assert!(app.set_option("language", "ja").is_err(), "a language Sintec.PDF doesn't offer");
     let mut restored = crate::PdfCraftApp::default();
     restored.restore(&app.persist());
-    assert_eq!(restored.language, "ja");
+    assert_eq!(restored.language, "ru");
     restored.restore(r#"{"language":"xx"}"#);
-    assert_eq!(restored.language, "ja");
+    assert_eq!(restored.language, "ru");
     app.set_option("language", AUTO).unwrap();
     assert_eq!(app.language, AUTO);
 }
 
 #[test]
-fn brazilian_portuguese_is_registered() {
-    needs_catalogs!();
-    let pt = Lang::from_code("pt-br").expect("pt-br registered");
-    assert_eq!(pt.name(), "Português (Brasil)");
-    assert_eq!(Lang::from_code("PT-BR"), Some(pt));
-    assert_eq!(normalize_pref("pt-BR"), Some("pt-br"));
-    assert_eq!(normalize_pref("pt"), None, "only exact codes are preferences");
-    assert_eq!(lang_from_tag("pt_BR.UTF-8"), Some(pt));
-    assert_eq!(lang_from_tag("pt_PT"), Some(pt));
-    assert_eq!(tr(pt, "Arquivo do usuário.pdf"), "Arquivo do usuário.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "pt-br").unwrap();
-    assert_eq!(app.language, "pt-br");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "pt-br");
-}
-
-#[test]
-fn spanish_is_registered() {
-    needs_catalogs!();
-    let es = Lang::from_code("es").expect("es registered");
-    assert_eq!(es.name(), "Español");
-    assert_eq!(normalize_pref("ES"), Some("es"));
-    assert_eq!(lang_from_tag("es_ES.UTF-8"), Some(es));
-    assert_eq!(lang_from_tag("es-MX"), Some(es));
-    assert_eq!(first_supported("es-ES\r\nen-US"), Some(es));
-    assert_eq!(tr(es, "Informe del usuario.pdf"), "Informe del usuario.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "es").unwrap();
-    assert_eq!(app.language, "es");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "es");
-}
-
-/// Each sentence the engine words for itself keeps its holes when it is said in Spanish, so
-/// the document's own words still have somewhere to go: a translation that drops `{p}` or
-/// `{}` would read as a sentence about nothing in particular.
-#[test]
-fn spanish_keeps_the_holes_in_what_the_engine_says() {
-    needs_catalogs!();
-    let es = Lang::from_code("es").expect("es registered");
-    let lists: [&[&str]; 5] = [
-        pdfcraft_engine::a11y::WORDINGS,
-        pdfcraft_engine::pdfa::WORDINGS,
-        pdfcraft_engine::sign::pdf::WORDINGS,
-        pdfcraft_engine::print::WORDINGS,
-        pdfcraft_engine::field_table::WORDINGS,
-    ];
-    for wording in lists.into_iter().flatten() {
-        let said = tr(es, wording);
-        // `{}` is one hole; `{name}` holes are named, and each name must survive by itself.
-        assert_eq!(wording.matches("{}").count(), said.matches("{}").count(), "the Spanish of {wording:?} loses a hole: {said:?}");
-        for hole in wording.split('{').skip(1).filter_map(|rest| rest.split_once('}')).map(|(name, _)| name).filter(|n| !n.is_empty()) {
-            assert!(said.contains(&format!("{{{hole}}}")), "the Spanish of {wording:?} loses {{{hole}}}: {said:?}");
-        }
-    }
-}
-
-#[test]
-fn telugu_is_registered() {
-    needs_catalogs!();
-    let te = Lang::from_code("te").expect("te registered");
-    assert_eq!(te.name(), "తెలుగు");
-    assert_eq!(normalize_pref("TE"), Some("te"));
-    assert_eq!(lang_from_tag("te_IN.UTF-8"), Some(te));
-    assert_eq!(first_supported("te-IN\r\nen-US"), Some(te));
-    assert_eq!(tr(te, "నివేదిక.pdf"), "నివేదిక.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "te").unwrap();
-    assert_eq!(app.language, "te");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "te");
-}
-
-/// Telugu puts the verb last, so it translates "Undo {action}" as a whole phrase; a catalog
-/// without that entry (Spanish) keeps the verb in front of the action.
-#[test]
 fn undo_and_redo_labels_use_the_catalog_phrase_when_there_is_one() {
     needs_catalogs!();
-    let te = Lang::from_code("te").expect("te registered");
-    set_current(te);
-    assert_eq!(command_label("Undo"), "రద్దు చేయి");
-    assert_eq!(command_label("Undo Untranslated custom action"), "రద్దు చేయి: Untranslated custom action");
-    assert_eq!(command_label("Redo Untranslated custom action"), "మళ్లీ చేయి: Untranslated custom action");
-    let es = Lang::from_code("es").expect("es registered");
-    set_current(es);
-    assert_eq!(command_label("Undo Untranslated custom action"), format!("{} Untranslated custom action", tr(es, "Undo")));
+    set_current(RU());
+    assert_eq!(command_label("Undo"), "Отменить");
+    assert_eq!(command_label("Undo Untranslated custom action"), "Отменить: Untranslated custom action");
     set_current(Lang::EN);
     assert_eq!(command_label("Undo Untranslated custom action"), "Undo Untranslated custom action");
 }
 
-/// A label that reads differently by use has its own contextual entry where a language needs
-/// one; a language without it falls back to the plain translation.
 #[test]
 fn contextual_labels_fall_back_to_the_plain_translation() {
     needs_catalogs!();
-    let te = Lang::from_code("te").expect("te registered");
-    assert_eq!(tr_ctx(te, "signature pad", "Type"), "టైప్ చేయి");
-    assert_eq!(tr(te, "Type"), "రకం");
+    assert_eq!(tr(RU(), "Type"), "Тип");
     // A context no catalog defines, so the fallback stays tested as catalogs fill their gaps.
-    let es = Lang::from_code("es").expect("es registered");
-    assert_eq!(tr_ctx(es, "no such context", "Type"), tr(es, "Type"));
-}
-
-/// With a craft-fonts Telugu face, every Telugu translation has glyphs: with all interface
-/// faces (desktop) and with the Telugu face as the only craft-fonts face (the web build keeps
-/// it; Telugu labels must not need a Japanese or Arabic face).
-#[test]
-fn telugu_labels_have_glyphs() {
-    let telugu: Vec<String> = pdfcraft_fonts::ui_telugu_fonts().iter().map(|f| f.name()).collect();
-    if telugu.is_empty() {
-        eprintln!("skipping Telugu glyph checks: build with CRAFT_FONTS_DIR and a Telugu face to run them");
-        return;
-    }
-    needs_catalogs!();
-    let te = Lang::from_code("te").expect("te registered");
-    let labels: String = translations("te").chars().chain(te.name().chars()).filter(|c| !c.is_control()).collect();
-    let mut telugu_only = crate::theme::font_definitions();
-    for family in telugu_only.families.values_mut() {
-        family.retain(|name| !pdfcraft_fonts::CRAFT_FONTS.iter().any(|face| face.name() == *name) || telugu.contains(name));
-    }
-    use egui::epaint::text::{Fonts, TextOptions};
-    for (build, defs) in [("all faces", crate::theme::font_definitions()), ("Telugu face only", telugu_only)] {
-        let mut fonts = Fonts::new(TextOptions::default(), defs);
-        for id in [egui::FontId::proportional(13.0), egui::FontId::monospace(13.0), crate::theme::medium(13.0), crate::theme::semibold(17.0)] {
-            assert!(fonts.has_glyphs(&id, &labels), "{build}: {id:?} lacks a Telugu label glyph");
-        }
-    }
-}
-
-#[test]
-fn czech_is_registered_and_persists() {
-    needs_catalogs!();
-    let cs = Lang::from_code("cs").expect("cs registered");
-    assert_eq!(cs.name(), "Čeština");
-    assert_eq!(tr(cs, "Žluťoučký kůň.pdf"), "Žluťoučký kůň.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "cs").unwrap();
-    assert!(app.set_option("language", "cz").is_err());
-    assert_eq!(app.language, "cs");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "cs");
-}
-
-#[test]
-fn turkish_is_registered_and_persists() {
-    needs_catalogs!();
-    let tr_lang = Lang::from_code("tr").expect("tr registered");
-    assert_eq!(tr_lang.name(), "Türkçe");
-    assert_eq!(tr(tr_lang, "Türkçe Belge.pdf"), "Türkçe Belge.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "tr").unwrap();
-    assert!(app.set_option("language", "tu").is_err());
-    assert_eq!(app.language, "tr");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "tr");
+    assert_eq!(tr_ctx(RU(), "no such context", "Type"), "Тип");
 }
 
 /// The code joins some labels with a space at either end, so these catalogs (PdfCraft's rows in
@@ -848,7 +639,7 @@ fn turkish_is_registered_and_persists() {
 fn catalog_rows_keep_the_source_spacing_and_ellipsis() {
     needs_catalogs!();
     let edges = |s: &str| (s.len() - s.trim_start().len(), s.len() - s.trim_end().len());
-    for code in ["cs", "tr", "vi"] {
+    for code in ["ru"] {
         for (_, source, translation) in rows(app_catalog(code)) {
             assert!(!translation.contains("..."), "{code}: use … rather than three dots: {translation:?}");
             assert_eq!(edges(&translation), edges(&source), "{code}: stray whitespace: {translation:?}");
@@ -857,84 +648,13 @@ fn catalog_rows_keep_the_source_spacing_and_ellipsis() {
 }
 
 #[test]
-fn simplified_chinese_is_registered() {
-    needs_catalogs!();
-    let zh = Lang::from_code("zh-hans").expect("zh-hans registered");
-    assert_eq!(zh.name(), "简体中文");
-    assert_eq!(normalize_pref("zh-Hans"), Some("zh-hans"));
-    assert_eq!(normalize_pref("zh"), None, "only exact codes are preferences");
-    assert_eq!(tr(zh, "报告.pdf"), "报告.pdf");
-}
-
-#[test]
-fn traditional_chinese_is_registered() {
-    needs_catalogs!();
-    let zh = Lang::from_code("zh-hant").expect("zh-hant registered");
-    assert_eq!(zh.name(), "繁體中文");
-    assert_eq!(normalize_pref("zh-Hant"), Some("zh-hant"));
-    assert_eq!(tr(zh, "報告.pdf"), "報告.pdf");
-}
-
-#[test]
-fn french_is_registered() {
-    needs_catalogs!();
-    let fr = Lang::from_code("fr").expect("fr registered");
-    assert_eq!(fr.name(), "Français");
-    assert_eq!(normalize_pref("FR"), Some("fr"));
-    assert_eq!(lang_from_tag("fr_FR.UTF-8"), Some(fr));
-    assert_eq!(lang_from_tag("fr-CA"), Some(fr));
-    assert_eq!(first_supported("fr-FR\r\nen-US"), Some(fr));
-    assert_eq!(tr(fr, "Rapport de l'utilisateur.pdf"), "Rapport de l'utilisateur.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "fr").unwrap();
-    assert_eq!(app.language, "fr");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "fr");
-}
-
-#[test]
-fn german_is_registered() {
-    needs_catalogs!();
-    let de = Lang::from_code("de").expect("de registered");
-    assert_eq!(de.name(), "Deutsch");
-    assert_eq!(normalize_pref("DE"), Some("de"));
-    assert_eq!(lang_from_tag("de_DE.UTF-8"), Some(de));
-    assert_eq!(lang_from_tag("de-AT"), Some(de));
-    assert_eq!(lang_from_tag("de_CH"), Some(de));
-    assert_eq!(first_supported("de-DE\r\nen-US"), Some(de));
-    assert_eq!(tr(de, "Bericht des Nutzers.pdf"), "Bericht des Nutzers.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "de").unwrap();
-    assert_eq!(app.language, "de");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "de");
-}
-
-#[test]
-fn tool_names_inside_sentences_are_lowercased_except_in_german() {
+fn tool_names_inside_sentences_are_lowercased() {
     set_current(Lang::EN);
     assert_eq!(in_sentence("Text Box"), "text box");
     needs_catalogs!();
-    set_current(Lang::from_code("de").expect("de registered"));
-    assert_eq!(in_sentence("Textfeld"), "Textfeld");
+    set_current(RU());
+    assert_eq!(in_sentence("Текстовое поле"), "текстовое поле");
     set_current(Lang::EN);
-}
-
-#[test]
-fn turkish_keeps_its_dotted_and_dotless_i_when_changing_case() {
-    needs_catalogs!();
-    set_current(Lang::from_code("tr").expect("tr registered"));
-    assert_eq!(upper_label("Advanced"), "GELİŞMİŞ");
-    assert_eq!(upper_label("Signatures"), "İMZALAR");
-    // A label with no Turkish row is still English and keeps the English rule.
-    assert_eq!(upper_label("Untranslated title"), "UNTRANSLATED TITLE");
-    assert_eq!(in_sentence("İmza Alanı"), "imza alanı");
-    assert_eq!(in_sentence("Işık"), "ışık");
-    set_current(Lang::EN);
-    assert_eq!(upper_label("Advanced"), "ADVANCED");
-    assert_eq!(in_sentence("Image"), "image");
 }
 
 #[test]
@@ -953,445 +673,6 @@ fn russian_is_registered() {
     let mut restored = crate::PdfCraftApp::default();
     restored.restore(&app.persist());
     assert_eq!(restored.language, "ru");
-}
-
-#[test]
-fn finnish_is_registered_and_persists() {
-    needs_catalogs!();
-    let fi = Lang::from_code("fi").expect("fi registered");
-    assert_eq!(fi.name(), "Suomi");
-    assert_eq!(normalize_pref("FI"), Some("fi"));
-    for tag in ["fi", "fi-FI", "fi_FI.UTF-8", "FI-fi"] {
-        assert_eq!(lang_from_tag(tag), Some(fi), "{tag}");
-    }
-    // Filipino (`fil`) and Swedish in Finland (`sv-FI`) don't pick Finnish.
-    assert_ne!(lang_from_tag("fil"), Some(fi));
-    assert_ne!(lang_from_tag("sv-FI"), Some(fi));
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "FI").unwrap();
-    assert_eq!(app.language, "fi");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "fi");
-}
-
-#[test]
-fn lithuanian_is_registered_and_persists() {
-    needs_catalogs!();
-    let lt = Lang::from_code("lt").expect("lt registered");
-    assert_eq!(lt.name(), "Lietuvių");
-    assert_eq!(normalize_pref("LT"), Some("lt"));
-    for tag in ["lt", "lt-LT", "lt_LT.UTF-8", "LT-lt"] {
-        assert_eq!(lang_from_tag(tag), Some(lt), "{tag}");
-    }
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "LT").unwrap();
-    assert_eq!(app.language, "lt");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "lt");
-    assert!(restored.set_option("language", "xx").is_err());
-}
-
-#[test]
-fn norwegian_bokmal_is_registered_and_persists() {
-    needs_catalogs!();
-    let nb = Lang::from_code("nb").expect("nb registered");
-    assert_eq!(nb.name(), "Norsk bokmål");
-    assert_eq!(normalize_pref("NB"), Some("nb"));
-    assert_eq!(normalize_pref("no"), None, "only exact codes are preferences");
-    // Current systems say `nb`; older ones and some Linux setups say `no`. Nynorsk is `nn`.
-    for tag in ["nb", "nb-NO", "nb_NO.UTF-8", "no", "no_NO.UTF-8", "NO-no", "nn", "nn_NO.UTF-8"] {
-        assert_eq!(lang_from_tag(tag), Some(nb), "{tag}");
-    }
-    assert_eq!(first_supported("(\n    \"nb-NO\",\n    \"en-US\"\n)\n"), Some(nb));
-    assert_eq!(first_supported("nn-NO\r\nen-US\r\n"), Some(nb));
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "NB").unwrap();
-    assert_eq!(app.language, "nb");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "nb");
-}
-
-#[test]
-fn vietnamese_is_registered_and_persists() {
-    needs_catalogs!();
-    let vi = Lang::from_code("vi").expect("vi registered");
-    assert_eq!(vi.name(), "Tiếng Việt");
-    assert_eq!(normalize_pref("Vi"), Some("vi"));
-    for tag in ["vi", "vi-VN", "vi_VN.UTF-8", "VI-vn"] {
-        assert_eq!(lang_from_tag(tag), Some(vi), "{tag}");
-    }
-    assert_eq!(first_supported("vi-VN\r\nen-US"), Some(vi));
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "vi").unwrap();
-    assert_eq!(app.language, "vi");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "vi");
-    assert!(restored.set_option("language", "xx").is_err());
-    assert_eq!(restored.language, "vi");
-}
-
-#[test]
-fn romanian_is_registered_with_three_plural_forms() {
-    // one: 1; few: 0 and n % 100 in 1..=19 ("2 pagini", "101 pagini"); other: the "de" form ("20 de pagini").
-    let form = plural_fixture("ro", 3);
-    for (n, f) in [(1, 0), (0, 1), (2, 1), (19, 1), (101, 1), (119, 1), (20, 2), (100, 2), (120, 2), (1000, 2)] {
-        assert_eq!(form(n), f, "{n}");
-    }
-    needs_catalogs!();
-    let ro = Lang::from_code("ro").expect("ro registered");
-    for tag in ["ro", "ro-RO", "ro_RO.UTF-8", "RO-ro", "ro-MD"] {
-        assert_eq!(lang_from_tag(tag), Some(ro), "{tag}");
-    }
-    assert_eq!(normalize_pref("Ro"), Some("ro"));
-}
-
-#[test]
-fn catalan_is_registered_and_persists() {
-    needs_catalogs!();
-    let ca = Lang::from_code("ca").expect("ca registered");
-    assert_eq!(ca.name(), "Català");
-    assert_eq!(normalize_pref("CA"), Some("ca"));
-    for tag in ["ca", "ca-ES", "ca_ES.UTF-8", "CA-es", "ca_ES@valencia"] {
-        assert_eq!(lang_from_tag(tag), Some(ca), "{tag}");
-    }
-    assert_eq!(first_supported("ca-ES\r\nen-US"), Some(ca));
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "CA").unwrap();
-    assert_eq!(app.language, "ca");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "ca");
-    assert!(restored.set_option("language", "xx").is_err());
-    assert_eq!(restored.language, "ca");
-}
-
-#[test]
-fn slovene_is_registered_and_persists() {
-    needs_catalogs!();
-    let sl = Lang::from_code("sl").expect("sl registered");
-    assert_eq!(sl.name(), "Slovenščina");
-    assert_eq!(normalize_pref("SL"), Some("sl"));
-    for tag in ["sl", "sl-SI", "sl_SI.UTF-8", "SL-si", "sl_SI@variant"] {
-        assert_eq!(lang_from_tag(tag), Some(sl), "{tag}");
-    }
-    assert_eq!(first_supported("sl-SI\r\nen-US"), Some(sl));
-    assert_eq!(tr(sl, "Poročilo {n}.pdf"), "Poročilo {n}.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "SL").unwrap();
-    assert_eq!(app.language, "sl");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "sl");
-    assert!(restored.set_option("language", "xx").is_err());
-    assert_eq!(restored.language, "sl");
-}
-
-#[test]
-fn albanian_is_registered_and_persists() {
-    needs_catalogs!();
-    let sq = Lang::from_code("sq").expect("sq registered");
-    assert_eq!(sq.name(), "Shqip");
-    assert_eq!(normalize_pref("SQ"), Some("sq"));
-    for tag in ["sq", "sq-AL", "sq_AL.UTF-8", "SQ-xk", "sq_XK@variant"] {
-        assert_eq!(lang_from_tag(tag), Some(sq), "{tag}");
-    }
-    assert_eq!(first_supported("sq-AL\r\nen-US"), Some(sq));
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "SQ").unwrap();
-    assert_eq!(app.language, "sq");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "sq");
-    assert!(restored.set_option("language", "xx").is_err());
-    assert_eq!(restored.language, "sq");
-}
-
-#[test]
-fn slovene_plurals_cover_dual_few_teens_and_large_counts() {
-    let form = plural_fixture("sl", 4);
-    for (counts, f) in [
-        (vec![1, 101, 201, 1001, 1101], 0),
-        (vec![2, 102, 202, 1002], 1),
-        (vec![3, 4, 103, 104, 1003], 2),
-        (vec![0, 5, 10, 11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 25, 31, 100, 111, 112, 121, 122, 1000, u64::MAX], 3),
-    ] {
-        for n in counts {
-            assert_eq!(form(n), f, "{n}");
-        }
-    }
-}
-
-#[test]
-fn indonesian_and_vietnamese_are_registered_and_persist() {
-    needs_catalogs!();
-    let id = Lang::from_code("id").expect("id registered");
-    let vi = Lang::from_code("vi").expect("vi registered");
-    assert_eq!(id.name(), "Bahasa Indonesia");
-    assert_eq!(vi.name(), "Tiếng Việt");
-    assert_eq!(normalize_pref("ID"), Some("id"));
-    assert_eq!(normalize_pref("Vi"), Some("vi"));
-    for tag in ["id", "id-ID", "id_ID.UTF-8", "ID-id"] {
-        assert_eq!(lang_from_tag(tag), Some(id), "{tag}");
-    }
-    for tag in ["vi", "vi-VN", "vi_VN.UTF-8", "VI-vn"] {
-        assert_eq!(lang_from_tag(tag), Some(vi), "{tag}");
-    }
-    assert_eq!(first_supported("id-ID\r\nen-US"), Some(id));
-    assert_eq!(first_supported("vi-VN\r\nen-US"), Some(vi));
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "ID").unwrap();
-    assert_eq!(app.language, "id");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "id");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "vi").unwrap();
-    assert_eq!(app.language, "vi");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "vi");
-    assert!(restored.set_option("language", "xx").is_err());
-    assert_eq!(restored.language, "vi");
-}
-
-#[test]
-fn hindi_and_korean_are_registered_and_persist() {
-    needs_catalogs!();
-    let hi = Lang::from_code("hi").expect("hi registered");
-    let ko = Lang::from_code("ko").expect("ko registered");
-    assert_eq!(hi.name(), "हिन्दी");
-    assert_eq!(ko.name(), "한국어");
-    assert_eq!(normalize_pref("HI"), Some("hi"));
-    assert_eq!(normalize_pref("Ko"), Some("ko"));
-    for tag in ["hi", "hi-IN", "hi_IN.UTF-8", "HI-in"] {
-        assert_eq!(lang_from_tag(tag), Some(hi), "{tag}");
-    }
-    for tag in ["ko", "ko-KR", "ko_KR.UTF-8", "KO-kr"] {
-        assert_eq!(lang_from_tag(tag), Some(ko), "{tag}");
-    }
-    assert_eq!(first_supported("hi-IN\r\nen-US"), Some(hi));
-    assert_eq!(first_supported("ko-KR\r\nen-US"), Some(ko));
-    for code in ["hi", "ko"] {
-        let mut app = crate::PdfCraftApp::default();
-        app.set_option("language", &code.to_uppercase()).unwrap();
-        assert_eq!(app.language, code);
-        let mut restored = crate::PdfCraftApp::default();
-        restored.restore(&app.persist());
-        assert_eq!(restored.language, code);
-        assert!(restored.set_option("language", "xx").is_err());
-        assert_eq!(restored.language, code);
-    }
-}
-
-#[test]
-fn bulgarian_is_registered() {
-    needs_catalogs!();
-    let bg = Lang::from_code("bg").expect("bg registered");
-    assert_eq!(bg.name(), "Български");
-    assert_eq!(normalize_pref("BG"), Some("bg"));
-    assert_eq!(lang_from_tag("bg_BG.UTF-8"), Some(bg));
-    assert_eq!(lang_from_tag("bg-BG"), Some(bg));
-    assert_eq!(first_supported("bg-BG\r\nen-US"), Some(bg));
-    assert_eq!(tr(bg, "Rapport de l'utilisateur.pdf"), "Rapport de l'utilisateur.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "bg").unwrap();
-    assert_eq!(app.language, "bg");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "bg");
-}
-
-#[test]
-fn hungarian_is_registered() {
-    needs_catalogs!();
-    let hu = Lang::from_code("hu").expect("hu registered");
-    assert_eq!(hu.name(), "Magyar");
-    assert_eq!(normalize_pref("HU"), Some("hu"));
-    assert_eq!(lang_from_tag("hu_HU.UTF-8"), Some(hu));
-    assert_eq!(lang_from_tag("hu-HU"), Some(hu));
-    assert_eq!(first_supported("hu-HU\r\nen-US"), Some(hu));
-    assert_eq!(tr(hu, "Rapport de l'utilisateur.pdf"), "Rapport de l'utilisateur.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "hu").unwrap();
-    assert_eq!(app.language, "hu");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "hu");
-}
-
-#[test]
-fn ukrainian_is_registered_and_persists() {
-    needs_catalogs!();
-    let uk = Lang::from_code("uk").expect("uk registered");
-    assert_eq!(uk.name(), "Українська");
-    assert_eq!(normalize_pref("UK"), Some("uk"));
-    for tag in ["uk", "uk-UA", "uk_UA.UTF-8", "UK-ua", "uk_UA@variant"] {
-        assert_eq!(lang_from_tag(tag), Some(uk), "{tag}");
-    }
-    assert_eq!(first_supported("uk-UA\r\nen-US"), Some(uk));
-    assert_eq!(first_supported("(\n    \"uk-UA\",\n    \"en-US\"\n)\n"), Some(uk));
-    assert_eq!(tr(uk, "Звіт {n}.pdf"), "Звіт {n}.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "UK").unwrap();
-    assert_eq!(app.language, "uk");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "uk");
-    assert!(restored.set_option("language", "xx").is_err());
-    assert_eq!(restored.language, "uk");
-}
-
-#[test]
-fn ukrainian_integer_plurals_cover_teens_and_large_counts() {
-    let form = plural_fixture("uk", 3);
-    for (counts, f) in [
-        (vec![1, 21, 31, 101, 121, 1001], 0),
-        (vec![2, 3, 4, 22, 23, 24, 102, 104, 122, 1002], 1),
-        (vec![0, 5, 10, 11, 12, 13, 14, 19, 20, 25, 100, 110, 111, 112, 114, 1000, u64::MAX], 2),
-    ] {
-        for n in counts {
-            assert_eq!(form(n), f, "{n}");
-        }
-    }
-}
-
-fn arabic() -> Lang {
-    Lang::from_code("ar").expect("ar registered")
-}
-
-#[test]
-fn arabic_is_registered_and_persists() {
-    needs_catalogs!();
-    let ar = arabic();
-    assert_eq!(ar.name(), "العربية");
-    assert!(ar.rtl());
-    let rtl: Vec<&str> = Lang::all().filter(|l| l.rtl()).map(|l| l.code()).collect();
-    assert_eq!(rtl, ["ar", "ckb", "fa"], "Arabic, Kurdish and Persian are the right-to-left languages");
-    assert_eq!(normalize_pref("AR"), Some("ar"));
-    for tag in ["ar", "ar-MA", "ar_EG.UTF-8", "AR-sa", "ar_DZ@variant"] {
-        assert_eq!(lang_from_tag(tag), Some(ar), "{tag}");
-    }
-    assert_eq!(first_supported("ar-MA\r\nen-US"), Some(ar));
-    // Unknown strings and user text are never reordered by a lookup.
-    assert_eq!(tr(ar, "تقرير نهائي {n}.pdf"), "تقرير نهائي {n}.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "AR").unwrap();
-    assert_eq!(app.language, "ar");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "ar");
-    assert!(restored.set_option("language", "xx").is_err());
-    assert_eq!(restored.language, "ar");
-}
-
-/// Catalog lookups stay in logical order; the egui 0.37 fork owns bidi shaping and display
-/// reordering (E5/E12), so preordering here would reverse Arabic twice. Accessibility names,
-/// copied labels and search therefore see the source string.
-#[test]
-fn arabic_catalog_stays_logical() {
-    needs_catalogs!();
-    let ar = arabic();
-    assert_eq!(tr(ar, "Save as…"), "حفظ باسم…");
-    assert_eq!(tr(ar, "About PdfCraft"), "حول PdfCraft");
-    assert_eq!(tr(ar, "Name:"), "الاسم:");
-    assert_eq!(tr(ar, "Issued by: "), "صادرة عن: ");
-    // Placeholders survive in their logical positions.
-    assert_eq!(tr(ar, "Couldn't open {name}: {e}"), "تعذّر فتح {name}: {e}");
-    assert_eq!(fmt(tr(ar, "Couldn't open {name}: {e}"), &[("name", "a {e}.pdf"), ("e", "x")]), "تعذّر فتح a {e}.pdf: x");
-    assert_eq!(fmt(tr(ar, "Page {p} of {n}"), &[("p", "3"), ("n", "12")]), "الصفحة 3 من 12");
-    set_current(ar);
-    let command = command_label("Undo Insert pages from a.pdf");
-    assert!(command.contains("a.pdf") && command.contains("إدراج صفحات"), "logical command label: {command:?}");
-    assert_eq!(menu_label("file.saveAs", "Save as…"), "حفظ باسم…");
-    set_current(Lang::EN);
-}
-
-#[test]
-fn arabic_plurals_follow_the_six_cldr_forms() {
-    let form = plural_fixture("ar", 6);
-    assert_eq!([0, 1, 2].map(&form), [0, 1, 2]);
-    assert_eq!([3, 10, 103, 110, 1003].map(&form), [3; 5]);
-    assert_eq!([11, 99, 111, 199, 1011].map(&form), [4; 5]);
-    assert_eq!([100, 101, 102, 200, 1000, u64::MAX - 13].map(&form), [5; 6]);
-}
-
-fn persian() -> Lang {
-    Lang::from_code("fa").expect("fa registered")
-}
-
-#[test]
-fn persian_is_registered_and_persists() {
-    needs_catalogs!();
-    let fa = persian();
-    assert_eq!(fa.name(), "فارسی");
-    assert!(fa.rtl());
-    // CLDR `fa` (one: i = 0 or n = 1): 0 and 1 are singular, every other count the plural.
-    let form = plural_fixture("fa", 2);
-    assert_eq!([0, 1, 2, 11].map(&form), [0, 0, 1, 1]);
-    assert_eq!(normalize_pref("FA"), Some("fa"));
-    for tag in ["fa", "fa-IR", "fa_IR.UTF-8", "FA-af", "fa_IR@calendar=persian"] {
-        assert_eq!(lang_from_tag(tag), Some(fa), "{tag}");
-    }
-    assert_eq!(first_supported("fa-IR\r\nen-US"), Some(fa));
-    // Lookups return Persian in logical order; epaint handles visual ordering.
-    assert_eq!(tr(fa, "Save"), "ذخیره");
-    assert_eq!(tr(fa, "Cancel"), "لغو");
-    assert_eq!(tr(fa, "File"), "فایل");
-    // Unknown strings and user text are never reordered by a lookup.
-    assert_eq!(tr(fa, "گزارش نهایی {n}.pdf"), "گزارش نهایی {n}.pdf");
-    let mut app = crate::PdfCraftApp::default();
-    app.set_option("language", "FA").unwrap();
-    assert_eq!(app.language, "fa");
-    let mut restored = crate::PdfCraftApp::default();
-    restored.restore(&app.persist());
-    assert_eq!(restored.language, "fa");
-    assert!(restored.set_option("language", "xx").is_err());
-    assert_eq!(restored.language, "fa");
-}
-
-/// A form picker for `code`: a fixture row with `forms` plural forms, and for a count the form
-/// index the crate's CLDR rules choose.
-fn plural_fixture(code: &'static str, forms: usize) -> impl Fn(u64) -> usize {
-    let row = (0..forms).map(|i| format!("F{i} {{n}}")).collect::<Vec<_>>().join("|");
-    let lang = fixture_lang(code, Box::leak(format!("@plural\t{{n}} x|{{n}} xs\t{row}\n").into_boxed_str()));
-    move |n| {
-        let said = trn(lang, n, "{n} x", "{n} xs");
-        said.strip_prefix('F')
-            .and_then(|s| s.split(' ').next())
-            .and_then(|i| i.parse().ok())
-            .unwrap_or_else(|| panic!("{code}: no form for {n}: {said:?}"))
-    }
-}
-
-/// With a craft-fonts Arabic face, every Arabic translation has glyphs: with all interface
-/// faces (desktop) and with the Arabic face as the only craft-fonts face (the web build keeps
-/// it; Arabic labels must not need a Japanese face).
-#[test]
-fn arabic_labels_have_glyphs() {
-    let faces: Vec<String> = pdfcraft_fonts::ui_arabic_fonts().iter().map(|f| f.name()).collect();
-    if faces.is_empty() {
-        eprintln!("skipping Arabic glyph checks: build with CRAFT_FONTS_DIR and an Arabic face to run them");
-        return;
-    }
-    needs_catalogs!();
-    let ar = arabic();
-    let labels: String = translations("ar").chars().chain(ar.name().chars()).filter(|c| !c.is_control()).collect();
-    let mut arabic_only = crate::theme::font_definitions();
-    for family in arabic_only.families.values_mut() {
-        family.retain(|name| !pdfcraft_fonts::CRAFT_FONTS.iter().any(|face| face.name() == *name) || faces.contains(name));
-    }
-    use egui::epaint::text::{Fonts, TextOptions};
-    for (build, defs) in [("all faces", crate::theme::font_definitions()), ("Arabic face only", arabic_only)] {
-        let mut fonts = Fonts::new(TextOptions::default(), defs);
-        for id in [egui::FontId::proportional(13.0), egui::FontId::monospace(13.0), crate::theme::medium(13.0), crate::theme::semibold(17.0)] {
-            let missing: std::collections::BTreeSet<char> = labels.chars().filter(|c| !fonts.has_glyphs(&id, &c.to_string())).collect();
-            assert!(missing.is_empty(), "{build}: {id:?} lacks Arabic label glyphs {missing:?}");
-        }
-    }
 }
 
 /// The language list is well-formed. Problems in the embedded catalogs are not failed: craft-i18n
@@ -1426,7 +707,7 @@ fn unused_id_rows() -> String {
                 continue;
             }
             let Some(command) = pdfcraft_engine::commands::command(&id) else {
-                out.push(format!("{}: @id {id:?} names a command PdfCraft doesn't have", lang.code()));
+                out.push(format!("{}: @id {id:?} names a command Sintec.PDF doesn't have", lang.code()));
                 continue;
             };
             if !same_shape(&translation, command.label) {
@@ -1503,7 +784,7 @@ fn english_keys() -> std::collections::BTreeSet<(String, String)> {
 fn translation_gaps_report() {
     const SHOWN: usize = 3;
     if !catalogs_embedded() {
-        println!("{REPORT_START}\nTranslation gaps: skipped, built without craft-i18n (set CRAFT_I18N_DIR to a craft-i18n checkout)\n{REPORT_END}");
+        println!("{REPORT_START}\nTranslation gaps: skipped, built without the interface catalogs (i18n/locales/)\n{REPORT_END}");
         return;
     }
     let keys = english_keys();
