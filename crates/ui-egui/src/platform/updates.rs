@@ -324,7 +324,7 @@ mod tests {
             tag: "v99.0.0".into(),
             version: craft_update::parse_version("99.0.0"),
             name: "Sintec.PDF 99.0.0".into(),
-            html_url: "https://github.com/storytold/pdfcraft/releases/tag/v99.0.0".into(),
+            html_url: "https://github.com/sintec-llc/sintec.pdf/releases/tag/v99.0.0".into(),
             ..Default::default()
         });
         assert!(app.updates.updater.prompt_open());

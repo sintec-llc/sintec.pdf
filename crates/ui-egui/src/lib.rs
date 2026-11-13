@@ -16,7 +16,7 @@
 pub const UPDATE_APP: craft_update::app::App = craft_update::app::App {
     name: "Sintec.PDF",
     developer: "Sintec LLC",
-    icon_png: Some(include_bytes!("../../../assets/app-icon/hicolor/128x128/apps/ai.storyteller.pdfcraft.png")),
+    icon_png: Some(include_bytes!("../../../assets/app-icon/hicolor/128x128/apps/io.github.sintec_llc.sintec_pdf.png")),
     accent: Some([0xb7, 0x02, 0x28]),
     // Sintec.PDF's own releases, never upstream PdfCraft's: craft-update downloads only from
     // `sintec-llc/sintec.pdf`, reads its assets as `sintec-pdf-<version>-<os>-<arch>.<ext>`
