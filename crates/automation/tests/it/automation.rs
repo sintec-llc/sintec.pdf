@@ -14822,3 +14822,68 @@ fn reduce_levels_and_estimates_through_tools() {
     assert!(matches!(a.call("doc_reduce", &json!({ "doc": doc, "path": "x.pdf", "level": "maximum" })), Err(ToolError::InvalidArgs(_))));
     assert!(!dir.join("x.pdf").exists());
 }
+
+/// Sintec.PDF: `page_transfer`, the Pages panel's drag between documents: a copy puts the pages
+/// into the other document where asked, a move also takes them out of the first, each change is
+/// undone on its own document, and what can't be done is refused with what is allowed.
+#[test]
+fn page_transfer_copies_and_moves_pages_between_open_documents() {
+    let dir = workdir("page-transfer");
+    let mut a = auto(&dir);
+    let src = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    let dst = ok(&mut a, "doc_open", json!({ "path": "b.pdf" }))["doc"].as_u64().unwrap();
+    let copied = ok(&mut a, "page_transfer", json!({ "doc": src, "pages": [3, 2], "to": dst, "at": 2 }));
+    assert_eq!((copied["copied"].as_u64(), copied["at"].as_u64(), copied["moved"].as_bool()), (Some(2), Some(2), Some(false)));
+    assert_eq!(page_text(&mut a, dst), ["Page 1", "Page 3", "Page 2", "Page 2"]);
+    assert_eq!(page_text(&mut a, src), ["Page 1", "Page 2", "Page 3"], "a copy leaves the original as it was");
+    let moved = ok(&mut a, "page_transfer", json!({ "doc": src, "pages": [1], "to": dst, "move": true }));
+    assert_eq!(moved["moved"], true);
+    assert_eq!(moved["document"]["pages"], 2);
+    assert_eq!(moved["to"]["pages"], 5);
+    assert_eq!(page_text(&mut a, dst).last().map(String::as_str), Some("Page 1"), "at the end by default");
+    assert_eq!(page_text(&mut a, src), ["Page 2", "Page 3"]);
+    // Each side undoes on its own.
+    ok(&mut a, "edit_undo", json!({ "doc": src }));
+    assert_eq!(page_text(&mut a, src), ["Page 1", "Page 2", "Page 3"]);
+    assert_eq!(page_text(&mut a, dst).len(), 5);
+    // Refused, with nothing changed: the same document, past the end, a move that empties.
+    assert!(matches!(a.call("page_transfer", &json!({ "doc": src, "pages": [1], "to": src })), Err(ToolError::InvalidArgs(_))));
+    assert!(matches!(a.call("page_transfer", &json!({ "doc": src, "pages": [4], "to": dst })), Err(ToolError::InvalidArgs(_))));
+    assert!(matches!(a.call("page_transfer", &json!({ "doc": src, "pages": [1], "to": dst, "at": 7 })), Err(ToolError::InvalidArgs(_))));
+    assert!(matches!(a.call("page_transfer", &json!({ "doc": src, "pages": [1, 2, 3], "to": dst, "move": true })), Err(ToolError::InvalidArgs(_))));
+    assert!(matches!(a.call("page_transfer", &json!({ "doc": src, "pages": [1], "to": 9999 })), Err(ToolError::Failed(_))));
+    assert_eq!((page_text(&mut a, src).len(), page_text(&mut a, dst).len()), (3, 5));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Sintec.PDF: `page_extract_save_as`, Pages ▸ Extract and save as… headless: the chosen pages, in
+/// page order and each once, written to `out`; the document stays as it was and nothing new opens.
+/// The command runs through it, and a file outside the root or a page past the end writes nothing.
+#[test]
+fn page_extract_save_as_writes_the_chosen_pages_and_leaves_the_document() {
+    let dir = workdir("extract-save-as");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    let listed = ok(&mut a, "doc_list", json!({}));
+    let saved = ok(&mut a, "page_extract_save_as", json!({ "doc": doc, "pages": [3, 1, 3], "out": "a (p. 1, 3).pdf" }));
+    assert_eq!(saved["pages"], 2);
+    assert!(saved["path"].as_str().unwrap().ends_with("a (p. 1, 3).pdf"), "{saved}");
+    assert_eq!(ok(&mut a, "doc_list", json!({})), listed, "nothing new is opened, the document is unchanged");
+    assert_eq!(page_text(&mut a, doc), ["Page 1", "Page 2", "Page 3"]);
+    let written = ok(&mut a, "doc_open", json!({ "path": "a (p. 1, 3).pdf" }))["doc"].as_u64().unwrap();
+    assert_eq!(page_text(&mut a, written), ["Page 1", "Page 3"]);
+    // The registry command has this tool, and runs it.
+    let list = ok(&mut a, "command_list", json!({ "doc": doc }));
+    let command = list["commands"].as_array().unwrap().iter().find(|c| c["id"] == "page.extract_save_as").unwrap().clone();
+    assert_eq!((command["tool"].as_str(), command["enabled"].as_bool()), (Some("page_extract_save_as"), Some(true)));
+    ok(&mut a, "command_run", json!({ "id": "page.extract_save_as", "params": { "doc": doc, "pages": [2], "out": "two.pdf" } }));
+    let two = ok(&mut a, "doc_open", json!({ "path": "two.pdf" }))["doc"].as_u64().unwrap();
+    assert_eq!(page_text(&mut a, two), ["Page 2"]);
+    // Refused, with nothing written: outside the root, a page past the end, no file named.
+    assert!(a.call("page_extract_save_as", &json!({ "doc": doc, "pages": [1], "out": "../sintec-extract-save-as-outside.pdf" })).is_err());
+    assert!(!dir.join("../sintec-extract-save-as-outside.pdf").exists());
+    assert!(matches!(a.call("page_extract_save_as", &json!({ "doc": doc, "pages": [4], "out": "x.pdf" })), Err(ToolError::InvalidArgs(_))));
+    assert!(matches!(a.call("page_extract_save_as", &json!({ "doc": doc, "pages": [1] })), Err(ToolError::InvalidArgs(_))));
+    assert!(!dir.join("x.pdf").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

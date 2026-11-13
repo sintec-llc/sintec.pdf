@@ -119,6 +119,9 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 // The pointer's x while a tab is dragged, for scrolling at the strip's edges.
                 let mut drag_x = None;
                 let mut strip_tabs: Vec<(pdfcraft_engine::DocId, Rect)> = Vec::new();
+                // Sintec.PDF: pages dragged from a Pages panel over another document's tab.
+                let mut over_tab = false;
+                let mut tab_drop: Option<usize> = None;
                 ui.scope(|ui| {
                     ui.style_mut().always_scroll_the_only_direction = true;
                     let mut area = egui::ScrollArea::horizontal().id_salt("document_tabs").max_width(tabs_width).auto_shrink([true, true]);
@@ -173,6 +176,13 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                 // unsaved changes ask first, as the close button does.
                                 if response.middle_clicked() {
                                     close = Some(i);
+                                }
+                                // Sintec.PDF: pages released on another document's tab go after its last page.
+                                if page_drop_on_tab(app, ui, &t, i, response.rect) {
+                                    over_tab = true;
+                                    if ui.input(|inp| inp.pointer.primary_released()) {
+                                        tab_drop = Some(i);
+                                    }
                                 }
                             }
                             let busy = close.is_some() || action.is_some();
@@ -238,6 +248,13 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         }
                     }
                 });
+                if !over_tab {
+                    app.tab_hover = None;
+                }
+                if let Some(i) = tab_drop {
+                    let remove = ui.input(|inp| inp.modifiers.shift);
+                    app.drop_page_transfer(i, None, remove);
+                }
                 // Where this strip and its tabs are on the screen, for drags from other windows
                 // (in points) and other processes (in physical pixels).
                 let window = app.current_window;
@@ -1165,4 +1182,36 @@ mod tab_widths {
         // `egui::Margin` is in `i8`.
         assert!(MAC_CONTENT_LEFT <= f32::from(i8::MAX));
     }
+}
+
+/// Sintec.PDF: pages dragged from one document's Pages panel over the tab of document tab `i`
+/// (another document): the tab is outlined, with what a release does by the pointer, and resting
+/// on it brings it to the front, to drop the pages between its thumbnails. Returns whether the
+/// drag is over this tab (and so `app.tab_hover` names it).
+fn page_drop_on_tab(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, i: usize, rect: Rect) -> bool {
+    let Some(tr) = &app.page_transfer else { return false };
+    if app.views.get(i).is_none_or(|v| v.id == tr.from) {
+        return false;
+    }
+    let Some(p) = ui.input(|inp| inp.pointer.interact_pos()) else { return false };
+    if !rect.contains(p) {
+        return false;
+    }
+    ui.painter().rect_stroke(rect, 6.0, Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
+    let now = ui.input(|inp| inp.time);
+    let since = match app.tab_hover {
+        Some((h, since)) if h == i => since,
+        _ => {
+            app.tab_hover = Some((i, now));
+            now
+        }
+    };
+    if now - since > 0.6 && app.active != Some(i) && ui.input(|inp| inp.pointer.primary_down()) {
+        app.active = Some(i);
+    }
+    let action = if ui.input(|inp| inp.modifiers.shift) { tl!("Move to the end") } else { tl!("Copy to the end (Shift: move)") };
+    egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), egui::Id::unique("page-drop-on-tab"), egui::PopupAnchor::Pointer)
+        .show(|ui| ui.label(action));
+    ui.ctx().request_repaint();
+    true
 }

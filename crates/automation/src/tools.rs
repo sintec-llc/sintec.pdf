@@ -347,6 +347,19 @@ pub fn tools() -> Vec<ToolDef> {
                 json!({ "doc": doc(), "pages": pages("to extract"), "out": save_out.clone(), "open": open.clone(), "separate": { "type": "boolean" }, "out_dir": { "type": "string" }, "delete": { "type": "boolean" } }),
                 &["doc", "pages"],
             )),
+        // Sintec.PDF: Pages ▸ Extract and save as… without its file dialog.
+        t("page_extract_save_as", "Extract and save as", "Write the chosen pages of doc (as it is now, unsaved changes included), in page order and each once, as a new PDF at out; links, bookmarks, fields and layers that belong to them come along. The document itself is unchanged and nothing new is opened. Refused when doc's security withholds extracting pages.")
+            .cmd("page.extract_save_as")
+            .with(schema(
+                json!({ "doc": doc(), "pages": pages("to save"), "out": { "type": "string", "description": "The PDF file to write (replaced if it exists)." } }),
+                &["doc", "pages", "out"],
+            )),
+        // Sintec.PDF: the Pages panel's drag of pages into another open document.
+        t("page_transfer", "Copy or move pages to another document", "Copy pages of doc (as it is now, unsaved changes included) into another open document `to`, so the first becomes its page `at` (default: after its last page). Links, bookmarks, fields and layers that belong to them come along; a form field whose name `to` already uses is renamed. move: true also deletes them from doc, which must keep at least one page. Each document's change is undone on its own (edit_undo on each). Refused when doc's security withholds extracting pages.")
+            .with(schema(
+                json!({ "doc": doc(), "pages": pages("to copy or move"), "to": { "type": "integer", "description": "The open document the pages go to (from doc_open)." }, "at": { "type": "integer", "minimum": 1, "description": "1-based position in `to` (n+1 = after its last page; default)." }, "move": { "type": "boolean", "description": "Also delete the pages from doc (default false)." } }),
+                &["doc", "pages", "to"],
+            )),
         t("doc_combine", "Combine files", "Combine files, in order, into one PDF (bookmarks are kept under one entry per file). Images (PNG, JPEG, TIFF, GIF, BMP, JPEG 2000), .txt files and Office documents (Word, Excel, PowerPoint, OpenDocument, RTF; through an installed LibreOffice) are made into PDFs first. pages optionally chooses each file's pages, in step with paths: a range such as \"1-3, 6\" or null for all pages. passwords, also in step with paths, opens encrypted files (the open password, or the permissions password where a file's security doesn't allow copying pages; null for none). The result is not encrypted. Passwords are never echoed back. groups, also in step with paths, splits a file around others: entries with the same number (they must name the same path) are one file, copied once, so it keeps one bookmark at its first page, its links and its form fields; null for a file of its own. A group uses its first entry's password. When two files' forms name the same field, field_conflicts says what happens: \"rename\" (the default) keeps the fields separate by renaming the later one (Text1 becomes Text1-1) and the result lists renamed_fields as [[old, new], …] — scripts that refer to the old name are not rewritten; \"merge\" makes them one field, as before.")
             .cmd("page.combine")
             .with(schema(

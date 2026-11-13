@@ -261,6 +261,44 @@ impl Automation {
         Ok(out)
     }
 
+    /// `page_extract_save_as` (Sintec.PDF): Pages ▸ Extract and save as…, the chosen pages (in
+    /// page order, each once, as the app takes a selection) written to `out`. The document is
+    /// unchanged, and the file is checked against `--root` before anything is extracted.
+    pub(crate) fn page_extract_save_as(&mut self, a: &Args) -> Result<Value> {
+        let id = self.doc(a)?.id;
+        let mut pages = self.pages(a, "pages")?;
+        pages.sort_unstable();
+        pages.dedup();
+        let path = self.resolve(a.str("out")?, true)?;
+        let bytes = self.session.extract(id, &pages).map_err(failed)?;
+        write_atomic(&path, &bytes)?;
+        Ok(json!({ "path": path.to_string_lossy(), "bytes": bytes.len(), "pages": pages.len() }))
+    }
+
+    /// `page_transfer` (Sintec.PDF): pages of `doc` copied, or with `move` moved, into the open
+    /// document `to` at 1-based position `at` (default: after its last page).
+    pub(crate) fn page_transfer(&mut self, a: &Args) -> Result<Value> {
+        let from = self.doc(a)?.id;
+        let pages = self.pages(a, "pages")?;
+        let to = u64::try_from(a.int("to")?).map_err(|_| ToolError::InvalidArgs("to must be positive".into()))?;
+        let to = pdfcraft_engine::DocId(to);
+        let n = self.session.get(to).ok_or_else(|| ToolError::Failed(format!("no open document with id {} (see doc_list)", to.0)))?.info.pages.len();
+        let at = match a.opt_int("at")? {
+            None => None,
+            Some(at) if at >= 1 && usize::try_from(at).is_ok_and(|at| at <= n + 1) => usize::try_from(at - 1).ok(),
+            Some(_) => return Err(ToolError::InvalidArgs(format!("at must be between 1 and {} (document {} has {n} pages)", n + 1, to.0))),
+        };
+        let remove = a.opt_bool("move")?.unwrap_or(false);
+        let done = self.session.transfer_pages(from, &pages, to, at, remove).map_err(|e| match e {
+            pdfcraft_engine::EditError::Invalid(why) => ToolError::InvalidArgs(why),
+            e => failed(e),
+        })?;
+        let target = self.session.get(to).ok_or_else(|| failed("the document vanished"))?;
+        let mut out = json!({ "copied": done.copied, "at": done.at + 1, "moved": done.removed, "to": summary(target) });
+        out["document"] = summary(self.doc(a)?);
+        Ok(out)
+    }
+
     /// Each of `pages` as its own `<stem>-page<n>.pdf` in `out_dir`, extracted and written one at a
     /// time, so only one page's PDF is held at once. The first page is extracted before `out_dir` is
     /// resolved and made, so a refusal (the permissions refuse every page alike, #5081) leaves nothing

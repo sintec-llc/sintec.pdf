@@ -850,6 +850,8 @@ pub enum ViewAction {
     /// Save the document as the grid shows it.
     Save,
     Extract,
+    /// Sintec.PDF: save the selected pages as a new PDF file (Save As).
+    ExtractSaveAs,
     Split,
     /// Split before each selected page: opens Split on that mode.
     SplitBeforeSelected,

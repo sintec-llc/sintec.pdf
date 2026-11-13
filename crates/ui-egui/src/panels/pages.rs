@@ -6,12 +6,13 @@ use super::{Align, Align2, Color32, CornerRadius, DocInfo, Layout, Nav, Rect, Se
 /// does; the items say so, apart from the thumbnails' own menu. `enabled` is false while the
 /// document may not be assembled or a dialog is open. Returns the command a click asks for.
 pub(super) fn page_tools(ui: &mut egui::Ui, enabled: bool) -> Option<&'static str> {
-    let tools: [(&'static str, &str); 6] = [
+    let tools: [(&'static str, &str); 7] = [
         ("page.insert_blank", tl!("Insert a blank page after the selection")),
         ("page.insert", tl!("Insert pages from a file after the selection…")),
         ("page.rotate_ccw", tl!("Rotate the selected pages counterclockwise")),
         ("page.rotate", tl!("Rotate the selected pages clockwise")),
         ("page.extract", tl!("Extract the selected pages…")),
+        ("page.extract_save_as", tl!("Extract the selected pages and save as…")),
         ("page.delete", tl!("Delete the selected pages")),
     ];
     let mut picked = None;
@@ -86,7 +87,8 @@ pub(super) fn thumbnail_size(ui: &mut egui::Ui, t: &Tokens, view: &mut crate::Do
 /// The page thumbnails. A click goes to the page; ⌘/Ctrl-click and ⇧-click pick several pages
 /// (the selection page commands and Print act on) without moving the document. Right-click
 /// offers Extract, Cut, Copy and Paste on the selection, or on the page clicked; dragging
-/// moves the selection, or the page grabbed, to the gap it is dropped on.
+/// moves the selection, or the page grabbed, to the gap it is dropped on. Pages dragged here from
+/// another document (`foreign`, their count) go to the gap they are dropped on (`foreign_drop`).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn pages(
     ui: &mut egui::Ui,
@@ -97,6 +99,8 @@ pub(super) fn pages(
     keys: crate::page_keys::PageKeys,
     editable: bool,
     nav: &mut Option<Nav>,
+    foreign: Option<usize>,
+    foreign_drop: &mut Option<usize>,
 ) {
     let focus_id = ui.make_persistent_id(("pages-keyboard", view.id));
     view.pages_focus_id = Some(focus_id);
@@ -202,6 +206,10 @@ pub(super) fn pages(
                     view.pending_action = Some(crate::canvas::ViewAction::Extract);
                     ui.close();
                 }
+                if ui.button(tl!("Extract and save as…")).clicked() {
+                    view.pending_action = Some(crate::canvas::ViewAction::ExtractSaveAs);
+                    ui.close();
+                }
                 if ui.button(tl!("Split document…")).clicked() {
                     if view.selected.is_empty() {
                         view.select_pages(&[i]);
@@ -238,7 +246,42 @@ pub(super) fn pages(
         ui.add_space(4.0);
     }
     page_drag(ui, t, view, &rows, dropped);
+    foreign_page_drag(ui, t, view, &rows, foreign.filter(|_| editable && !modal), foreign_drop);
     file_drop(ui, t, view, &rows, editable && !modal);
+}
+
+/// Sintec.PDF: `n` pages dragged from another document over this one's thumbnails: the bar on
+/// the gap they would go to and, by the pointer, their count and "Copy here" (or "Move here"
+/// with Shift); on release over the panel, that gap.
+fn foreign_page_drag(ui: &mut egui::Ui, t: &Tokens, view: &crate::DocView, rows: &[Rect], foreign: Option<usize>, drop: &mut Option<usize>) {
+    let Some(n) = foreign else { return };
+    if view.panel_drag.is_some() {
+        return;
+    }
+    let Some(p) = ui.input(|i| i.pointer.interact_pos()) else { return };
+    let clip = ui.clip_rect();
+    if !clip.contains(p) {
+        return;
+    }
+    let gap = panel_gap(rows, p.y).unwrap_or(0);
+    if let (Some(first), Some(last)) = (rows.first(), rows.last()) {
+        let y = rows.get(gap).map_or(last.bottom() + 2.0, |r| r.top() - 3.0);
+        ui.painter().line_segment([pos2(first.left(), y), pos2(first.right(), y)], Stroke::new(3.0, t.accent));
+    }
+    ui.painter().rect_stroke(clip.shrink(2.0), CornerRadius::same(6), Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
+    let what = if n == 1 { tl!("1 page").to_string() } else { crate::i18n::fmt(tl!("{n} pages"), &[("n", &n.to_string())]) };
+    let action = if ui.input(|i| i.modifiers.shift) { tl!("Move here") } else { tl!("Copy here (Shift: move)") };
+    ui.painter().text(p + vec2(14.0, 14.0), Align2::LEFT_TOP, format!("{what} · {action}"), theme::medium(12.0), t.accent_text);
+    let edge = 40.0;
+    if p.y < clip.top() + edge {
+        ui.scroll_with_delta(vec2(0.0, 10.0));
+    } else if p.y > clip.bottom() - edge {
+        ui.scroll_with_delta(vec2(0.0, -10.0));
+    }
+    ui.ctx().request_repaint();
+    if ui.input(|i| i.pointer.primary_released()) {
+        *drop = Some(gap);
+    }
 }
 
 /// Files dragged in from outside go to the gap under the pointer: remember where the panel is

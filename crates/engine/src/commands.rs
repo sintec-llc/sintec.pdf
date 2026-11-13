@@ -419,6 +419,8 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("page.insert", "Insert pages from file…", PAGES, None, Assembly, "file-input"),
     c("page.replace", "Replace pages…", PAGES, None, Assembly, "replace"),
     c("page.extract", "Extract pages…", PAGES, None, PageExtraction, "file-output"),
+    // Sintec.PDF: the selected pages (or the current one) saved as a new PDF where the user chooses.
+    c("page.extract_save_as", "Extract and save as…", PAGES, None, PageExtraction, "save"),
     c("page.split", "Split document…", PAGES, None, PageExtraction, "scissors"),
     c("page.number", "Number pages…", PAGES, None, Assembly, "hash"),
     c("prepress.marks", "Add printer marks…", None, None, Modification, "ruler"),

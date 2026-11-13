@@ -29,6 +29,10 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let preparing = app.is_preparing();
     // The Pages panel's Escape and Delete act on the pages: not while something is over them.
     let keys = app.page_keys.also(app.covers_pages());
+    // Sintec.PDF: pages dragged here from another document's Pages panel (how many), and the gap
+    // they are dropped on.
+    let foreign = app.page_transfer.as_ref().filter(|tr| tr.from != id).map(|tr| tr.pages.len());
+    let mut foreign_drop: Option<usize> = None;
     {
         let Some(doc) = app.session.get(id) else { return };
         let info = &doc.info;
@@ -220,7 +224,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             ui.label(tl!("Some bookmarks are not shown here: the panel lists a limited number, nested a limited depth."));
                         }
                     }
-                    RightPanel::Pages => pages(ui, &t, info, view, modal, keys, bm_editable, &mut nav),
+                    RightPanel::Pages => pages(ui, &t, info, view, modal, keys, bm_editable, &mut nav, foreign, &mut foreign_drop),
                     RightPanel::Fields => {
                         field_properties = fields(
                             ui,
@@ -422,6 +426,17 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     }
     if close {
         app.choose_right_panel(None);
+    }
+    // Sintec.PDF: a drag of this document's thumbnails can leave it, into another document's
+    // Pages panel or onto its tab.
+    if app.page_transfer.is_none()
+        && let Some(pages) = app.views.get(index).and_then(|v| v.panel_drag.clone())
+    {
+        app.begin_page_transfer(pages);
+    }
+    if let Some(gap) = foreign_drop {
+        let remove = ui.input(|i| i.modifiers.shift);
+        app.drop_page_transfer(index, Some(gap), remove);
     }
     if let Some(e) = panel_edit {
         app.apply_edit(e);

@@ -15509,3 +15509,21 @@ fn inline_conversions_refuse_office_documents_without_running_libreoffice() {
     assert_eq!(s.convert_to_pdf_inline("notes.txt", &Arc::new(b"hello".to_vec())).unwrap().0, SourceKind::Text);
     assert!(s.as_pdf_inline("scan.jpg", &Arc::new(jpeg_bytes())).unwrap().starts_with(b"%PDF-"));
 }
+
+/// Sintec.PDF: pages of a file under "Any except extracting pages" (#5081) don't go into another
+/// open document by a drag (`page_transfer`) either, and Extract and save as is off for it; the
+/// other document is left as it was, with nothing to undo.
+#[test]
+fn extraction_permissions_refuse_moving_pages_to_another_document() {
+    let bytes = protected_with_changes(pdfcraft_cos::Algorithm::Aes256, Changes::AnyExceptExtract);
+    let plain = Arc::new(fixture(1));
+    let mut s = Session::new();
+    let restricted = s.open("restricted.pdf", None, bytes, None).unwrap();
+    let dest = s.open("destination.pdf", None, plain.clone(), None).unwrap();
+    assert!(matches!(s.transfer_pages(restricted, &[0], dest, None, false), Err(EditError::NotPermitted(_))));
+    assert_eq!(s.get(dest).unwrap().bytes, plain);
+    assert_eq!(s.get(dest).unwrap().can_undo(), None);
+    let save_as = crate::commands::command("page.extract_save_as").unwrap();
+    assert!(!crate::commands::is_enabled(save_as, &s, Some(restricted)));
+    assert!(crate::commands::is_enabled(save_as, &s, Some(dest)));
+}
