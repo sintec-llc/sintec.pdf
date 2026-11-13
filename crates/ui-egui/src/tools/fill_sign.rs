@@ -1058,21 +1058,19 @@ mod tests {
     }
 
     #[test]
-    fn overlapping_glyph_contours_fill_without_holes_while_keeping_counters() {
-        let runs =
-            |img: &egui::ColorImage, y: usize| (0..img.width()).filter(|&x| img[(x, y)].a() > 0 && (x == 0 || img[(x - 1, y)].a() == 0)).count();
-        // #1786: Inter's Ђ (T + right hook) and ћ (h + crossbar) have two same-direction contours
-        // that overlap on the stem; non-zero winding fills the join instead of punching a hole.
-        let dje = super::script_preview("Ђ", 200, 200);
-        assert_eq!(dje[(97, 108)], egui::Color32::BLACK, "stem-hook overlap of Ђ is filled");
-        assert_eq!(runs(&dje, 108), 2, "stem and right loop of Ђ are two solid strokes");
-        let tshe = super::script_preview("ћ", 200, 200);
-        assert_eq!(tshe[(93, 53)], egui::Color32::BLACK, "stem-crossbar overlap of ћ is filled");
-        assert_eq!(runs(&tshe, 53), 1, "crossbar of ћ is one unbroken stroke across the stem");
-        // Counter-clockwise inner contours remain open holes.
+    fn cyrillic_previews_use_marck_script_and_fill_solid_strokes() {
+        // Sintec.PDF: Cyrillic names are written in Marck Script (Dancing Script has no Cyrillic),
+        // so upstream's #1786 pixels of Inter's overlapping Ђ and ћ contours no longer apply. What
+        // still must hold: the preview is drawn with the non-zero fill, strokes are solid and an
+        // inner counter stays transparent.
+        let ink = |img: &egui::ColorImage| img.pixels.iter().filter(|p| p.a() > 0).count();
+        for text in ["Ђ", "ћ", "О", "Иванов"] {
+            let img = super::script_preview(text, 200, 200);
+            assert!(ink(&img) > 300, "{text} is drawn");
+            assert!(img.pixels.iter().all(|p| p.a() == 0 || *p == egui::Color32::BLACK), "{text}: strokes are solid black, no half-filled holes");
+        }
         let omicron = super::script_preview("О", 200, 200);
-        assert_eq!(omicron[(109, 94)].a(), 0, "counter of О stays transparent");
-        assert_eq!(runs(&omicron, 94), 2);
+        assert_eq!(omicron[(100, 100)].a(), 0, "counter of О stays transparent");
         assert!(super::script_preview("", 200, 200).pixels.iter().all(|p| p.a() == 0));
         assert!(super::script_preview("Ђћ", 0, 0).pixels.is_empty());
     }

@@ -161,7 +161,6 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                 // Sintec.PDF: a tab dragged out of the strip goes to a window.
                                 if response.drag_started_by(egui::PointerButton::Primary) {
                                     app.tab_drag = Some(crate::TabDrag { doc: app.views[i].id, from_window: app.current_window });
-                                    app.active = Some(i);
                                 }
                                 if changed && app.active == Some(i) && !app.combine_showing() {
                                     response.scroll_to_me(Some(Align::Center));
@@ -298,10 +297,6 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     if icons::button(ui, "circle-help", button, false, tl!("Keyboard shortcuts")).clicked() {
                         app.dialog = Some(Dialog::Shortcuts);
                     }
-                    // One click to the community, from anywhere in the app.
-                    if widgets::ghost_button_sized(ui, "messages-square", "Discord", tab_h).on_hover_text(pdfcraft_engine::links::DISCORD).clicked() {
-                        app.execute("help.discord");
-                    }
                 });
             });
         });
@@ -365,7 +360,10 @@ fn window_tab_drag(app: &mut PdfCraftApp, ui: &egui::Ui, t: &Tokens) -> bool {
     let offset = crate::doc_windows::screen_offset(ui.ctx());
     let screen = p + offset;
     let in_strip = strip.expand2(vec2(0.0, 24.0)).contains(p);
-    let pulled_out = !strip.expand2(vec2(0.0, 48.0)).contains(p);
+    // Over a drop target of split view (the right half of the pages) the tab splits, as before
+    // tear-off: it opens a new window only where nothing here takes it.
+    let over_split = !matches!(app.drop_target(p, Place::Main), crate::panes::TabDrop::Strip);
+    let pulled_out = !strip.expand2(vec2(0.0, 48.0)).contains(p) && !over_split;
     // A window's only tab stays: tearing it off would make the same window again. It goes to a
     // process of its own when the app can start one; otherwise windows of this process need the
     // platform's (not on the web, where they'd be drawn inside this one).
@@ -409,9 +407,15 @@ fn window_tab_drag(app: &mut PdfCraftApp, ui: &egui::Ui, t: &Tokens) -> bool {
     // The button came up: wherever the pointer is, the drag ends here.
     app.tab_drag = None;
     use crate::tab_transfer::TabDrop;
-    match crate::tab_transfer::decide(in_strip, other, foreign, pulled_out, can_tear) {
+    match crate::tab_transfer::decide(in_strip || over_split, other, foreign, pulled_out, can_tear) {
         // Along the strip: the strip's own drag moves it, in or out of split view's panes.
-        TabDrop::Reorder => false,
+        // Sintec.PDF: the dragged tab shows its document wherever along the strip it lands.
+        TabDrop::Reorder => {
+            if !over_split && let Some(i) = app.views.iter().position(|v| v.id == drag.doc) {
+                app.active = Some(i);
+            }
+            false
+        }
         TabDrop::ToWindow(g) => {
             let before = crate::doc_windows::tab_gap(&g.tabs, screen.x);
             app.drop_tab_on_window(drag.doc, g.window, before);

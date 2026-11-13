@@ -1,16 +1,17 @@
-//! Where PdfCraft and the ArtCraft community live on the web. One table, so the Help menu, the
+//! Where Sintec.PDF lives on the web. One table, so the Help menu, the
 //! About dialog, the home screen, the CLI and the README agree.
 
 use icu_properties::props::Script;
 use std::path::{Path, PathBuf};
 
-/// The app's name in ArtCraft URLs (`getartcraft.com/apps/{APP}`, `github.com/storytold/{APP}`).
-pub const APP: &str = "pdfcraft";
+/// The app's name in its GitHub URL (`github.com/sintec-llc/{APP}`).
+pub const APP: &str = "sintec.pdf";
 
-pub const DISCORD: &str = "https://discord.gg/artcraft";
-pub const WEBSITE: &str = "https://getartcraft.com";
-pub const APP_PAGE: &str = "https://getartcraft.com/apps/pdfcraft";
-pub const GITHUB: &str = "https://github.com/storytold/pdfcraft";
+pub const GITHUB: &str = "https://github.com/sintec-llc/sintec.pdf";
+/// Where releases (installers) are published; the update check reads the latest one.
+pub const APP_PAGE: &str = "https://github.com/sintec-llc/sintec.pdf/releases";
+/// The open-source project Sintec.PDF is based on (credited in plain text, as its licence asks).
+pub const UPSTREAM: &str = "https://github.com/storytold/pdfcraft";
 
 /// A link and the registry command that opens it.
 #[derive(Clone, Copy, Debug)]
@@ -22,12 +23,10 @@ pub struct Link {
     pub icon: &'static str,
 }
 
-/// In the order they are shown. Discord comes first: it is where people get help fastest.
+/// In the order they are shown.
 pub const LINKS: &[Link] = &[
-    Link { command: "help.discord", label: "Join the ArtCraft Discord", url: DISCORD, icon: "messages-square" },
-    Link { command: "help.app_page", label: "Sintec.PDF web page", url: APP_PAGE, icon: "globe" },
     Link { command: "help.github", label: "Sintec.PDF on GitHub", url: GITHUB, icon: "code-xml" },
-    Link { command: "help.website", label: "ArtCraft website", url: WEBSITE, icon: "external-link" },
+    Link { command: "help.app_page", label: "Sintec.PDF releases", url: APP_PAGE, icon: "globe" },
 ];
 
 pub fn for_command(id: &str) -> Option<&'static Link> {

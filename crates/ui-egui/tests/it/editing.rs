@@ -3666,11 +3666,15 @@ fn opening_a_paragraph_leaves_the_page_as_it_is() {
     let before = h.render().unwrap();
     // Inside the paragraph, away from the caret (at the click) and the frame around it.
     let inside = r.shrink(3.0);
-    let changed = |img: &image::RgbaImage| {
+    let changed = |img: &image::RgbaImage, panel: Option<egui::Rect>| {
         let mut n = 0;
         for y in inside.top() as u32..inside.bottom() as u32 {
             for x in inside.left() as u32..inside.right() as u32 {
                 if (x as f32 - at.x).abs() < 14.0 {
+                    continue;
+                }
+                // Sintec.PDF: the Format text panel floats over the page beside the paragraph.
+                if panel.is_some_and(|p| p.expand(12.0).contains(egui::pos2(x as f32, y as f32))) {
                     continue;
                 }
                 let (a, b) = (img.get_pixel(x, y).0, before.get_pixel(x, y).0);
@@ -3686,7 +3690,8 @@ fn opening_a_paragraph_leaves_the_page_as_it_is() {
     h.drop_at(at);
     for frame in 0..8 {
         h.step();
-        let n = changed(&h.render().unwrap());
+        let panel = h.state().views[0].text_panel_rect();
+        let n = changed(&h.render().unwrap(), panel);
         assert!(n < 20, "frame {frame} after the click changed {n} pixels of the paragraph");
     }
     assert_eq!(h.state().views[0].line_editor.as_ref().map(|e| e.text.as_str()), Some("White on a banner"));

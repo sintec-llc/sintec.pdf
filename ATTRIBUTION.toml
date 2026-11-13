@@ -7,7 +7,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "licenses/craft-i18n-LICENSE-MIT.txt"
 kind = "translation"
 usage = "Russian UI strings shared with the other Crafting Apps, embedded by crates/ui-egui/build.rs and looked up through craft-libs' craft-i18n crate (Sintec.PDF's own catalog wins over it)"
-sha256 = "5e89562493576895d205788017a9990d83b29235dd96f13985d35f67a1b0d13e"
+sha256 = "da62a2180ecff5aa359312b2d4a2cab417414d339ae59acb973c510718581799"
 
 [[asset]]
 path = "i18n/locales/ru/pdfcraft.tsv"
@@ -18,7 +18,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "licenses/craft-i18n-LICENSE-MIT.txt"
 kind = "translation"
 usage = "Russian UI strings, embedded by crates/ui-egui/build.rs and looked up through craft-libs' craft-i18n crate"
-sha256 = "f1c610fa4383cd0862301151be5363a336eb372795fde382f4eca9be5fbeb9f2"
+sha256 = "7d0016fad94536a3e8fddfa5eee5316789cb83350f7b205805a4ed83d9e093a7"
 
 [[asset]]
 path = "assets/icons/accessibility.svg"

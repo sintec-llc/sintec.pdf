@@ -290,12 +290,12 @@ fn a_tab_dropped_on_the_right_half_of_the_page_splits_right_with_it() {
     drag_tab(&mut h, "one.pdf", strip.right_center() + egui::vec2(40.0, 0.0));
     assert!(h.state().panes.split.is_none());
     assert_eq!(places(&h), [Place::Main, Place::Main]);
-    // Let go outside the window, a tab moves along the strip as before split view (here to the
-    // front), and nothing splits.
+    // Let go outside the window, nothing splits. Sintec.PDF: the tab is handled as a drop on a
+    // window (tab_windows.rs), so it doesn't move along the strip; here, with no other window, it stays.
     let ids: Vec<_> = h.state().views.iter().map(|v| v.id).collect();
     drag_tab(&mut h, "two.pdf", egui::pos2(-200.0, 300.0));
     assert!(h.state().panes.split.is_none());
-    assert_eq!(h.state().views.iter().map(|v| v.id).collect::<Vec<_>>(), [ids[1], ids[0]]);
+    assert_eq!(h.state().views.iter().map(|v| v.id).collect::<Vec<_>>(), ids);
 }
 
 /// Regression: closing the second pane's tab from its own strip, with the same document in both

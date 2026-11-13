@@ -6,7 +6,7 @@
     {"click_page": {"x": 100, "y": 700}},
     {"expect_editor": {"contains": "One", "text": "One  Two"}},
     {"key": {"key": "Enter", "modifiers": ["command"]}},
-    {"drag_edge": {"contains": "One", "dx": -220}},
+    {"drag_edge": {"contains": "One", "dx": -900}},
     {"expect_editor": {"contains": "One", "text": "One\nTwo"}},
     {"drag_edge": {"contains": "One", "dx": 360}},
     {"expect_editor": {"contains": "One", "text": "One  Two"}},

@@ -632,26 +632,14 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
     cancel
 }
 
-/// The ArtCraft wordmark's place, `height` points tall. Sintec.PDF ships without the ArtCraft
-/// marks (docs/brand/ is not open source and forks must remove it), so nothing is drawn; the
-/// rebrand step removes the callers.
-pub fn artcraft_logo(ui: &mut egui::Ui, height: f32) -> Response {
-    ui.allocate_response(vec2(0.0, height.max(0.0)), Sense::hover())
-}
-
-/// The ArtCraft mark's place, `size` points square: empty in Sintec.PDF (see [`artcraft_logo`]).
-pub fn artcraft_mark(ui: &mut egui::Ui, size: f32) -> Response {
-    ui.allocate_response(vec2(size.max(0.0), size.max(0.0)), Sense::hover())
-}
-
-/// Buttons for every community link (`pdfcraft_engine::links`), Discord first and prominent.
+/// Buttons for every community link (`pdfcraft_engine::links`), in the table's order.
 /// Returns the registry command of the one clicked.
 pub fn community_links(ui: &mut egui::Ui) -> Option<&'static str> {
     let mut clicked = None;
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
-        for (i, l) in pdfcraft_engine::links::LINKS.iter().enumerate() {
-            let resp = if i == 0 { icon_pill(ui, l.icon, tl!("Join our Discord"), true) } else { icon_pill(ui, l.icon, tl!(l.label), false) };
+        for l in pdfcraft_engine::links::LINKS {
+            let resp = icon_pill(ui, l.icon, tl!(l.label), false);
             if resp.on_hover_text(l.url).clicked() {
                 clicked = Some(l.command);
             }

@@ -257,7 +257,11 @@ fn drag_edge(h: &mut Harness<'static, PdfCraftApp>, session: &Session, contains:
         let Some(block) = blocks.iter().find(|b| b.editor_text.contains(contains) || b.text.contains(contains)) else {
             return Err(format!("no paragraph contains {contains:?}"));
         };
-        let rect = block.rect;
+        // Sintec.PDF: a box spans where its text wraps (`edit_text_ui/grips.rs`), and the width handle is on that edge.
+        let mut rect = block.rect;
+        if block.wrap.iter().all(|v| v.is_finite()) {
+            rect[2] = rect[2].max(block.wrap[1]);
+        }
         let [pw, ph] = session.page;
         egui::pos2(page.left() + rect[2] as f32 / pw * page.width(), page.top() + (ph - (rect[1] + rect[3]) as f32 / 2.0) / ph * page.height())
     };

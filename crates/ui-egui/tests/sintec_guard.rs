@@ -160,7 +160,6 @@ fn the_upstream_name_and_marks_stay_out_of_the_app() {
 
 /// The ArtCraft community links (Discord, website) stay out of the Help menu and home screen.
 #[test]
-#[ignore = "upstream's ArtCraft links came back with the 041 merge; re-enable once the Sintec.PDF links (.sync041/ours/crates/engine/src/links.rs) are re-applied"]
 fn the_artcraft_links_stay_out_of_the_app() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let found = code_lines(&root, |line| line.contains("discord.gg/artcraft") || line.contains("getartcraft.com"));
