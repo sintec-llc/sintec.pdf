@@ -12,6 +12,8 @@
 //!  --cover on|off  --default-layout single|continuous|two-up|two-page  --default-continuous on|off  --default-zoom fit-width|fit-page|<percent>  --always-default-view on|off
 //!  --page-gaps on|off  --default-page-gaps on|off  --recent-files 0..50
 //!  --combine-view grid|list  --combine-zoom 60..200`
+//! `--convert-to-pdf files…` (Explorer ▸ «Преобразовать в PDF») pools the paths of the launches Explorer
+//! starts for one selection (`collect`) and puts them all in the Combine files tab.
 //! `--combine files…` adds the files to the Combine files tab (File Explorer's "Combine files in
 //! PdfCraft", #585), of the PdfCraft already running when there is one.
 //!
@@ -36,6 +38,7 @@ use pdfcraft_ui_egui::PdfCraftApp;
 
 #[cfg(target_os = "macos")]
 mod apple_events;
+mod collect;
 mod compositor_gpu;
 mod decorations;
 mod logging;
@@ -78,6 +81,7 @@ Options:
   --two-paged                 open command-line PDFs in noncontinuous two-page view
   --new-window                open a window of its own instead of passing the files to a running Sintec.PDF
   --create-images [images…]   put the images in one PDF and ask for the page DPI
+  --convert-to-pdf files…     File Explorer's Convert to PDF: the files go to the Combine files tab (one launch per file is pooled)
   --combine files…            add the files to the Combine files tab, of a running Sintec.PDF if there is one
   --control <file>            enable the UI control channel (pdfcraft-cli ui --control <file> …)
   --page N, --zoom 150, --layout continuous, --theme dark, …
@@ -240,6 +244,15 @@ fn main() -> eframe::Result {
         return print_and_exit(USAGE);
     }
     startup.files = rejoin_split_paths(startup.files, |p| std::path::Path::new(p).is_file());
+    // Explorer starts one process per selected file: pool their paths, and let one launch go on
+    // with all of them (the rest exit without a window). They then go to the Combine files tab.
+    if startup.convert_to_pdf {
+        match collect::collect(startup.files.iter().map(std::path::PathBuf::from).collect(), &collect::spool_dir()) {
+            collect::Role::Handled => return Ok(()),
+            collect::Role::Convert(all) => startup.files = all.iter().map(|p| p.to_string_lossy().into_owned()).collect(),
+        }
+        startup.combine = true;
+    }
     let may_hand_off = startup.may_hand_off();
     let startup::Arguments { files, options, control_file, create_images, combine, two_paged, torn_off, window_pos, recover_key, .. } = startup;
     let integrated = cfg!(target_os = "macos");

@@ -9,6 +9,9 @@ pub(super) struct Arguments {
     pub create_images: bool,
     /// `--combine`: the files go to the Combine files tab.
     pub combine: bool,
+    /// `--convert-to-pdf`: Explorer's «Преобразовать в PDF»; one launch per selected file, pooled
+    /// by `collect`, then the files go to the Combine files tab like `--combine`.
+    pub convert_to_pdf: bool,
     pub new_window: bool,
     /// Started for a tab torn off another window (`pdfcraft_ui_egui::tear_off`).
     pub torn_off: bool,
@@ -51,6 +54,7 @@ impl Arguments {
                 // File Explorer's "Combine files in PdfCraft" (#585): the files go to the Combine
                 // files tab, of the running PdfCraft when there is one.
                 "--combine" => parsed.combine = true,
+                "--convert-to-pdf" => parsed.convert_to_pdf = true,
                 "--new-window" => parsed.new_window = true,
                 "--torn-off" => parsed.torn_off = true,
                 "--window-pos" => match args.next().as_deref().map(pdfcraft_ui_egui::tear_off::parse_window_pos) {
@@ -239,6 +243,14 @@ mod tests {
         }
         std::fs::remove_file(path).unwrap();
         std::fs::remove_file(second_path).unwrap();
+    }
+
+    #[test]
+    fn convert_to_pdf_is_a_flag_without_a_value() {
+        let parsed = parse(&["--convert-to-pdf", "C:\\docs\\a.jpg"]);
+        assert!(parsed.convert_to_pdf);
+        assert_eq!(parsed.files.len(), 1, "the path is a file, not the flag's value");
+        assert!(parsed.options.is_empty());
     }
 }
 
