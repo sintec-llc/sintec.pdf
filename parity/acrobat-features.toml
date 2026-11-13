@@ -5799,6 +5799,18 @@ evidence = ["crates/ui-egui/tests/it/redact.rs::marking_applying_and_clearing", 
 notes = "drag a box anywhere else"
 
 [[feature]]
+id = "protect.mask-white"
+title = "Mask areas with white"
+area = "G"
+tier = "P1"
+milestone = "M8"
+status = "shipped"
+commands = ["redact.mask"]
+tools = ["redact_mask"]
+evidence = ["crates/ui-egui/tests/it/mask.rs::mask_areas_with_white_removes_what_is_under_them_for_good", "crates/automation/tests/it/redact_mask.rs::redact_mask_covers_an_area_with_white_and_removes_what_is_under_it"]
+notes = "Sintec.PDF «Закрыть белым», not an Acrobat command: Redact a PDF ▸ Mask areas with white turns the Redact tool into a white mask (drag over areas or select text first); its marks have a white box and no overlay text whatever the redaction properties say, and leave those properties unchanged. Applying them (Redact all / Apply redactions) is ordinary redaction: what is under the areas leaves the file and the white box is drawn into the page content. The redaction properties' colour list also starts with White"
+
+[[feature]]
 id = "protect.redact-pages"
 title = "Mark whole pages for redaction"
 area = "G"

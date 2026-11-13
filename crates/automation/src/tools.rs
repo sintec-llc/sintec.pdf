@@ -714,6 +714,30 @@ pub fn tools() -> Vec<ToolDef> {
             &["doc"],
         )),
         t(
+            "redact_mask",
+            "Mask areas with white",
+            "Sintec.PDF «Закрыть белым»: mark areas or text to be covered with white, like redact_mark but always with a white box and no overlay text (overlay, code_set, codes and fill are refused; the redaction properties are not used). Nothing is removed until redact_apply: then text, images, vectors, comments, links and form fields under the areas are removed for good and the white box is drawn into the page content, so no mark remains to delete. Takes redact_mark's ways to choose what to cover: rect [x0, y0, x1, y1] (points from the top-left of the displayed page) with page; find; words; pattern; regex with optional validate; whole_pages: true; with page or pages, case_sensitive and whole_words as there. Undoable.",
+        )
+        .cmd("redact.mask")
+        .with(schema(
+            json!({
+                "doc": doc(),
+                "page": { "type": "integer", "minimum": 1, "description": "Single page to mask; mutually exclusive with pages." },
+                "rect": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 },
+                "find": { "type": "string", "minLength": 1 },
+                "words": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 1000 },
+                "case_sensitive": { "type": "boolean", "description": "Match letter case for find or words (default false)." },
+                "whole_words": { "type": "boolean", "description": "Match whole words for find or words (default false)." },
+                "pattern": pattern_enum(),
+                "regex": { "type": "string", "minLength": 1, "maxLength": 1024, "description": "Regular expression (Rust regex syntax), at most 1024 bytes; every match is masked." },
+                "validate": { "type": "string", "enum": ["luhn", "mod97", "iban"], "description": "With regex: keep a match only if its checksum is valid (spaces and hyphens ignored)." },
+                "whole_pages": { "type": "boolean" },
+                "pages": pages("to search or mask (default: all); mutually exclusive with page, and not valid with rect"),
+                "author": { "type": "string" },
+            }),
+            &["doc"],
+        )),
+        t(
             "redact_apply",
             "Apply redactions",
             "Apply the redaction marks (all, or those on pages): text, images, vectors, comments and form fields under them are removed for good and boxes are drawn in their place. A verification pass fails the operation if anything readable remains. Document metadata (Info entries, the document's and pages' XMP) that repeats the removed text is removed too; when the document XMP goes, identification says what became of its PDF/A and PDF/UA claims (pdfa, pdfua: none, kept when written back in a packet holding only the identification, or lost). still_holding counts the places applying leaves as they are that still hold the removed text: bookmarks (titles), attachments (names, file names, descriptions), comments (text, rich text, subject or author of those that remain) and xmp (XMP on images, fonts, forms, annotations and other objects), with their total; doc_remove_hidden removes them. unsearched: true means the removed text couldn't be searched for, so every such place holding any text is counted. Undoable until saved; the saved file no longer contains the content. The result's save_as is the document's name with _Redacted before the extension (contract.pdf gives contract_Redacted.pdf; a name that already ends in _Redacted is unchanged); pass it to doc_save as path to save under that name.",

@@ -55,6 +55,7 @@ mod javascript;
 mod layer_actions;
 mod links;
 mod marks;
+mod mask;
 mod min_window;
 mod object_selection;
 mod ocr;

@@ -3705,7 +3705,7 @@ fn apply_frame_requests(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui, 
                 author,
             })
         } else {
-            app.redact_prefs.mark(page, quads, &author)
+            app.mark_prefs().mark(page, quads, &author)
         });
     }
     match image_action {

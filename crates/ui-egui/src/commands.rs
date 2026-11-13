@@ -769,7 +769,12 @@ impl PdfCraftApp {
             "a11y.autotag_fields" => self.autotag_form_fields(),
             "a11y.tags" => self.choose_right_panel(Some(RightPanel::Tags)),
             "a11y.reading_options" => self.dialog = Some(Dialog::Properties(crate::PropsTab::Advanced)),
-            "redact.mark" => {
+            "redact.mark" | "redact.mask" => {
+                // Sintec.PDF «Закрыть белым» marks white areas; Redact uses the redaction properties.
+                self.mask_mode = id == "redact.mask";
+                if self.mask_mode {
+                    self.notify_tr("Drag over the areas to cover with white, then Apply redactions: what is under them is removed for good.");
+                }
                 self.quick_tool = crate::QuickTool::Redact;
                 self.left = crate::LeftPanel::Tool("redact");
                 self.reveal_tools();
@@ -781,7 +786,7 @@ impl PdfCraftApp {
                     if let Some((page, quads)) = self.views[i].selection_quads(info) {
                         self.views[i].clear_selection();
                         let author = self.comment_prefs.author.clone();
-                        self.apply_edit(self.redact_prefs.mark(page, quads, &author));
+                        self.apply_edit(self.mark_prefs().mark(page, quads, &author));
                     }
                 }
             }

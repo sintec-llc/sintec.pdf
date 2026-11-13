@@ -916,6 +916,9 @@ pub struct PdfCraftApp {
     pub field_props: Option<prepare::FieldDraft>,
     pub bulk_field_props: Option<bulk_fields::Draft>,
     pub redact_prefs: RedactPrefs,
+    /// Sintec.PDF: the Redact tool is «Закрыть белым» (`redact.mask`): the areas it marks get a
+    /// white box and no overlay text, without changing the redaction properties.
+    pub mask_mode: bool,
     /// The Redaction Tool Properties kept for the next run (what the last OK with "Make
     /// properties default" ticked left), and the values before the dialog opened, for Cancel.
     pub redact_defaults: RedactPrefs,

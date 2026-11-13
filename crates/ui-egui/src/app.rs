@@ -365,6 +365,7 @@ impl PdfCraftApp {
             field_props: None,
             bulk_field_props: None,
             redact_prefs: RedactPrefs::default(),
+            mask_mode: false,
             redact_defaults: RedactPrefs::default(),
             redact_before: None,
             redact_pages_draft: RedactPagesDraft::default(),

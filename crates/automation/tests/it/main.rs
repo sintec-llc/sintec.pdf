@@ -20,6 +20,7 @@ mod office;
 mod optimize_content_boundaries;
 mod portfolio_info;
 mod redact_after_stray_q_form;
+mod redact_mask;
 mod redact_text_after_q;
 mod render_warnings;
 mod text_copy;
