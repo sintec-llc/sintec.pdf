@@ -24,7 +24,7 @@ User-facing names say **Sintec.PDF**; crates and build outputs keep upstream's `
 
 ## Base and what we carry
 
-The code is synced with upstream PdfCraft **v0.9.0** (release 0.3.0). On top of it we carry: English
+The code is synced with upstream PdfCraft **v0.21.1** (release 0.4.0). On top of it we carry: English
 and Russian only, the Russian catalog, 46-language OCR (`crates/ocr`), our Windows print path
 (`crates/print/src/spool.rs`), tab tear-off, text-box grips, the floating text panel and font
 substitution, bundled fonts, the scanner, table-aware export, update checks and the MSI installer.

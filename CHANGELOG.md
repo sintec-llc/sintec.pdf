@@ -34,8 +34,13 @@ This release moves the base from upstream v0.9.0 to v0.21.1 and carries our feat
 - **Installers:** the Windows installer says "Edit with Sintec.PDF" in the PDF right-click menu
   (it said "Edit with PdfCraft"); `--help` names `sintec-pdf` and `sintec-pdf-cli`.
 
-### Not yet carried onto the new base
-- **Close in white** (permanent white masking) from 0.3.1 is not in this code yet.
+### Also carried over from 0.3.1
+- **Close in white** (permanent white masking, `redact.mask`) is back.
+- **Scan into document…** is back in the Pages menu: scan from the scanner into the open document
+  or a new one.
+- **Explorer ▸ Convert to PDF** works again for several selected files at once
+  (`--convert-to-pdf`).
+- **Linux Flatpak** files use the Sintec id `io.github.sintec_llc.sintec_pdf`.
 
 ## 0.3.1 — based on upstream PdfCraft v0.9.0
 
