@@ -4396,3 +4396,47 @@ scroll speed	Fast	Высокая
 scroll speed	Normal	Обычная
 scroll speed	Slow	Низкая
 signature pad	Type	Ввести
+# Engine checks (PDF/A, accessibility) and a few UI strings
+	A CMap maps a character code to a CID above 65535	CMap сопоставляет код символа с CID больше 65535
+	A graphics state has a halftone phase (HTP)	В графическом состоянии задана фаза полутонов (HTP)
+	A graphics state has a rendering intent that isn't a name	В графическом состоянии назначение цветопередачи не является именем
+	A graphics state has a transfer function (TR)	В графическом состоянии задана передаточная функция (TR)
+	A graphics state has a transfer function (TR2) other than Default	В графическом состоянии задана передаточная функция (TR2), отличная от Default
+	A graphics state has the rendering intent {}, which isn't a standard one	В графическом состоянии задано назначение цветопередачи {}, не являющееся стандартным
+	A graphics state uses the blend mode {}, which ISO 32000-1 doesn't define	В графическом состоянии используется режим наложения {}, не определённый в ISO 32000-1
+	A halftone has a HalftoneName	У полутонового растра есть HalftoneName
+	A halftone has a transfer function, which only a non-primary colorant's halftone may have	У полутонового растра есть передаточная функция, которая допустима только для растра неосновного красителя
+	A halftone has type {}: only types 1 and 5 are allowed	У полутонового растра тип {}: допустимы только типы 1 и 5
+	A halftone's HalftoneType is missing or isn't an integer	HalftoneType полутонового растра отсутствует или не является целым числом
+	A name is longer than 127 bytes	Имя длиннее 127 байт
+	A real number is outside ±3.403 × 10³⁸, or nonzero but within ±1.175 × 10⁻³⁸	Вещественное число выходит за пределы ±3,403 × 10³⁸ либо не равно нулю, но лежит в пределах ±1,175 × 10⁻³⁸
+	A string is longer than 32767 bytes	Строка длиннее 32767 байт
+	Add 3D model	Добавить 3D-модель
+	An integer is outside the 32-bit range	Целое число выходит за 32-разрядный диапазон
+	Crop image	Обрезать изображение
+	Edit attachment description	Изменить описание вложения
+	Import bookmarks	Импортировать закладки
+	Metadata stream {object} writes the namespace {namespace} with the prefix {written}, not {prefix}	Поток метаданных {object} записывает пространство имён {namespace} с префиксом {written}, а не {prefix}
+	Metadata stream {object} writes the namespace {namespace} without a prefix, not with {prefix}	Поток метаданных {object} записывает пространство имён {namespace} без префикса, а не с {prefix}
+	Page {} has a boundary smaller than 3 or larger than 14400 units	У страницы {} граница меньше 3 или больше 14400 единиц
+	Page {} has transparency but no device-independent blending colour space or PDF/A output intent	На странице {} есть прозрачность, но нет аппаратно-независимого цветового пространства наложения или выходного условия PDF/A
+	Prepare grouped text	Подготовить сгруппированный текст
+	Separation colour spaces named {} differ in their alternate space or tint transform	Цветовые пространства Separation с именем {} различаются альтернативным пространством или преобразованием оттенка
+	Some content could not be read for device colour	Часть содержимого не удалось прочитать для аппаратного цвета
+	The XMP extension schema container in metadata stream {object} holds no rdf:Bag	Контейнер схемы расширения XMP в потоке метаданных {object} не содержит rdf:Bag
+	The XMP extension schema container in metadata stream {object} holds {found}, not one rdf:Bag	Контейнер схемы расширения XMP в потоке метаданных {object} содержит {found}, а не один rdf:Bag
+	The XMP extension schema {schema} in metadata stream {object} describes {item} with an empty {entry} entry	Схема расширения XMP {schema} в потоке метаданных {object} описывает {item} с пустой записью {entry}
+	The XMP extension schema {schema} in metadata stream {object} describes {item} without a {entry} entry	Схема расширения XMP {schema} в потоке метаданных {object} описывает {item} без записи {entry}
+	The XMP extension schema {schema} in metadata stream {object} has an empty {entry} entry	В схеме расширения XMP {schema} в потоке метаданных {object} пустая запись {entry}
+	The XMP extension schema {schema} in metadata stream {object} has no {entry} entry	В схеме расширения XMP {schema} в потоке метаданных {object} нет записи {entry}
+	The XMP property {property} in metadata stream {object} should have the value type {type}	Свойство XMP {property} в потоке метаданных {object} должно иметь тип значения {type}
+	The XMP property {property} in metadata stream {object}, written {written}, should have the value type {type}	Свойство XMP {property} в потоке метаданных {object}, записанное как {written}, должно иметь тип значения {type}
+	The file doesn't start with a %PDF-1.0 to %PDF-1.7 header line	Файл не начинается со строки заголовка от %PDF-1.0 до %PDF-1.7
+	The file header isn't followed by a comment of four bytes above 127	За заголовком файла не следует комментарий из четырёх байт со значениями больше 127
+	The file identifier (ID) in the trailer isn't two non-empty strings	Идентификатор файла (ID) в трейлере не состоит из двух непустых строк
+	The halftone for the colorant {} has no transfer function	У полутонового растра для красителя {} нет передаточной функции
+	The spot colour {} of a DeviceN colour space isn't in its Colorants dictionary	Плашечного цвета {} цветового пространства DeviceN нет в его словаре Colorants
+	The trailer has no file identifier (ID)	В трейлере нет идентификатора файла (ID)
+	This form has too many fields, or a field name too long, for Sintec.PDF to read them all. Any signature among the rest is not listed, so the document is treated as signed.	В этой форме слишком много полей или слишком длинное имя поля, чтобы Sintec.PDF прочитал их все. Подписи среди остальных полей не перечислены, поэтому документ считается подписанным.
+	This signature carries certification permissions, but the document does not name it as its certification, so it is checked as an approval signature.	Эта подпись несёт разрешения сертификации, но документ не называет её своей сертификацией, поэтому она проверяется как подпись утверждения.
+	the range selects more than {limit} pages	диапазон выбирает более {limit} страниц
