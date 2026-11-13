@@ -280,6 +280,8 @@ impl PdfCraftApp {
             scan_clean_run: None,
             progress_notice: None,
             page_clipboard: None,
+            page_transfer: None,
+            tab_hover: None,
             comment_clipboard: None,
             object_clipboard: None,
             object_clip_mark: Default::default(),
@@ -953,6 +955,12 @@ impl PdfCraftApp {
         // FitWindow and CenterWindow, once the document just opened is laid out.
         self.window_preferences_frame(&ctx);
         self.process_pending_edits();
+        // Sintec.PDF: a page drag ends with the button: dropped by now (on a tab or a Pages
+        // panel), or let go elsewhere.
+        if self.page_transfer.is_some() && !ctx.input(|i| i.pointer.primary_down()) {
+            self.page_transfer = None;
+            self.tab_hover = None;
+        }
         // Sintec.PDF: the open paragraph previews typed characters its fonts lack in their stand-ins.
         self.preview_substitutes(&ctx);
         // Edit PDF's text editing shows a page: suggest a font of it with no similar installed

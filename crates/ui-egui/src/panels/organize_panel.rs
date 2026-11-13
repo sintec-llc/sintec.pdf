@@ -114,6 +114,9 @@ pub(crate) fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
                 if icons::button(ui, "file-output", 34.0, false, tl!("Extract pages to a new document")).clicked() {
                     act = Some(Act::View(ViewAction::Extract));
                 }
+                if icons::button(ui, "save", 34.0, false, tl!("Extract and save as…")).clicked() {
+                    act = Some(Act::View(ViewAction::ExtractSaveAs));
+                }
             });
             ui.add_space(2.0);
             // Insert ▸: a blank page, pages from a file, or copies of the selected pages.

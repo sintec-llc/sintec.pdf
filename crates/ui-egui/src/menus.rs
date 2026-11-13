@@ -182,6 +182,7 @@ const PAGES: &[&str] = &[
     "page.insert",
     "page.replace",
     "page.extract",
+    "page.extract_save_as",
     "page.split",
     "page.duplicate",
     "page.delete",

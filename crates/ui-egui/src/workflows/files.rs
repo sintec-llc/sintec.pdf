@@ -924,6 +924,104 @@ impl PdfCraftApp {
     }
 }
 
+impl PdfCraftApp {
+    /// Sintec.PDF: Extract and save as: the selected pages (or the current page) as a new PDF,
+    /// saved where the user chooses (`save_override` in tests), named "<document> (p. 2-4, 7).pdf".
+    /// The document itself is unchanged.
+    pub fn extract_save_as(&mut self) {
+        // What's typed in a form field is part of the document (#166).
+        if !self.commit_form_typing() {
+            return;
+        }
+        let Some((i, id)) = self.active_ids() else { return };
+        let mut pages = self.views[i].target_pages();
+        pages.sort_unstable();
+        pages.dedup();
+        let Some(doc) = self.session.get(id) else { return };
+        let stem = strip_pdf(&doc.name).to_string();
+        #[cfg(not(target_arch = "wasm32"))]
+        let folder = doc.path.clone();
+        let bytes = match self.session.extract(id, &pages) {
+            Ok(b) => b,
+            Err(e) => return self.notify_fmt("Couldn't extract pages: {e}", &[("e", &e.to_string())]),
+        };
+        let what = if pages.len() == 1 { tl!("1 page").to_string() } else { crate::i18n::fmt(tl!("{n} pages"), &[("n", &pages.len().to_string())]) };
+        let name = extract_file_name(&stem, &pages);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let write = move |app: &mut Self, path: std::path::PathBuf| match crate::editing::write_atomically(&path.to_string_lossy(), &bytes) {
+                Ok(()) => app.notify_fmt("Saved {what} to {path}", &[("what", &what), ("path", &path.display().to_string())]),
+                Err(e) => app.notify_fmt("Couldn't write {name}: {e}", &[("name", &path.display().to_string()), ("e", &e.to_string())]),
+            };
+            match self.save_override.clone() {
+                Some(p) => write(self, p.into()),
+                None => {
+                    let dialog = rfd::AsyncFileDialog::new()
+                        .set_title(tl!("Extract and save as").to_string())
+                        .add_filter_any_case("PDF", &["pdf"])
+                        .set_file_name(name);
+                    let dialog = crate::editing::in_document_folder(dialog, folder.as_deref());
+                    self.ask_one(crate::pickers::Ask::Save(dialog), None, write);
+                }
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = what;
+            if let Err(e) = crate::editing::download(&name, &bytes) {
+                self.notify_error(e);
+            }
+        }
+    }
+}
+
+/// The file name Extract and save as offers: "<document> (p. 2-4, 7).pdf", safe on every
+/// platform, its page list cut short (with "…") so the name stays within 250 bytes.
+pub(crate) fn extract_file_name(stem: &str, pages: &[usize]) -> String {
+    extract_file_name_with(stem, pages, tl!("p. {pages}"))
+}
+
+/// [`extract_file_name`] with the page label's template (`p. {pages}`, translated). The whole
+/// name, label included, stays within 250 bytes, under the usual 255-byte file name limit
+/// whatever the language: the stem has at most 200, and the page list gives way.
+fn extract_file_name_with(stem: &str, pages: &[usize], template: &str) -> String {
+    const MAX: usize = 250;
+    let stem = file_stem_from_user(stem);
+    let stem = if stem.is_empty() { "document".to_string() } else { stem };
+    let name = |ranges: &str| format!("{stem} ({}).pdf", crate::i18n::fmt(template, &[("pages", ranges)]));
+    let ranges = page_ranges(pages);
+    let full = name(&ranges);
+    if full.len() <= MAX {
+        return full;
+    }
+    // Cut the list by what is over, plus room for the "…", at a whole page number.
+    let over = full.len().saturating_sub(MAX).saturating_add('…'.len_utf8());
+    let mut end = ranges.len().saturating_sub(over);
+    while !ranges.is_char_boundary(end) {
+        end -= 1;
+    }
+    let kept = ranges.get(..end).unwrap_or_default();
+    let kept = kept.rfind(", ").and_then(|i| kept.get(..i)).unwrap_or(kept);
+    name(&format!("{kept}…"))
+}
+
+/// Sorted, distinct page indices as people number pages: `[1, 2, 3, 6]` → "2-4, 7".
+pub(crate) fn page_ranges(pages: &[usize]) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    let mut i = 0;
+    while let Some(&start) = pages.get(i) {
+        let mut end = start;
+        while let Some(&next) = pages.get(i + 1).filter(|&&n| Some(n) == end.checked_add(1)) {
+            i += 1;
+            end = next;
+        }
+        let (first, last) = (start.saturating_add(1), end.saturating_add(1));
+        parts.push(if end == start { first.to_string() } else { format!("{first}-{last}") });
+        i += 1;
+    }
+    parts.join(", ")
+}
+
 pub(crate) fn strip_pdf(name: &str) -> &str {
     name.strip_suffix(".pdf").or_else(|| name.strip_suffix(".PDF")).unwrap_or(name)
 }
@@ -1143,6 +1241,36 @@ impl PdfCraftApp {
 #[cfg(test)]
 mod stem_tests {
     use super::{attachment_file_name, file_stem_from_user, is_plain_file_name};
+
+    #[test]
+    fn page_ranges_read_as_people_number_pages() {
+        use super::page_ranges;
+        assert_eq!(page_ranges(&[]), "");
+        assert_eq!(page_ranges(&[0]), "1");
+        assert_eq!(page_ranges(&[1, 2, 3, 6]), "2-4, 7");
+        assert_eq!(page_ranges(&[0, 2, 4, 5]), "1, 3, 5-6");
+    }
+
+    /// Extract and save as names the file after the document and its pages, and keeps the name
+    /// short and safe however many pages are picked.
+    #[test]
+    fn extract_and_save_as_names_the_document_and_its_pages() {
+        use super::{extract_file_name, extract_file_name_with};
+        assert_eq!(extract_file_name("Report", &[1, 2, 3, 6]), "Report (p. 2-4, 7).pdf");
+        assert_eq!(extract_file_name("../x", &[0]), ".._x (p. 1).pdf");
+        // The longest stem and a page list too long to show: the list gives way, at a whole
+        // number, in English and in Russian (whose label is longer).
+        let every_other: Vec<usize> = (0..2000).step_by(2).collect();
+        for template in ["p. {pages}", "стр. {pages}"] {
+            let long = extract_file_name_with(&"文".repeat(300), &every_other, template);
+            assert!(long.len() <= 250 && long.ends_with("…).pdf"), "{} {long}", long.len());
+            assert!(long.contains("(p. 1, 3, 5") || long.contains("(стр. 1, 3, 5"), "{long}");
+        }
+        let short = extract_file_name_with("Report", &every_other, "стр. {pages}");
+        assert!(short.len() <= 250 && short.ends_with("…).pdf") && short.starts_with("Report (стр. 1, 3, 5, "), "{short}");
+        let before = short.trim_end_matches("…).pdf");
+        assert!(before.ends_with(|c: char| c.is_ascii_digit()), "cut at a whole number: {short}");
+    }
 
     #[test]
     fn user_file_names_stay_inside_the_folder_and_writable_everywhere() {

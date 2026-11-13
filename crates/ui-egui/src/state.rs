@@ -264,6 +264,20 @@ pub struct PageClip {
     pub pages: Vec<usize>,
 }
 
+/// Sintec.PDF: pages being dragged out of one document's Pages panel, which can drop into another
+/// open document (between the thumbnails of its Pages panel, or on its tab to add them at the
+/// end). Shift at the drop moves them instead of copying.
+#[derive(Clone, Debug)]
+pub struct PageTransfer {
+    /// The document they come from.
+    pub from: DocId,
+    /// Its edit generation when the drag started: a move removes the pages from it only if it
+    /// hasn't changed since (the page numbers would no longer name them).
+    pub generation: u64,
+    /// The pages (0-based), as the drag picked them.
+    pub pages: Vec<usize>,
+}
+
 /// One page of a whole-document copy: its text as read for display, to read, or not to try
 /// (reading it failed before).
 pub(crate) enum CopyPage {

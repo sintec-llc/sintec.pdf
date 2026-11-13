@@ -24,13 +24,18 @@ This release moves the base from upstream v0.9.0 to v0.21.1 and carries our feat
   **compression levels** (Strong / Medium / Light on top of upstream's optimizer), **Excel and Word
   export**, **Convert to PDF** from Office, **tabs between windows** and **printing** (A4 by
   default, automatic orientation) work as in 0.3.1.
+- **Pages between documents:** drag thumbnails from the Pages panel onto another document's tab;
+  resting there opens it, and its Pages panel shows where they go ("Copy here", Shift: "Move
+  here"). Releasing on the tab adds them at the end. A move never empties the original. Each side
+  is undone on its own. **Extract and save as…** (Pages menu, the Pages panel and page grid menus)
+  saves the selected pages as a new PDF named "<document> (p. 2-4, 7).pdf". Both are also
+  automation tools (`page_transfer`, `page_extract_save_as`).
 - **Interface languages:** English and Russian; the translations live in this repository.
 - **Installers:** the Windows installer says "Edit with Sintec.PDF" in the PDF right-click menu
   (it said "Edit with PdfCraft"); `--help` names `sintec-pdf` and `sintec-pdf-cli`.
 
 ### Not yet carried onto the new base
-- **Close in white** (permanent white masking) and **dragging pages between documents** (Move
-  here / Copy here, Extract and save as…) from 0.3.1 are not in this code yet.
+- **Close in white** (permanent white masking) from 0.3.1 is not in this code yet.
 
 ## 0.3.1 — based on upstream PdfCraft v0.9.0
 

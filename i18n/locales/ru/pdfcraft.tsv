@@ -741,7 +741,7 @@
 	Copied to clipboard	Скопировано в буфер обмена
 	Copied {what}	Скопировано: {what}
 	Copied {what} to {name}	Скопировано в «{name}»: {what}
-	Copied {what} to {name}; the original kept them (it changed during the drag, or would be left empty)	Скопировано в «{name}»: {what}; в исходном файле страницы остались (он изменился во время перетаскивания или остался бы пустым)
+	Copied {what} to {name}; {source} kept them: it would be left without pages, or its pages can't be removed	Скопировано в «{name}»: {what}; в «{source}» страницы остались: иначе в нём не осталось бы страниц, или удалять из него страницы нельзя
 	Copies, two-sided printing and colour are chosen in the browser's print dialog.	Число копий, двустороннюю печать и цвет выбирают в диалоге печати браузера.
 	Copies, two-sided printing, colour and the printer are chosen in the system print dialog, which opens when you print.	Число копий, двустороннюю печать, цвет и принтер выбирают в системном диалоге печати, который открывается при печати.
 	Copy Image	Копировать изображение
@@ -779,6 +779,7 @@
 	Couldn't check for updates: {e}	Не удалось проверить обновления: {e}
 	Couldn't combine files: {e}	Не удалось объединить файлы: {e}
 	Couldn't copy the image: {e}	Не удалось скопировать изображение: {e}
+	Couldn't copy the pages: {e}	Не удалось скопировать страницы: {e}
 	Couldn't create a PDF: {e}	Не удалось создать PDF: {e}
 	Couldn't download the text recognition models: {e}	Не удалось скачать модели распознавания текста: {e}
 	Couldn't download {name}: {e}	Не удалось скачать {name}: {e}
@@ -1297,6 +1298,7 @@
 	Extract pages…	Извлечь страницы…
 	Extract page…	Извлечь страницу…
 	Extract the original PDF…	Извлечь исходный PDF…
+	Extract the selected pages and save as…	Извлечь выбранные страницы и сохранить как…
 	Extract the selected pages…	Извлечь выбранные страницы…
 	Extracted 1 page	Извлечена 1 страница
 	Extracted {n} pages	Извлечено страниц: {n}
@@ -3499,6 +3501,7 @@
 	The page's words were cleared (undo in the panel)	Слова страницы удалены (отмена на панели)
 	The pages already scanned were kept in the document.	Уже отсканированные страницы сохранены в документе.
 	The pages were extracted but not deleted, because the document changed while you were choosing a folder.	Страницы извлечены, но не удалены: документ изменился, пока вы выбирали папку.
+	The pages weren't copied: {name} changed during the drag	Страницы не скопированы: «{name}» изменился во время перетаскивания
 	The paragraph's font as the PDF names it, how much of it the document carries, and whether this computer has it.	Шрифт абзаца, как его называет PDF: сколько его встроено в документ и есть ли он на этом компьютере.
 	The password is incorrect.	Неверный пароль.
 	The password is only used to read the file; it isn't saved.	Пароль используется только для чтения файла; он не сохраняется.

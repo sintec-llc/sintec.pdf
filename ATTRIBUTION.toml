@@ -18,7 +18,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "licenses/craft-i18n-LICENSE-MIT.txt"
 kind = "translation"
 usage = "Russian UI strings, embedded by crates/ui-egui/build.rs and looked up through craft-libs' craft-i18n crate"
-sha256 = "7d0016fad94536a3e8fddfa5eee5316789cb83350f7b205805a4ed83d9e093a7"
+sha256 = "0430f117cd23419e12e5eed729d0387931193ad5c3cce5d5c5a40541caa72088"
 
 [[asset]]
 path = "assets/icons/accessibility.svg"

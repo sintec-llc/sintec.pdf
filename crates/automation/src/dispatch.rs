@@ -158,6 +158,8 @@ impl Automation {
             "page_insert_blank" => self.insert_blank(&a)?,
             "page_insert_file" => self.insert_file(&a)?,
             "page_extract" => self.page_extract(&a)?,
+            "page_extract_save_as" => self.page_extract_save_as(&a)?,
+            "page_transfer" => self.page_transfer(&a)?,
             "doc_combine" => self.doc_combine(&a)?,
             "doc_create_multiple" => self.doc_create_multiple(&a)?,
             "doc_split" => self.doc_split(&a)?,
