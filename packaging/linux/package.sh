@@ -29,9 +29,6 @@ set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../env.sh"
 HERE="$ROOT/packaging/linux"
 APP_ID=io.github.sintec_llc.sintec_pdf
-# The hicolor icons keep the upstream file name in assets/ (assets/app-icon/README.md); they are
-# installed under the app id.
-ICON_STEM=ai.storyteller.pdfcraft
 # Where the app looks for its OCR models and substitute fonts from <bin>:
 # pdfcraft_ocr::Models::dirs_beside_exe and pdfcraft_engine::text_fonts::bundled_directories.
 SHARE=sintec-pdf
@@ -86,7 +83,7 @@ install -Dm644 "$HERE/$APP_ID.desktop" "$STAGE/usr/share/applications/$APP_ID.de
 mkdir -p "$STAGE/usr/share/metainfo"
 sed -e "s/@VERSION@/$VERSION/g" -e "s/@DATE@/$PDFCRAFT_BUILD_DATE/g" \
   "$HERE/$APP_ID.metainfo.xml.in" >"$STAGE/usr/share/metainfo/$APP_ID.metainfo.xml"
-for icon in "$ROOT"/assets/app-icon/hicolor/*/apps/"$ICON_STEM.png"; do
+for icon in "$ROOT"/assets/app-icon/hicolor/*/apps/"$APP_ID.png"; do
   size="$(basename "$(dirname "$(dirname "$icon")")")"
   install -Dm644 "$icon" "$STAGE/usr/share/icons/hicolor/$size/apps/$APP_ID.png"
 done
@@ -148,7 +145,7 @@ if has appimage; then
   mv "$APPDIR/usr/share/doc" "$WORK/doc-unused"
   ln -s usr/bin/sintec-pdf "$APPDIR/AppRun"
   cp "$HERE/$APP_ID.desktop" "$APPDIR/$APP_ID.desktop"
-  cp "$ROOT/assets/app-icon/hicolor/256x256/apps/$ICON_STEM.png" "$APPDIR/$APP_ID.png"
+  cp "$ROOT/assets/app-icon/hicolor/256x256/apps/$APP_ID.png" "$APPDIR/$APP_ID.png"
   ln -s "$APP_ID.png" "$APPDIR/.DirIcon"
 
   TOOL="${APPIMAGETOOL:-$(command -v appimagetool || true)}"

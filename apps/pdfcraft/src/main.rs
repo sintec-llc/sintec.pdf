@@ -53,22 +53,18 @@ mod text_scale;
 #[path = "windows_manifest.rs"]
 mod windows_manifest;
 
-/// Freedesktop app id: the `.desktop` file name, the hicolor icon name and the Wayland app id /
-/// X11 `WM_CLASS` (packaging/linux/package.sh installs both under it). Sintec.PDF's own on Linux
-/// and the BSDs, so it never shares a launcher entry with an upstream PdfCraft (task 028).
-#[cfg(not(any(windows, target_os = "macos")))]
+/// App id: the Linux/BSD `.desktop` file name, the hicolor icon name and the Wayland app id /
+/// X11 `WM_CLASS` (packaging/linux/package.sh installs both under it); on Windows and macOS only
+/// eframe's fallback storage folder uses it. Sintec.PDF's own, so it never shares a launcher entry
+/// with an upstream PdfCraft.
 const APP_ID: &str = "io.github.sintec_llc.sintec_pdf";
-/// Windows and macOS have no use for the freedesktop id, but eframe also falls back to it for its
-/// storage folder, so it stays the upstream one there.
-#[cfg(any(windows, target_os = "macos"))]
-const APP_ID: &str = "ai.storyteller.pdfcraft";
 
 /// The app icon (assets/app-icon/README.md). macOS gets the version on Apple's icon grid, with a
 /// transparent margin; Windows and Linux get the full-bleed tile.
 #[cfg(target_os = "macos")]
 const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/pdfcraft-1024.png");
 #[cfg(not(target_os = "macos"))]
-const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/ai.storyteller.pdfcraft.png");
+const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/io.github.sintec_llc.sintec_pdf.png");
 
 /// What `-h` / `--help` prints (#4076): a hint, not the full option list (that is this file's
 /// doc comment and the README). Scripts want `pdfcraft-cli`, which never opens a window.
@@ -153,7 +149,7 @@ fn migrate_legacy_folders() {
 
 /// Desktop launchers (GNOME Files, KDE Dolphin…) only recognise an app as the default handler for a
 /// mime type if its `Exec` takes URIs (`%u`/`%U`), not just paths (`%F`); the packaged `.desktop`
-/// file uses `%U` accordingly (packaging/linux/ai.storyteller.pdfcraft.desktop). Decode a local
+/// file uses `%U` accordingly (packaging/linux/io.github.sintec_llc.sintec_pdf.desktop). Decode a local
 /// `file://` argument (`file:///path` or `file://localhost/path`) to a plain path here so the rest
 /// of the app, which only ever opens paths, is unaffected. Other schemes (`http://`, `mailto:`…),
 /// URIs naming another host, and plain paths pass through untouched.
@@ -377,7 +373,7 @@ fn native_options(integrated: bool, app_frame: bool, renderer: eframe::Renderer)
         .with_inner_size([1440.0, 920.0])
         .with_min_inner_size(pdfcraft_ui_egui::MIN_WINDOW_SIZE)
         .with_drag_and_drop(true)
-        // Wayland app id: matches packaging/linux/ai.storyteller.pdfcraft.desktop.
+        // Wayland app id: matches packaging/linux/io.github.sintec_llc.sintec_pdf.desktop.
         .with_app_id(APP_ID);
     // eframe replaces ICON_BIG with a system-sized icon on its first active frame.
     // An explicitly empty icon disables that setter (None selects eframe's default).
