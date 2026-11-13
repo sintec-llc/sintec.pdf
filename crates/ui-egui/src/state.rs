@@ -181,6 +181,8 @@ pub enum Dialog {
     RecognizeText,
     /// Scan & OCR ▸ Enhance scanned file.
     EnhanceScan,
+    /// Sintec.PDF: «Page scanned», after Scan into document: scan another page or finish.
+    ScanMore,
     /// The JavaScript console (⌘J).
     JsConsole,
     /// Document JavaScripts.

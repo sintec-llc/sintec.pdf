@@ -260,16 +260,20 @@ pub static TOOL_GROUPS: &[ToolGroup] = &[
         hue: GREEN,
         badge: None,
         availability: Ready,
-        sections: &[ToolSection {
-            title: "Recognize text",
-            items: &[
-                item("In this file", "scan-text", "ocr.recognize", Ready),
-                item("In multiple files", "files", "ocr.recognize_batch", Ready),
-                item("Enhance scanned file", "sparkles", "ocr.enhance", Ready),
-                item("Enhance camera image", "camera", "ocr.enhance_camera", Ready),
-                item("Correct recognized text", "text-select", "ocr.correct", Ready),
-            ],
-        }],
+        sections: &[
+            // Sintec.PDF: Scan into document.
+            ToolSection { title: "Scan", items: &[item("Scan into document", "scan", "page.scan", Ready)] },
+            ToolSection {
+                title: "Recognize text",
+                items: &[
+                    item("In this file", "scan-text", "ocr.recognize", Ready),
+                    item("In multiple files", "files", "ocr.recognize_batch", Ready),
+                    item("Enhance scanned file", "sparkles", "ocr.enhance", Ready),
+                    item("Enhance camera image", "camera", "ocr.enhance_camera", Ready),
+                    item("Correct recognized text", "text-select", "ocr.correct", Ready),
+                ],
+            },
+        ],
     },
     ToolGroup {
         id: "protect",
