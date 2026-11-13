@@ -2847,11 +2847,11 @@ title = "Insert pages from a scanner"
 area = "D"
 tier = "P2"
 milestone = "M14"
-status = "planned"
-commands = []
+status = "partial"
+commands = ["page.scan"]
 tools = []
-evidence = []
-notes = ""
+evidence = ["crates/ui-egui/tests/it/scan.rs::scanned_pages_go_in_after_the_selection_one_after_another", "crates/ui-egui/tests/it/scan.rs::a_scan_with_nothing_open_starts_a_new_document", "crates/ui-egui/tests/it/scan.rs::the_scan_another_page_dialog_scans_on_and_done_closes_it", "crates/ui-egui/tests/it/scan.rs::a_cancelled_or_failed_scan_changes_nothing"]
+notes = "Sintec.PDF: Scan into document (Scan & OCR, Pages menu, Organize pages ▸ Insert) scans a page through the scanner's own Windows (WIA) dialog, or on Linux SANE's scanimage at 300 dpi with no dialog (crates/engine/src/scan.rs), and inserts it after the selection, or starts a new document when none is open; «Scan another page» then scans the next one in after it. Missing: macOS; TWAIN; an automation tool (it needs a real scanner); tests replace the scanner with queued pages (scan_fakes)."
 
 [[feature]]
 id = "organize.insert-from-web"

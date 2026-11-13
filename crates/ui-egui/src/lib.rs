@@ -226,6 +226,7 @@ use workflows::optimize_ui;
 use workflows::print_paper;
 use workflows::print_ui;
 use workflows::scan_clean_ui;
+use workflows::scan_ui;
 use workflows::web_print;
 
 /// Files dropped on a document's page grid or its Pages panel.
@@ -753,6 +754,12 @@ pub struct PdfCraftApp {
     /// Scan & OCR ▸ Enhance scanned file: the dialog's choices and the running clean-up.
     pub scan_clean_draft: scan_clean_ui::ScanCleanDraft,
     pub scan_clean_run: Option<scan_clean_ui::ScanCleanRun>,
+    /// Sintec.PDF: Scan into document, while the scanner's dialog is open.
+    pub scan_run: Option<scan_ui::ScanRun>,
+    /// Where the next scanned page goes: the document and the page index it is inserted at.
+    pub scan_target: Option<(DocId, usize)>,
+    /// Tests: pages the "scanner" hands over instead of starting the real one.
+    pub scan_fakes: Vec<scan_ui::ScanResult>,
     /// A background job's progress card (see [`widgets::progress_notice`]).
     pub progress_notice: Option<widgets::ProgressNotice>,
     /// Pages copied or cut in Organize Pages, ready to paste (into any document).

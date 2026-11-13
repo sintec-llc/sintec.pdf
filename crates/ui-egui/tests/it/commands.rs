@@ -48,7 +48,9 @@ fn harness() -> Harness<'static, PdfCraftApp> {
 
 /// Commands that open a native file picker can't run headless.
 /// (Create ▸ Clipboard reads the system clipboard: tests use `create_from_clip`.)
+/// (Scan opens the real scanner's dialog: tests use `scan_fakes`, see scan.rs.)
 const PICKERS: &[&str] = &[
+    "page.scan",
     "file.open",
     "page.combine",
     "page.insert",

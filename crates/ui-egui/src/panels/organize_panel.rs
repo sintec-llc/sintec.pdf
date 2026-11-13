@@ -130,6 +130,10 @@ pub(crate) fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
                 if ui.button(tl!("Insert pages from a file…")).clicked() {
                     act = Some(Act::View(ViewAction::InsertFromFile));
                 }
+                // Sintec.PDF: pages from the scanner, after the selection.
+                if ui.button(tl!("Scan into document…")).clicked() {
+                    act = Some(Act::Command("page.scan"));
+                }
                 if ui.button(tl!("Duplicate pages")).clicked() {
                     act = Some(Act::Command("page.duplicate"));
                 }
