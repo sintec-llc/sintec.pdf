@@ -30,8 +30,8 @@ fn main() -> Result<(), String> {
         println!("  estimate took {:.2} s", t.elapsed().as_secs_f32());
         for l in Level::ALL {
             let t = std::time::Instant::now();
-            match s.reduced_bytes(id, l) {
-                Ok((out, _)) => {
+            match s.reduced_bytes_at(id, l) {
+                Ok((out, ..)) => {
                     let est = estimated.iter().find(|(x, _)| *x == l).map_or(0, |(_, b)| *b);
                     println!(
                         "  {:<6} {:>10} ({:>5.1}% smaller)  estimate {:>10} ({:+.1}%)  {:.2} s",

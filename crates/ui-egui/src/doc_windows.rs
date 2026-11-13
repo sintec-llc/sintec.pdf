@@ -3,32 +3,28 @@
 //! A tab dragged out of the tab strip opens in a new window; dragged onto another window's strip
 //! it joins that window, and the window it left closes if that was its last tab
 //! ([`PdfCraftApp::drop_tab_on_window`]); dragged along its own strip it moves there. Every window shows the same
-//! tools and panels for its own tabs, and pages drag between documents in any windows.
+//! tools and panels for its own tabs.
 //!
 //! The desktop app opens a torn-off tab in a process of its own ([`crate::tear_off`]); these
 //! windows are the fallback where it can't. They are egui viewports in this one process, so they
-//! share the documents, undo history, settings and clipboard. `DocView::window` says which window shows a tab (0: the main window);
+//! share the documents, undo history, settings and clipboard. Each has its own split-view state
+//! (`DocWindow::panes`, swapped in while it is drawn) and is never split. `DocView::window` says which window shows a tab (0: the main window);
 //! while a window is drawn, `active` is its shown tab and `current_window` is its id.
 //!
 //! A drag started in one window gets every pointer event until the button is let go, wherever the
 //! pointer is, so a drop onto another window is found from where each window drew its tab strip
-//! and Pages panel last frame, in screen points ([`crate::WindowGeometry`]). Windows of other
+//! last frame, in screen points ([`crate::WindowGeometry`]). Windows of other
 //! processes publish their strips through [`crate::tab_transfer`].
 
 use egui::{Context, Pos2, Rect, Ui, Vec2, vec2};
 use pdfcraft_engine::DocId;
 
-use crate::{DocWindow, Mode, PdfCraftApp, chrome, dialogs, palette, panels, theme};
+use crate::{DocWindow, PdfCraftApp, chrome, dialogs, palette, theme};
 
 /// Where this window's content starts on the screen (zero when the platform doesn't say, as in
 /// tests, where every window is drawn inside the main one).
 pub(crate) fn screen_offset(ctx: &Context) -> Vec2 {
     ctx.input(|i| i.viewport().inner_rect).map_or(Vec2::ZERO, |r| r.min.to_vec2())
-}
-
-/// The gap (0 = before the first) nearest `y` among thumbnails `rows`, top to bottom.
-pub(crate) fn gap_at(rows: &[Rect], y: f32) -> usize {
-    rows.iter().position(|r| y < r.center().y).unwrap_or(rows.len())
 }
 
 /// The gap nearest `x` among tabs `tabs`, left to right.
@@ -37,6 +33,11 @@ pub(crate) fn tab_gap(tabs: &[(DocId, Rect)], x: f32) -> Option<DocId> {
 }
 
 impl PdfCraftApp {
+    /// What a tab drag shows under the pointer right now, if a tab is dragged.
+    pub fn drag_ghost(&self) -> Option<&crate::drag_ghost::Ghost> {
+        self.drag_ghost.as_ref().filter(|_| self.tab_drag.is_some())
+    }
+
     fn view_index(&self, doc: DocId) -> Option<usize> {
         self.views.iter().position(|v| v.id == doc)
     }
@@ -70,7 +71,7 @@ impl PdfCraftApp {
 
     /// Move tab `doc` into window `window`, before tab `before` (`None`: after that window's last
     /// tab). It becomes the shown tab there; its old window shows a neighbour.
-    pub fn move_tab(&mut self, doc: DocId, window: u64, before: Option<DocId>) {
+    pub fn move_tab_to_window(&mut self, doc: DocId, window: u64, before: Option<DocId>) {
         let Some(from) = self.view_index(doc) else { return };
         if before == Some(doc) {
             return;
@@ -110,11 +111,11 @@ impl PdfCraftApp {
     }
 
     /// Tab `doc` was let go over the tab strip of window `window` of this process, before tab
-    /// `before`: it moves there ([`Self::move_tab`]), and the window it left closes when that was
+    /// `before`: it moves there ([`Self::move_tab_to_window`]), and the window it left closes when that was
     /// its last tab ([`Self::close_emptied_window`]).
     pub fn drop_tab_on_window(&mut self, doc: DocId, window: u64, before: Option<DocId>) {
         let Some(from) = self.view_index(doc).and_then(|i| self.views.get(i)).map(|v| v.window) else { return };
-        self.move_tab(doc, window, before);
+        self.move_tab_to_window(doc, window, before);
         if from != window {
             self.close_emptied_window(from, Some(window));
         }
@@ -171,8 +172,8 @@ impl PdfCraftApp {
     pub fn tear_off_tab(&mut self, doc: DocId, at: Option<Pos2>) {
         let id = self.next_window_id;
         self.next_window_id = self.next_window_id.saturating_add(1);
-        self.doc_windows.push(DocWindow { id, active: Some(doc), spawn_at: at });
-        self.move_tab(doc, id, None);
+        self.doc_windows.push(DocWindow { id, active: Some(doc), spawn_at: at, panes: Default::default() });
+        self.move_tab_to_window(doc, id, None);
     }
 
     /// Close torn-off window `id`: its tabs go back to the main window, so nothing unsaved is lost.
@@ -181,51 +182,6 @@ impl PdfCraftApp {
             v.window = 0;
         }
         self.doc_windows.retain(|w| w.id != id);
-    }
-
-    /// Pages dragged out of this window's Pages panel and let go over another window: into its
-    /// Pages panel at the gap there, or onto one of its tabs (after the last page). The drag ends
-    /// with the button, in the window it started in.
-    pub(crate) fn finish_page_transfer_drop(&mut self, ctx: &Context) {
-        let Some(tr) = self.page_transfer.as_ref().filter(|tr| tr.window == self.current_window) else { return };
-        let from = tr.from;
-        if ctx.input(|i| i.pointer.primary_down())
-            && let Some(p) = ctx.input(|i| i.pointer.latest_pos())
-        {
-            let count = tr.pages.len();
-            let title = format!("{} · {}", crate::i18n::trn(crate::i18n::current(), count as u64, "{n} page", "{n} pages"), tr.name);
-            let page = tr.pages.first().copied().unwrap_or(0);
-            self.drag_ghost = Some(crate::drag_ghost::Ghost { screen: p + screen_offset(ctx), title, doc: from, page, pages: count, preview: true });
-        }
-        if ctx.input(|i| i.pointer.primary_released())
-            && let Some(p) = ctx.input(|i| i.pointer.latest_pos())
-        {
-            let screen = p + screen_offset(ctx);
-            let remove = ctx.input(|i| i.modifiers.shift);
-            let mut target: Option<(DocId, Option<usize>)> = None;
-            for g in self.window_geometry.iter().filter(|g| g.window != self.current_window) {
-                if let Some((doc, area, rows)) = &g.pages
-                    && area.contains(screen)
-                    && *doc != from
-                {
-                    target = Some((*doc, Some(gap_at(rows, screen.y))));
-                    break;
-                }
-                if let Some((doc, _)) = g.tabs.iter().find(|(d, r)| r.contains(screen) && *d != from) {
-                    target = Some((*doc, None));
-                    break;
-                }
-            }
-            if let Some((doc, at)) = target
-                && let Some(index) = self.view_index(doc)
-            {
-                self.drop_page_transfer(index, at, remove);
-            }
-        }
-        if !ctx.input(|i| i.pointer.primary_down()) {
-            self.page_transfer = None;
-            self.tab_hover = None;
-        }
     }
 
     /// Draw the torn-off windows (from the main window's frame). Only as the platform's own
@@ -246,7 +202,11 @@ impl PdfCraftApp {
                 .or_else(|| self.views.iter().find(|v| v.window == id).and_then(|v| self.session.get(v.id)))
                 .map(|d| d.display_name());
             let title = name.map_or_else(|| "Sintec.PDF".to_owned(), |n| format!("{n} — Sintec.PDF"));
-            let mut builder = egui::ViewportBuilder::default().with_title(title).with_inner_size([1100.0, 780.0]).with_min_inner_size([560.0, 380.0]);
+            let mut builder = egui::ViewportBuilder::default()
+                .with_title(title)
+                .with_inner_size([1100.0, 780.0])
+                .with_min_inner_size([560.0, 380.0])
+                .with_decorations(!self.draws_window_frame());
             if let Some(p) = w.spawn_at {
                 // Under the pointer, as if carried there by its tab.
                 builder = builder.with_position(p - vec2(120.0, 18.0));
@@ -268,42 +228,24 @@ impl PdfCraftApp {
         let main_active = self.active;
         self.saved_main_active = Some(main_active);
         self.current_window = id;
+        // The window's own split-view state: its strip and page area are not the main window's.
+        if let Some(w) = self.doc_windows.iter_mut().find(|w| w.id == id) {
+            std::mem::swap(&mut self.panes, &mut w.panes);
+        }
         let wanted = self.doc_windows.iter().find(|w| w.id == id).and_then(|w| w.active);
         self.active = wanted
             .and_then(|d| self.views.iter().position(|v| v.id == d && v.window == id))
             .or_else(|| self.views.iter().position(|v| v.window == id));
         if self.active.is_some() {
-            self.shortcuts(&ctx);
-            if let Some(view) = self.active.and_then(|i| self.views.get_mut(i)) {
-                view.objects.set_input_blocked(false);
+            self.settle_panes();
+            if self.draws_window_frame() {
+                crate::platform::window_controls::resize_edges(&ctx);
             }
-            let t = theme::Tokens::get(&ctx);
             chrome::tab_strip(self, ui);
             chrome::mode_bar(self, ui);
-            // As the main window: the docking workspace lays out the tool panels, the inspector and
-            // the page; Read mode shows the page with only the navigation panes.
-            let shown = self.active.filter(|&i| self.views.get(i).is_some_and(|v| v.window == id));
-            if shown.is_some() {
-                chrome::right_rail(self, ui);
-                if self.mode == Mode::Read && self.right.is_some() {
-                    egui::Panel::right("read_right_panel")
-                        .resizable(true)
-                        .default_size(330.0)
-                        .size_range(260.0..=520.0)
-                        .frame(egui::Frame::NONE)
-                        .show(ui, |ui| panels::right_panel(self, ui));
-                }
-            }
-            egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| {
-                if let Some(i) = shown {
-                    if self.mode == Mode::Read {
-                        crate::canvas::document_area(self, i, ui);
-                    } else {
-                        crate::docking::show(self, ui);
-                    }
-                }
-            });
-            crate::widgets::page_cursor_only_on_the_page(&ctx);
+            crate::panels::side_panels::show(self, ui);
+            let t = theme::Tokens::get(&ctx);
+            egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| crate::panes::page_area(self, ui));
             self.process_pending_edits();
             let overlay = self.dialog.is_some() || self.palette_open;
             if overlay && self.overlay_window.is_none() {
@@ -313,32 +255,19 @@ impl PdfCraftApp {
                 palette::show(self, &ctx);
                 dialogs::show(self, &ctx);
             }
-            self.finish_page_transfer_drop(&ctx);
             if crate::drag_ghost::paint(self, &ctx) {
                 self.ghost_painted = true;
             }
-            crate::widgets::hand_over_clickables(&ctx);
         }
         let shown = self.active.and_then(|i| self.views.get(i)).filter(|v| v.window == id).map(|v| v.id);
-        if let (Some(d), Some(w)) = (shown, self.doc_windows.iter_mut().find(|w| w.id == id)) {
-            w.active = Some(d);
+        if let Some(w) = self.doc_windows.iter_mut().find(|w| w.id == id) {
+            std::mem::swap(&mut self.panes, &mut w.panes);
+            if let Some(d) = shown {
+                w.active = Some(d);
+            }
         }
         let restored = self.saved_main_active.take().unwrap_or(main_active);
         self.active = restored.filter(|&i| self.views.get(i).is_some_and(|v| v.window == 0));
         self.current_window = 0;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn gaps_follow_the_pointer() {
-        let rows = [Rect::from_min_size(Pos2::new(0.0, 0.0), vec2(10.0, 10.0)), Rect::from_min_size(Pos2::new(0.0, 20.0), vec2(10.0, 10.0))];
-        assert_eq!(gap_at(&rows, -5.0), 0);
-        assert_eq!(gap_at(&rows, 12.0), 1);
-        assert_eq!(gap_at(&rows, 99.0), 2);
-        assert_eq!(gap_at(&[], 3.0), 0);
     }
 }

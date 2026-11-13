@@ -454,7 +454,10 @@ mod transport {
     use std::sync::{Arc, Condvar, Mutex, PoisonError, mpsc};
     use std::time::Instant;
 
-    use super::*;
+    use super::{
+        CONNECT_TIMEOUT, Entry, HEARTBEAT, IO_TIMEOUT, MAX_MESSAGE, MAX_QUEUE, MAX_REPLY, PEERS_REFRESH, REPLY_TIMEOUT, Registry, Strip, TAKE_WAIT,
+        Take, Target, now_secs, parse_reply, parse_request, reason, reply_line, request_line,
+    };
 
     enum State {
         Waiting,
@@ -798,7 +801,7 @@ impl crate::PdfCraftApp {
         };
         let window = if take.window == 0 || self.doc_windows.iter().any(|w| w.id == take.window) { take.window } else { 0 };
         let before = self.views.iter().filter(|v| v.window == window && v.id != doc).nth(take.before).map(|v| v.id);
-        self.move_tab(doc, window, before);
+        self.move_tab_to_window(doc, window, before);
         if take.page > 0
             && let Some(view) = self.views.iter_mut().find(|v| v.id == doc)
         {
