@@ -16,7 +16,7 @@
 pub const UPDATE_APP: craft_update::app::App = craft_update::app::App {
     name: "Sintec.PDF",
     developer: "Sintec LLC",
-    icon_png: Some(include_bytes!("../../../assets/app-icon/hicolor/128x128/apps/ai.storyteller.pdfcraft.png")),
+    icon_png: Some(include_bytes!("../../../assets/app-icon/hicolor/128x128/apps/io.github.sintec_llc.sintec_pdf.png")),
     accent: Some([0xb7, 0x02, 0x28]),
     // Sintec.PDF's own releases, never upstream PdfCraft's: craft-update downloads only from
     // `sintec-llc/sintec.pdf`, reads its assets as `sintec-pdf-<version>-<os>-<arch>.<ext>`
@@ -183,7 +183,7 @@ use state::CopyPage;
 #[cfg(not(target_arch = "wasm32"))]
 use state::OpenRequest;
 pub use state::{
-    CommentClip, CustomDraft, Dialog, DuplicateDraft, LeftPanel, LinkOrigin, Mode, NumberDraft, OpenOutcome, PageClip, PagePropsDraft,
+    CommentClip, CustomDraft, Dialog, DuplicateDraft, LeftPanel, LinkOrigin, Mode, NumberDraft, OpenOutcome, PageClip, PagePropsDraft, PageTransfer,
     PasswordPrompt, PendingLink, PendingRemoteLink, PropsTab, QuickTool, RECENT_FILES_DEFAULT, RECENT_FILES_MAX, RecentFile, RightPanel,
     UnlockPrompt,
 };
@@ -226,6 +226,7 @@ use workflows::optimize_ui;
 use workflows::print_paper;
 use workflows::print_ui;
 use workflows::scan_clean_ui;
+use workflows::scan_ui;
 use workflows::web_print;
 
 /// Files dropped on a document's page grid or its Pages panel.
@@ -753,10 +754,20 @@ pub struct PdfCraftApp {
     /// Scan & OCR ▸ Enhance scanned file: the dialog's choices and the running clean-up.
     pub scan_clean_draft: scan_clean_ui::ScanCleanDraft,
     pub scan_clean_run: Option<scan_clean_ui::ScanCleanRun>,
+    /// Sintec.PDF: Scan into document, while the scanner's dialog is open.
+    pub scan_run: Option<scan_ui::ScanRun>,
+    /// Where the next scanned page goes: the document and the page index it is inserted at.
+    pub scan_target: Option<(DocId, usize)>,
+    /// Tests: pages the "scanner" hands over instead of starting the real one.
+    pub scan_fakes: Vec<scan_ui::ScanResult>,
     /// A background job's progress card (see [`widgets::progress_notice`]).
     pub progress_notice: Option<widgets::ProgressNotice>,
     /// Pages copied or cut in Organize Pages, ready to paste (into any document).
     pub page_clipboard: Option<PageClip>,
+    /// Sintec.PDF: pages dragged out of a document's Pages panel, while the button is held.
+    pub page_transfer: Option<PageTransfer>,
+    /// The tab a page drag rests on, and since when (it opens after a moment).
+    pub(crate) tab_hover: Option<(usize, f64)>,
     /// Copied comments (XFDF), to paste into this or another document (M14).
     pub comment_clipboard: Option<CommentClip>,
     /// Objects copied together in Edit a PDF, to paste into this or another document (#5989).
@@ -916,6 +927,9 @@ pub struct PdfCraftApp {
     pub field_props: Option<prepare::FieldDraft>,
     pub bulk_field_props: Option<bulk_fields::Draft>,
     pub redact_prefs: RedactPrefs,
+    /// Sintec.PDF: the Redact tool is «Закрыть белым» (`redact.mask`): the areas it marks get a
+    /// white box and no overlay text, without changing the redaction properties.
+    pub mask_mode: bool,
     /// The Redaction Tool Properties kept for the next run (what the last OK with "Make
     /// properties default" ticked left), and the values before the dialog opened, for Cancel.
     pub redact_defaults: RedactPrefs,

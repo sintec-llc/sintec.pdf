@@ -414,7 +414,8 @@ pub(super) fn organize_grid(
                 if resp.double_clicked() {
                     open_page = Some(i);
                 }
-                // Right-click: Extract, Replace, Cut, Copy, Paste (on the selection, or this page).
+                // Right-click: Extract, Extract and save as, Replace, Cut, Copy, Paste (on the
+                // selection, or this page).
                 resp.context_menu(|ui| {
                     if !view.selected.contains(&i) {
                         view.selected = [i].into();
@@ -422,6 +423,10 @@ pub(super) fn organize_grid(
                     }
                     if ui.button(tl!("Extract pages")).clicked() {
                         view.pending_action = Some(ViewAction::Extract);
+                        ui.close();
+                    }
+                    if ui.button(tl!("Extract and save as…")).clicked() {
+                        view.pending_action = Some(ViewAction::ExtractSaveAs);
                         ui.close();
                     }
                     if ui.button(tl!("Split document…")).clicked() {

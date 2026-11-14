@@ -458,6 +458,7 @@ impl PdfCraftApp {
                 self.dialog = Some(Dialog::PageBoxes);
             }
             "page.extract" => self.open_extract_dialog(),
+            "page.extract_save_as" => self.extract_save_as(),
             "page.rotate_dialog" => {
                 if let Some(i) = active {
                     let n = self.session.get(self.views[i].id).map_or(1, |d| d.info.pages.len());
@@ -553,6 +554,7 @@ impl PdfCraftApp {
             "export.text" => self.dialog = Some(Dialog::Export(crate::export_ui::ExportKind::Text)),
             "ocr.recognize" => self.dialog = Some(Dialog::RecognizeText),
             "ocr.enhance" => self.dialog = Some(Dialog::EnhanceScan),
+            "page.scan" => self.start_scan(),
             "ocr.recognize_batch" => self.ocr_files_dialog(),
             "ocr.correct" => self.ocr_verify.open = true,
             "edit.edit_text" => {
@@ -769,7 +771,12 @@ impl PdfCraftApp {
             "a11y.autotag_fields" => self.autotag_form_fields(),
             "a11y.tags" => self.choose_right_panel(Some(RightPanel::Tags)),
             "a11y.reading_options" => self.dialog = Some(Dialog::Properties(crate::PropsTab::Advanced)),
-            "redact.mark" => {
+            "redact.mark" | "redact.mask" => {
+                // Sintec.PDF «Закрыть белым» marks white areas; Redact uses the redaction properties.
+                self.mask_mode = id == "redact.mask";
+                if self.mask_mode {
+                    self.notify_tr("Drag over the areas to cover with white, then Apply redactions: what is under them is removed for good.");
+                }
                 self.quick_tool = crate::QuickTool::Redact;
                 self.left = crate::LeftPanel::Tool("redact");
                 self.reveal_tools();
@@ -781,7 +788,7 @@ impl PdfCraftApp {
                     if let Some((page, quads)) = self.views[i].selection_quads(info) {
                         self.views[i].clear_selection();
                         let author = self.comment_prefs.author.clone();
-                        self.apply_edit(self.redact_prefs.mark(page, quads, &author));
+                        self.apply_edit(self.mark_prefs().mark(page, quads, &author));
                     }
                 }
             }

@@ -579,6 +579,7 @@ impl PdfCraftApp {
                 self.save_active(SaveTarget::InPlace);
             }
             Some(crate::canvas::ViewAction::Extract) => self.open_extract_dialog(),
+            Some(crate::canvas::ViewAction::ExtractSaveAs) => self.extract_save_as(),
             Some(crate::canvas::ViewAction::Split) => self.dialog = Some(crate::Dialog::Split),
             Some(crate::canvas::ViewAction::SplitBeforeSelected) => {
                 self.split_draft.mode = crate::SplitMode::Selection;
@@ -780,6 +781,83 @@ impl PdfCraftApp {
             self.notify_fmt("Cut {what}", &[("what", &what)]);
         } else {
             self.notify_fmt("Copied {what}", &[("what", &what)]);
+        }
+    }
+
+    /// Sintec.PDF: start a page drag that can leave the active document: its `pages` (0-based).
+    pub fn begin_page_transfer(&mut self, pages: Vec<usize>) {
+        let Some((_, id)) = self.active_ids() else { return };
+        let Some(doc) = self.session.get(id) else { return };
+        if pages.is_empty() {
+            return;
+        }
+        self.page_transfer = Some(crate::PageTransfer { from: id, generation: doc.edit_generation(), pages });
+    }
+
+    /// Sintec.PDF: drop the dragged pages into the document of tab `target` before its page `at`
+    /// (`None`: after its last page), which then shows with them selected. With `remove` they
+    /// also leave the document they came from, unless that would leave it without pages or it
+    /// may not lose pages. Both are ordinary edits, each undone in its own document. Nothing is
+    /// copied when the source changed during the drag: its page numbers may name other pages.
+    pub fn drop_page_transfer(&mut self, target: usize, at: Option<usize>, remove: bool) {
+        let Some(tr) = self.page_transfer.take() else { return };
+        self.tab_hover = None;
+        let Some(target_id) = self.views.get(target).map(|v| v.id) else { return };
+        if target_id == tr.from {
+            return;
+        }
+        // The drag is over for the document the pages come from too: its own Pages panel, drawn
+        // after the tab strip, must not take the same release as a move inside it.
+        if let Some(view) = self.views.iter_mut().find(|v| v.id == tr.from) {
+            view.panel_drag = None;
+        }
+        let Some(source) = self.session.get(tr.from) else { return };
+        let source_name = source.display_name();
+        if source.edit_generation() != tr.generation {
+            self.notify_fmt("The pages weren't copied: {name} changed during the drag", &[("name", &source_name)]);
+            return;
+        }
+        let distinct = tr.pages.iter().collect::<std::collections::BTreeSet<_>>().len();
+        let can_remove = source.allows_assembly() && source.read_only_reason.is_none() && distinct < source.info.pages.len();
+        let Some(target_name) = self.session.get(target_id).map(|d| d.display_name()) else { return };
+        let edit = match self.session.page_transfer_edit(tr.from, &tr.pages, target_id, at) {
+            Ok(edit) => edit,
+            Err(e) => return self.notify_fmt("Couldn't copy the pages: {e}", &[("e", &e.to_string())]),
+        };
+        let at = match &edit {
+            Edit::InsertPagesFrom { at, .. } => *at,
+            _ => 0,
+        };
+        let count = tr.pages.len();
+        let previous = self.active;
+        self.active = Some(target);
+        if !self.apply_edit(edit) {
+            self.active = previous;
+            return;
+        }
+        if let Some(view) = self.views.get_mut(target) {
+            view.select_pages(&(at..at + count).collect::<Vec<_>>());
+            view.go_to_page(at);
+        }
+        let what = if count == 1 { tl!("1 page").to_string() } else { crate::i18n::fmt(tl!("{n} pages"), &[("n", &count.to_string())]) };
+        let source_tab = self.views.iter().position(|v| v.id == tr.from);
+        match (remove, source_tab) {
+            (true, Some(s)) if can_remove => {
+                self.active = Some(s);
+                let mut pages = tr.pages;
+                pages.sort_unstable();
+                pages.dedup();
+                let removed = self.apply_edit(Edit::DeletePages { pages });
+                self.active = Some(target);
+                if removed {
+                    self.notify_fmt("Moved {what} to {name}", &[("what", &what), ("name", &target_name)]);
+                }
+            }
+            (true, _) => self.notify_fmt(
+                "Copied {what} to {name}; {source} kept them: it would be left without pages, or its pages can't be removed",
+                &[("what", &what), ("name", &target_name), ("source", &source_name)],
+            ),
+            (false, _) => self.notify_fmt("Copied {what} to {name}", &[("what", &what), ("name", &target_name)]),
         }
     }
 

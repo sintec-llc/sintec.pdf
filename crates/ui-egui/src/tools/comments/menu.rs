@@ -270,6 +270,11 @@ fn other_colour_swatch(ui: &mut egui::Ui, open: bool) -> egui::Response {
 /// quick colours offer) and, once used, the recent custom colours; returns the colour chosen.
 /// The "+" sits in the first row, so the grid is no taller than before until the picker opens.
 pub fn swatch_grid(ui: &mut egui::Ui, current: Option<Rgb>) -> Option<Rgb> {
+    swatch_grid_of(ui, current, &SWATCHES)
+}
+
+/// Sintec.PDF: [`swatch_grid`] with its own colours (Redaction properties start with White).
+pub fn swatch_grid_of(ui: &mut egui::Ui, current: Option<Rgb>, swatches: &[(&str, Rgb)]) -> Option<Rgb> {
     let mut picked = None;
     let on = |c: &Rgb| current.is_some_and(|cur| same_colour(&cur, c));
     // Keyed on this grid's own place in the parent, so two grids in one dialog open their
@@ -280,7 +285,7 @@ pub fn swatch_grid(ui: &mut egui::Ui, current: Option<Rgb>) -> Option<Rgb> {
     let value_id = open_id.with("value");
     let mut open = ui.data(|d| d.get_temp::<bool>(open_id)).unwrap_or(false);
     egui::Grid::new(base.with("swatches")).spacing(vec2(6.0, 6.0)).show(ui, |ui| {
-        for (i, (name, c)) in SWATCHES.iter().enumerate() {
+        for (i, (name, c)) in swatches.iter().enumerate() {
             if swatch(ui, *c, on(c), tl!(name)).clicked() {
                 picked = Some(*c);
             }

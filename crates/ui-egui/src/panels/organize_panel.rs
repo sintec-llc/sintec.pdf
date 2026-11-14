@@ -114,6 +114,9 @@ pub(crate) fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
                 if icons::button(ui, "file-output", 34.0, false, tl!("Extract pages to a new document")).clicked() {
                     act = Some(Act::View(ViewAction::Extract));
                 }
+                if icons::button(ui, "save", 34.0, false, tl!("Extract and save as…")).clicked() {
+                    act = Some(Act::View(ViewAction::ExtractSaveAs));
+                }
             });
             ui.add_space(2.0);
             // Insert ▸: a blank page, pages from a file, or copies of the selected pages.
@@ -126,6 +129,10 @@ pub(crate) fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
                 }
                 if ui.button(tl!("Insert pages from a file…")).clicked() {
                     act = Some(Act::View(ViewAction::InsertFromFile));
+                }
+                // Sintec.PDF: pages from the scanner, after the selection.
+                if ui.button(tl!("Scan into document…")).clicked() {
+                    act = Some(Act::Command("page.scan"));
                 }
                 if ui.button(tl!("Duplicate pages")).clicked() {
                     act = Some(Act::Command("page.duplicate"));

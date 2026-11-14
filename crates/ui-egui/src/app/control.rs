@@ -339,7 +339,15 @@ impl PdfCraftApp {
                     "hand" => QuickTool::Hand,
                     "crop" => QuickTool::Crop,
                     "enhance-camera" => QuickTool::EnhanceCamera,
-                    "redact" => QuickTool::Redact,
+                    "redact" => {
+                        self.mask_mode = false;
+                        QuickTool::Redact
+                    }
+                    // Sintec.PDF «Закрыть белым».
+                    "mask" => {
+                        self.mask_mode = true;
+                        QuickTool::Redact
+                    }
                     "add-text" => QuickTool::AddText,
                     "edit-text" => QuickTool::EditText,
                     "link" => QuickTool::Link,

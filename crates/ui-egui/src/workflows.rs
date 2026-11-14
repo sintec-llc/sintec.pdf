@@ -18,4 +18,5 @@ pub(super) mod optimize_ui;
 pub(super) mod print_paper;
 pub(super) mod print_ui;
 pub(super) mod scan_clean_ui;
+pub(super) mod scan_ui;
 pub(super) mod web_print;

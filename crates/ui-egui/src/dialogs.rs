@@ -83,6 +83,8 @@ struct Pending {
     a11y_now: bool,
     ocr_now: bool,
     scan_clean_now: bool,
+    /// «Scan another page», acted on once the dialog has closed.
+    scan_next: bool,
     compare_now: bool,
     images_now: bool,
     stamp_now: bool,
@@ -465,6 +467,12 @@ fn dialog_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, dialog: Dialog, req: &m
             let (go, cancel) = crate::scan_clean_ui::body(ui, app, &t);
             req.scan_clean_now = go;
             req.close = go || cancel;
+            return false;
+        }
+        Dialog::ScanMore => {
+            let (next, close) = crate::scan_ui::scan_more_body(ui);
+            req.scan_next = next;
+            req.close = close;
             return false;
         }
         Dialog::AccessibilityOptions => {
@@ -2253,6 +2261,11 @@ fn finish_close(app: &mut PdfCraftApp, dialog: Dialog, modal_closed: bool, req: 
     }
     if req.scan_clean_now {
         app.start_scan_clean();
+    }
+    // After the dialog closed: a page that comes back at once offers «Scan another page» again
+    // instead of being closed with the old dialog.
+    if req.scan_next {
+        app.scan_next();
     }
     if req.compare_now {
         app.run_compare();

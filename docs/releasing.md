@@ -24,7 +24,7 @@ User-facing names say **Sintec.PDF**; crates and build outputs keep upstream's `
 
 ## Base and what we carry
 
-The code is synced with upstream PdfCraft **v0.9.0** (release 0.3.0). On top of it we carry: English
+The code is synced with upstream PdfCraft **v0.21.1** (release 0.4.0). On top of it we carry: English
 and Russian only, the Russian catalog, 46-language OCR (`crates/ocr`), our Windows print path
 (`crates/print/src/spool.rs`), tab tear-off, text-box grips, the floating text panel and font
 substitution, bundled fonts, the scanner, table-aware export, update checks and the MSI installer.
@@ -280,9 +280,9 @@ downloading only the changed blocks. `latest` is the newest published, non-pre-r
 otherwise; the release job checks both.
 
 **Flatpak:** the `flatpak` job turns each arch's tarball into a single-file bundle with
-`packaging/linux/flatpak-bundle.sh` and `flatpak/ai.storyteller.pdfcraft.bundle.yml` (no Rust build;
+`packaging/linux/flatpak-bundle.sh` and `flatpak/io.github.sintec_llc.sintec_pdf.bundle.yml` (no Rust build;
 the same binaries), then installs it and runs `pdfcraft-cli --version` in the sandbox.
-`flatpak/ai.storyteller.pdfcraft.yml` is the from-source manifest for a later Flathub submission;
+`flatpak/io.github.sintec_llc.sintec_pdf.yml` is the from-source manifest for a later Flathub submission;
 packaging-lint keeps the runtime and sandbox permissions (`finish-args`) of the two identical.
 Printing is not available in the Flatpak yet: it runs `lp`, which the freedesktop runtime lacks
 (the job logs a note); it needs the print portal. Users install the bundle with `flatpak install --user pdfcraft-<v>-linux-<arch>.flatpak`; the

@@ -12,6 +12,8 @@
 //!  --cover on|off  --default-layout single|continuous|two-up|two-page  --default-continuous on|off  --default-zoom fit-width|fit-page|<percent>  --always-default-view on|off
 //!  --page-gaps on|off  --default-page-gaps on|off  --recent-files 0..50
 //!  --combine-view grid|list  --combine-zoom 60..200`
+//! `--convert-to-pdf files…` (Explorer ▸ «Преобразовать в PDF») pools the paths of the launches Explorer
+//! starts for one selection (`collect`) and puts them all in the Combine files tab.
 //! `--combine files…` adds the files to the Combine files tab (File Explorer's "Combine files in
 //! PdfCraft", #585), of the PdfCraft already running when there is one.
 //!
@@ -36,6 +38,7 @@ use pdfcraft_ui_egui::PdfCraftApp;
 
 #[cfg(target_os = "macos")]
 mod apple_events;
+mod collect;
 mod compositor_gpu;
 mod decorations;
 mod logging;
@@ -50,22 +53,18 @@ mod text_scale;
 #[path = "windows_manifest.rs"]
 mod windows_manifest;
 
-/// Freedesktop app id: the `.desktop` file name, the hicolor icon name and the Wayland app id /
-/// X11 `WM_CLASS` (packaging/linux/package.sh installs both under it). Sintec.PDF's own on Linux
-/// and the BSDs, so it never shares a launcher entry with an upstream PdfCraft (task 028).
-#[cfg(not(any(windows, target_os = "macos")))]
+/// App id: the Linux/BSD `.desktop` file name, the hicolor icon name and the Wayland app id /
+/// X11 `WM_CLASS` (packaging/linux/package.sh installs both under it); on Windows and macOS only
+/// eframe's fallback storage folder uses it. Sintec.PDF's own, so it never shares a launcher entry
+/// with an upstream PdfCraft.
 const APP_ID: &str = "io.github.sintec_llc.sintec_pdf";
-/// Windows and macOS have no use for the freedesktop id, but eframe also falls back to it for its
-/// storage folder, so it stays the upstream one there.
-#[cfg(any(windows, target_os = "macos"))]
-const APP_ID: &str = "ai.storyteller.pdfcraft";
 
 /// The app icon (assets/app-icon/README.md). macOS gets the version on Apple's icon grid, with a
 /// transparent margin; Windows and Linux get the full-bleed tile.
 #[cfg(target_os = "macos")]
 const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/pdfcraft-1024.png");
 #[cfg(not(target_os = "macos"))]
-const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/ai.storyteller.pdfcraft.png");
+const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/io.github.sintec_llc.sintec_pdf.png");
 
 /// What `-h` / `--help` prints (#4076): a hint, not the full option list (that is this file's
 /// doc comment and the README). Scripts want `pdfcraft-cli`, which never opens a window.
@@ -78,6 +77,7 @@ Options:
   --two-paged                 open command-line PDFs in noncontinuous two-page view
   --new-window                open a window of its own instead of passing the files to a running Sintec.PDF
   --create-images [images…]   put the images in one PDF and ask for the page DPI
+  --convert-to-pdf files…     File Explorer's Convert to PDF: the files go to the Combine files tab (one launch per file is pooled)
   --combine files…            add the files to the Combine files tab, of a running Sintec.PDF if there is one
   --control <file>            enable the UI control channel (pdfcraft-cli ui --control <file> …)
   --page N, --zoom 150, --layout continuous, --theme dark, …
@@ -149,7 +149,7 @@ fn migrate_legacy_folders() {
 
 /// Desktop launchers (GNOME Files, KDE Dolphin…) only recognise an app as the default handler for a
 /// mime type if its `Exec` takes URIs (`%u`/`%U`), not just paths (`%F`); the packaged `.desktop`
-/// file uses `%U` accordingly (packaging/linux/ai.storyteller.pdfcraft.desktop). Decode a local
+/// file uses `%U` accordingly (packaging/linux/io.github.sintec_llc.sintec_pdf.desktop). Decode a local
 /// `file://` argument (`file:///path` or `file://localhost/path`) to a plain path here so the rest
 /// of the app, which only ever opens paths, is unaffected. Other schemes (`http://`, `mailto:`…),
 /// URIs naming another host, and plain paths pass through untouched.
@@ -240,6 +240,15 @@ fn main() -> eframe::Result {
         return print_and_exit(USAGE);
     }
     startup.files = rejoin_split_paths(startup.files, |p| std::path::Path::new(p).is_file());
+    // Explorer starts one process per selected file: pool their paths, and let one launch go on
+    // with all of them (the rest exit without a window). They then go to the Combine files tab.
+    if startup.convert_to_pdf {
+        match collect::collect(startup.files.iter().map(std::path::PathBuf::from).collect(), &collect::spool_dir()) {
+            collect::Role::Handled => return Ok(()),
+            collect::Role::Convert(all) => startup.files = all.iter().map(|p| p.to_string_lossy().into_owned()).collect(),
+        }
+        startup.combine = true;
+    }
     let may_hand_off = startup.may_hand_off();
     let startup::Arguments { files, options, control_file, create_images, combine, two_paged, torn_off, window_pos, recover_key, .. } = startup;
     let integrated = cfg!(target_os = "macos");
@@ -364,7 +373,7 @@ fn native_options(integrated: bool, app_frame: bool, renderer: eframe::Renderer)
         .with_inner_size([1440.0, 920.0])
         .with_min_inner_size(pdfcraft_ui_egui::MIN_WINDOW_SIZE)
         .with_drag_and_drop(true)
-        // Wayland app id: matches packaging/linux/ai.storyteller.pdfcraft.desktop.
+        // Wayland app id: matches packaging/linux/io.github.sintec_llc.sintec_pdf.desktop.
         .with_app_id(APP_ID);
     // eframe replaces ICON_BIG with a system-sized icon on its first active frame.
     // An explicitly empty icon disables that setter (None selects eframe's default).

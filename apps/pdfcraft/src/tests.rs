@@ -744,7 +744,7 @@ fn the_desktop_entry_names_the_window_class() {
 fn the_flatpak_manifests_build_with_the_in_repo_translations() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     assert!(root.join("i18n/locales/ru/pdfcraft.tsv").is_file());
-    for manifest in ["ai.storyteller.pdfcraft.yml", "ai.storyteller.pdfcraft.bundle.yml"] {
+    for manifest in ["io.github.sintec_llc.sintec_pdf.yml", "io.github.sintec_llc.sintec_pdf.bundle.yml"] {
         let text = std::fs::read_to_string(root.join("packaging/linux/flatpak").join(manifest)).unwrap();
         assert!(!text.contains("storytold/craft-i18n") && !text.contains("CRAFT_I18N"), "{manifest}");
     }

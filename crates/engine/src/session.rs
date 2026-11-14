@@ -22,7 +22,10 @@ use crate::{
 mod editing;
 mod files;
 mod save;
+mod transfer;
 mod view;
+
+pub use transfer::Transferred;
 
 #[derive(Default)]
 pub struct Session {

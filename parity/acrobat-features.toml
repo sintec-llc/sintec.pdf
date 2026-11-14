@@ -1307,7 +1307,31 @@ status = "shipped"
 commands = []
 tools = []
 evidence = ["crates/ui-egui/tests/it/view.rs::pages_sidebar_select_all_keeps_current_page_and_keyboard_scope", "crates/ui-egui/tests/it/editing.rs::dragging_pages_panel_thumbnails_reorders_pages", "crates/ui-egui/tests/it/viewer.rs::pages_panel_thumbnails_have_a_context_menu", "crates/ui-egui/tests/it/editing.rs::split_from_pages_panel_context_menu", "crates/ui-egui/tests/it/editing.rs::deleting_pages_from_the_pages_panel_menu", "crates/ui-egui/tests/it/editing.rs::the_delete_key_deletes_pages_picked_in_the_pages_panel_but_never_every_page"]
-notes = "Ctrl/Cmd+A selects every page while the Pages sidebar owns the keyboard, without navigation; Escape clears that selection. Viewer and text-field shortcuts keep their own scope. Drag the selection (or the page grabbed) to reorder, with a drop bar and edge scrolling; right-click offers Split document…, Extract pages, Cut, Copy, Paste after and Delete pages (also the Delete key over the panel). Deleting pages makes the next Save a full rewrite (unsigned files), so the deleted pages leave the file; signed files stay incremental. Not yet: Rotate, Insert and Page labels in the menu, dragging pages between documents, or dropping files onto the panel."
+notes = "Ctrl/Cmd+A selects every page while the Pages sidebar owns the keyboard, without navigation; Escape clears that selection. Viewer and text-field shortcuts keep their own scope. Drag the selection (or the page grabbed) to reorder, with a drop bar and edge scrolling; right-click offers Split document…, Extract pages, Cut, Copy, Paste after and Delete pages (also the Delete key over the panel). Deleting pages makes the next Save a full rewrite (unsigned files), so the deleted pages leave the file; signed files stay incremental. Right-click also offers Extract and save as… (organize.extract-save-as), and thumbnails dragged into another document copy or move there (organize.pages-between-documents). Not yet: Rotate, Insert and Page labels in the menu, or dropping files onto the panel."
+
+[[feature]]
+id = "organize.pages-between-documents"
+title = "Drag pages from one document's thumbnails into another document"
+area = "D"
+tier = "P1"
+milestone = "M4"
+status = "shipped"
+commands = []
+tools = ["page_transfer"]
+evidence = ["crates/engine/src/session/transfer.rs::pages_copy_into_another_document_where_asked", "crates/engine/src/session/transfer.rs::a_move_takes_the_pages_out_of_the_original_but_never_its_last_page", "crates/engine/src/tests.rs::extraction_permissions_refuse_moving_pages_to_another_document", "crates/automation/tests/it/automation.rs::page_transfer_copies_and_moves_pages_between_open_documents", "crates/ui-egui/tests/it/page_transfer.rs::pages_copy_and_move_into_another_document", "crates/ui-egui/tests/it/page_transfer.rs::dragging_thumbnails_onto_another_tab_adds_them_at_its_end", "crates/ui-egui/tests/it/page_transfer.rs::thumbnails_dropped_on_another_documents_pages_panel_go_to_the_gap"]
+notes = "Sintec.PDF. Drag thumbnails from the Pages panel onto another open document's tab: resting on it brings that document to the front, and its Pages panel shows a bar on the gap and \"Copy here (Shift: move)\" / \"Move here\" by the pointer; release there to insert at the gap, or on the tab to add the pages after its last page. A drop copies; Shift at the drop moves (the pages also leave the original, unless that would leave it without pages or its security withholds page changes; it then keeps them and says so). The pages are taken as the original is now, unsaved edits included; nothing is copied if it changed during the drag. Both sides are ordinary edits, each undone in its own document. Refused when the original's security withholds extracting pages. Headless: page_transfer (doc, pages, to, at, move). Not yet: dragging pages between windows, onto the tabs of split view's second pane, or onto the page grid of Organize Pages."
+
+[[feature]]
+id = "organize.extract-save-as"
+title = "Extract pages and save them as a new file in one step"
+area = "D"
+tier = "P2"
+milestone = "M4"
+status = "shipped"
+commands = ["page.extract_save_as"]
+tools = ["page_extract_save_as"]
+evidence = ["crates/ui-egui/tests/it/page_transfer.rs::extract_and_save_as_writes_the_chosen_pages_to_a_new_file", "crates/ui-egui/src/workflows/files.rs::extract_and_save_as_names_the_document_and_its_pages", "crates/automation/tests/it/automation.rs::page_extract_save_as_writes_the_chosen_pages_and_leaves_the_document", "crates/engine/src/tests.rs::extraction_permissions_refuse_moving_pages_to_another_document"]
+notes = "Sintec.PDF. Pages ▸ Extract and save as…, the Pages panel's page tools and right-click menu, the page grid's right-click menu and the Organize Pages panel: the selected pages (or the current page) are written as a new PDF where the user chooses, offered as \"<document> (p. 2-4, 7).pdf\" in the document's folder; the document itself is unchanged. Off where the document's security withholds extracting pages. Headless: page_extract_save_as (doc, pages, out), which command_run also reaches as page.extract_save_as."
 
 [[feature]]
 id = "view.bookmarks-panel"
@@ -2823,11 +2847,11 @@ title = "Insert pages from a scanner"
 area = "D"
 tier = "P2"
 milestone = "M14"
-status = "planned"
-commands = []
+status = "partial"
+commands = ["page.scan"]
 tools = []
-evidence = []
-notes = ""
+evidence = ["crates/ui-egui/tests/it/scan.rs::scanned_pages_go_in_after_the_selection_one_after_another", "crates/ui-egui/tests/it/scan.rs::a_scan_with_nothing_open_starts_a_new_document", "crates/ui-egui/tests/it/scan.rs::the_scan_another_page_dialog_scans_on_and_done_closes_it", "crates/ui-egui/tests/it/scan.rs::a_cancelled_or_failed_scan_changes_nothing"]
+notes = "Sintec.PDF: Scan into document (Scan & OCR, Pages menu, Organize pages ▸ Insert) scans a page through the scanner's own Windows (WIA) dialog, or on Linux SANE's scanimage at 300 dpi with no dialog (crates/engine/src/scan.rs), and inserts it after the selection, or starts a new document when none is open; «Scan another page» then scans the next one in after it. Missing: macOS; TWAIN; an automation tool (it needs a real scanner); tests replace the scanner with queued pages (scan_fakes)."
 
 [[feature]]
 id = "organize.insert-from-web"
@@ -5797,6 +5821,18 @@ commands = ["redact.mark"]
 tools = ["redact_mark"]
 evidence = ["crates/ui-egui/tests/it/redact.rs::marking_applying_and_clearing", "crates/redact/src/tests.rs::images_are_removed_or_have_their_pixels_cleared"]
 notes = "drag a box anywhere else"
+
+[[feature]]
+id = "protect.mask-white"
+title = "Mask areas with white"
+area = "G"
+tier = "P1"
+milestone = "M8"
+status = "shipped"
+commands = ["redact.mask"]
+tools = ["redact_mask"]
+evidence = ["crates/ui-egui/tests/it/mask.rs::mask_areas_with_white_removes_what_is_under_them_for_good", "crates/automation/tests/it/redact_mask.rs::redact_mask_covers_an_area_with_white_and_removes_what_is_under_it"]
+notes = "Sintec.PDF «Закрыть белым», not an Acrobat command: Redact a PDF ▸ Mask areas with white turns the Redact tool into a white mask (drag over areas or select text first); its marks have a white box and no overlay text whatever the redaction properties say, and leave those properties unchanged. Applying them (Redact all / Apply redactions) is ordinary redaction: what is under the areas leaves the file and the white box is drawn into the page content. The redaction properties' colour list also starts with White"
 
 [[feature]]
 id = "protect.redact-pages"

@@ -12,6 +12,24 @@ use crate::{Args, Automation, Result, ToolError, failed};
 
 impl Automation {
     pub(crate) fn redact_mark(&mut self, a: &Args) -> Result<Value> {
+        self.mark_for_redaction(a, false)
+    }
+
+    /// Sintec.PDF «Закрыть белым» (`redact.mask`): marks found like [`Self::redact_mark`]'s,
+    /// with a white box and no overlay text, whatever the redaction properties say. Applied with
+    /// redact_apply, what is under them leaves the file and the white box is drawn into the page.
+    pub(crate) fn redact_mask(&mut self, a: &Args) -> Result<Value> {
+        for key in ["overlay", "code_set", "codes", "fill"] {
+            if a.get(key).is_some() {
+                return Err(ToolError::InvalidArgs(format!(
+                    "redact_mask always draws a white box without overlay text, so {key} is not allowed; use redact_mark for that"
+                )));
+            }
+        }
+        self.mark_for_redaction(a, true)
+    }
+
+    fn mark_for_redaction(&mut self, a: &Args, white_mask: bool) -> Result<Value> {
         let doc = self.doc(a)?;
         let (id, n) = (doc.id, doc.info.pages.len());
         if a.get("page").is_some() && a.get("pages").is_some() {
@@ -49,7 +67,9 @@ impl Automation {
         };
         let author = a.opt_str("author")?.unwrap_or(DEFAULT_AUTHOR).to_string();
         let mut style = Style::default_for(&Shape::Redact { quads: Vec::new(), overlay: String::new(), look: Default::default() });
-        if let Some(c) = a.opt_str("fill")? {
+        if white_mask {
+            style.fill = Some([1.0, 1.0, 1.0]);
+        } else if let Some(c) = a.opt_str("fill")? {
             style.fill = Some(parse_color(c)?);
         }
         // (page, quads) per mark.
@@ -175,7 +195,7 @@ impl Automation {
             .collect();
         let edit = match <[Edit; 1]>::try_from(edits) {
             Ok([one]) => one,
-            Err(edits) => Edit::Batch { label: "Mark for redaction".into(), edits },
+            Err(edits) => Edit::Batch { label: if white_mask { "Mask areas with white" } else { "Mark for redaction" }.into(), edits },
         };
         let mut out = self.apply(a, edit)?;
         out["marked"] = json!(count);

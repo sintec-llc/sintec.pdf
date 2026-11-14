@@ -278,8 +278,13 @@ impl PdfCraftApp {
             reduce: None,
             scan_clean_draft: scan_clean_ui::ScanCleanDraft::default(),
             scan_clean_run: None,
+            scan_run: None,
+            scan_target: None,
+            scan_fakes: Vec::new(),
             progress_notice: None,
             page_clipboard: None,
+            page_transfer: None,
+            tab_hover: None,
             comment_clipboard: None,
             object_clipboard: None,
             object_clip_mark: Default::default(),
@@ -365,6 +370,7 @@ impl PdfCraftApp {
             field_props: None,
             bulk_field_props: None,
             redact_prefs: RedactPrefs::default(),
+            mask_mode: false,
             redact_defaults: RedactPrefs::default(),
             redact_before: None,
             redact_pages_draft: RedactPagesDraft::default(),
@@ -809,6 +815,7 @@ impl PdfCraftApp {
         self.poll_ocr();
         self.poll_optimize();
         self.poll_scan_clean();
+        self.poll_scan();
         self.poll_action();
         // The OCR Verify screen's worker may have finished while no frame was drawn.
         if self.ocr_verify.phase == workflows::ocr_verify::Phase::Running {
@@ -952,6 +959,12 @@ impl PdfCraftApp {
         // FitWindow and CenterWindow, once the document just opened is laid out.
         self.window_preferences_frame(&ctx);
         self.process_pending_edits();
+        // Sintec.PDF: a page drag ends with the button: dropped by now (on a tab or a Pages
+        // panel), or let go elsewhere.
+        if self.page_transfer.is_some() && !ctx.input(|i| i.pointer.primary_down()) {
+            self.page_transfer = None;
+            self.tab_hover = None;
+        }
         // Sintec.PDF: the open paragraph previews typed characters its fonts lack in their stand-ins.
         self.preview_substitutes(&ctx);
         // Edit PDF's text editing shows a page: suggest a font of it with no similar installed
