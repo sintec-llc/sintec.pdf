@@ -262,7 +262,10 @@ fn preserve_target_xattrs(path: &Path, staged: &std::fs::File) -> std::io::Resul
             return Err(std::io::Error::other("extended attributes exceed the 16 MiB per-value or 64 MiB total limit"));
         }
         // Resource forks may return a prefix instead of ERANGE on growth; check the size again.
-        let value = read_xattr_value(size, |buffer| fgetxattr(&source, &name, buffer).map_err(|e| std::io::Error::other(format!("read {name:?} (buffer {}): {e}", buffer.len()))))?;
+        let value = read_xattr_value(size, |buffer| {
+            let want = buffer.len();
+            fgetxattr(&source, &name, buffer).map_err(|e| std::io::Error::other(format!("read {name:?} (buffer {want}): {e}")))
+        })?;
         fsetxattr(staged, &name, &value, XattrFlags::empty()).map_err(|e| std::io::Error::other(format!("write {name:?} ({} bytes): {e}", value.len())))?;
         total = total.saturating_add(value.len());
     }
