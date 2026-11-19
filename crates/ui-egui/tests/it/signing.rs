@@ -906,7 +906,21 @@ fn signing_preserves_destination_opening_attributes() {
     support::outside_menus(&h, "Sign").click();
     h.run_steps(6);
     assert!(h.state().session.get(h.state().views[0].id).unwrap().signatures.iter().any(|s| s.signed));
-    assert_eq!(xattr::get(&dest, "com.apple.LaunchServices.OpenWith").unwrap(), Some(b"existing binding".to_vec()));
-    assert_eq!(xattr::get(&dest, "com.apple.quarantine").unwrap(), Some(b"0082;1234;Preview;".to_vec()));
+    assert_eq!(xattr_get(&dest, "com.apple.LaunchServices.OpenWith").unwrap(), Some(b"existing binding".to_vec()));
+    assert_eq!(xattr_get(&dest, "com.apple.quarantine").unwrap(), Some(b"0082;1234;Preview;".to_vec()));
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The `xattr` crate's `get` returns empty values with rustix 1.1.6 (its length probe has its own call now).
+#[cfg(target_os = "macos")]
+fn xattr_get(path: &std::path::Path, name: &str) -> std::io::Result<Option<Vec<u8>>> {
+    let size = match rustix::fs::getxattr_query(path, name) {
+        Ok(size) => size,
+        Err(rustix::io::Errno::NOATTR) => return Ok(None),
+        Err(e) => return Err(e.into()),
+    };
+    let mut value = vec![0u8; size.max(1)];
+    let len = rustix::fs::getxattr(path, name, &mut value[..])?;
+    value.truncate(len);
+    Ok(Some(value))
 }

@@ -71,6 +71,10 @@ fn read_attribute_with(mut get: impl FnMut(&mut [u8]) -> rustix::io::Result<usiz
 
 /// Accept only the supported native schema identifying this exact running bundle.
 fn points_to_this_app(data: &[u8], app: &Path) -> bool {
+    points_to_app(data, app, BUNDLE_ID)
+}
+
+fn points_to_app(data: &[u8], app: &Path, bundle_id: &str) -> bool {
     if data.len() > MAX_ATTRIBUTE {
         return false;
     }
@@ -85,7 +89,7 @@ fn points_to_this_app(data: &[u8], app: &Path) -> bool {
         bundleidentifier: Option<String>,
     }
     let Ok(binding) = plist::from_bytes::<Binding>(data) else { return false };
-    if binding.version != 0 || binding.bundleidentifier.as_deref().is_some_and(|id| id != BUNDLE_ID) || !Path::new(&binding.path).is_absolute() {
+    if binding.version != 0 || binding.bundleidentifier.as_deref().is_some_and(|id| id != bundle_id) || !Path::new(&binding.path).is_absolute() {
         return false;
     }
     // Exact native spelling is intentionally conservative. Never resolve an untrusted path:
@@ -263,8 +267,8 @@ mod tests {
             xattr::set(&file, QUARANTINE, b"0082;1234;Preview;").unwrap();
             crate::editing::write_atomically(file.to_str().unwrap(), b"after").unwrap();
             assert_eq!(std::fs::read(&file).unwrap(), b"after");
-            assert_eq!(xattr::get(&file, OPEN_WITH).unwrap(), Some(data));
-            assert_eq!(xattr::get(&file, QUARANTINE).unwrap(), Some(b"0082;1234;Preview;".to_vec()));
+            assert_eq!(crate::platform::test_xattr::get(&file, OPEN_WITH).unwrap(), Some(data));
+            assert_eq!(crate::platform::test_xattr::get(&file, QUARANTINE).unwrap(), Some(b"0082;1234;Preview;".to_vec()));
         }
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -275,8 +279,8 @@ mod tests {
         let dir = directory();
         let file = dir.join("new.pdf");
         crate::editing::write_atomically(file.to_str().unwrap(), b"pdf bytes").unwrap();
-        assert!(xattr::get(&file, OPEN_WITH).unwrap().is_none());
-        assert!(xattr::get(&file, QUARANTINE).unwrap().is_none());
+        assert!(crate::platform::test_xattr::get(&file, OPEN_WITH).unwrap().is_none());
+        assert!(crate::platform::test_xattr::get(&file, QUARANTINE).unwrap().is_none());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -291,8 +295,8 @@ mod tests {
         assert!(OpeningMetadata::read(&file).is_err());
         crate::editing::write_atomically(file.to_str().unwrap(), b"new PDF").unwrap();
         assert_eq!(std::fs::read(&file).unwrap(), b"new PDF");
-        assert_eq!(xattr::get(&file, OPEN_WITH).unwrap().unwrap().len(), MAX_ATTRIBUTE + 1);
-        assert_eq!(xattr::get(&file, QUARANTINE).unwrap(), Some(b"0082;1234;Preview;".to_vec()));
+        assert_eq!(crate::platform::test_xattr::get(&file, OPEN_WITH).unwrap().unwrap().len(), MAX_ATTRIBUTE + 1);
+        assert_eq!(crate::platform::test_xattr::get(&file, QUARANTINE).unwrap(), Some(b"0082;1234;Preview;".to_vec()));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -354,7 +358,10 @@ mod tests {
         let hex = "62706c6973743030d30102030405065776657273696f6e54706174685f101062756e646c656964656e74696669657210005f101a2f4170706c69636174696f6e732f50646643726166742e6170705f101761692e73746f727974656c6c65722e7064666372616674080f171c2f314e0000000000000101000000000000000700000000000000000000000000000068";
         let captured: Vec<u8> =
             hex.as_bytes().as_chunks::<2>().0.iter().map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap()).collect();
-        assert!(points_to_this_app(&captured, Path::new("/Applications/PdfCraft.app")));
+        // It was captured from upstream's app, so it names upstream's identifier: the schema is the
+        // same, and only this application's own identifier is accepted for it.
+        assert!(points_to_app(&captured, Path::new("/Applications/PdfCraft.app"), "ai.storyteller.pdfcraft"));
+        assert!(!points_to_this_app(&captured, Path::new("/Applications/PdfCraft.app")));
         let package = plist::from_bytes::<plist::Value>(include_bytes!("../../../../packaging/macos/Info.plist.in")).unwrap();
         assert_eq!(package.as_dictionary().unwrap().get("CFBundleIdentifier").unwrap().as_string(), Some(BUNDLE_ID));
     }

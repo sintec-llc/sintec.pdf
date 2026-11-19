@@ -521,27 +521,3 @@ fn a_replaced_local_file_keeps_archive_bit_intact() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
-
-#[cfg(target_os = "macos")]
-#[test]
-fn zz_debug_large_xattr() {
-    use rustix::fs::{XattrFlags, fgetxattr, fgetxattr_query, fsetxattr, getxattr, setxattr};
-    let dir = test_dir("zz-debug");
-    let a = dir.join("a.bin");
-    std::fs::write(&a, b"x").unwrap();
-    for n in [100usize, 4096, 65536, 65537, 200000] {
-        let v = vec![b'x'; n];
-        setxattr(&a, "com.apple.LaunchServices.OpenWith", &v, XattrFlags::empty()).unwrap();
-        let f = std::fs::File::open(&a).unwrap();
-        let q = fgetxattr_query(&f, "com.apple.LaunchServices.OpenWith").unwrap();
-        let mut buf = vec![0u8; q.max(1)];
-        let got = fgetxattr(&f, "com.apple.LaunchServices.OpenWith", &mut buf[..]).unwrap();
-        let b = dir.join(format!("b{n}.bin"));
-        std::fs::write(&b, b"y").unwrap();
-        let fb = std::fs::OpenOptions::new().write(true).open(&b).unwrap();
-        let set = fsetxattr(&fb, "com.apple.LaunchServices.OpenWith", &buf[..got], XattrFlags::empty());
-        let back = getxattr(&b, "com.apple.LaunchServices.OpenWith", &mut vec![0u8; n + 10][..]);
-        eprintln!("DBG n={n} query={q} got={got} fsetxattr={set:?} readback={back:?}");
-    }
-    let _ = std::fs::remove_dir_all(dir);
-}
