@@ -257,8 +257,7 @@ fn preserve_target_xattrs(path: &Path, staged: &std::fs::File) -> std::io::Resul
             continue;
         }
         let name = std::ffi::CString::new(name).map_err(|_| std::io::Error::other("invalid extended attribute name"))?;
-        let ctx = |what: &'static str| move |e: Errno| std::io::Error::other(format!("{what} {name:?}: {e}"));
-        let size = fgetxattr(&source, &name, &mut [] as &mut [u8]).map_err(ctx("size of"))?;
+        let size = fgetxattr(&source, &name, &mut [] as &mut [u8]).map_err(|e| std::io::Error::other(format!("size of {name:?}: {e}")))?;
         if size > MAX_VALUE_BYTES || size > MAX_TOTAL_BYTES.saturating_sub(total) {
             return Err(std::io::Error::other("extended attributes exceed the 16 MiB per-value or 64 MiB total limit"));
         }
