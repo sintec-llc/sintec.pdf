@@ -7,12 +7,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15, macos-15-intel]
+        runner: [macos-15]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p pdfcraft-platform
-      - run: "cargo test -p pdfcraft-ui-egui --lib -- platform:: editing::tests::a_save_preserves"
-      - run: cargo test -p pdfcraft-automation --test it -- saving_a_pdf_keeps
+      - run: cargo test -p pdfcraft-platform zz_debug -- --nocapture
