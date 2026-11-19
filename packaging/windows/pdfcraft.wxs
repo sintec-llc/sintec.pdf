@@ -55,7 +55,7 @@
          (MSI*.LOG), however it was started (double-click, the in-app updater, Programs), so a
          missing installation on someone's PC can be traced afterwards. -->
     <Property Id="MsiLogging" Value="voicewarmup" />
-    <!-- "Edit with PdfCraft" on the right-click menu of PDF files in File Explorer (#682): on by
+    <!-- "Edit with Sintec.PDF" on the right-click menu of PDF files in File Explorer (#682): on by
          default, the same way, and INSTALLPDFCONTEXTMENU=0 for unattended installs without it. -->
     <Property Id="INSTALLPDFCONTEXTMENU" Value="1" Secure="yes" />
     <UIRef Id="PdfcraftInstallerUI" />
@@ -285,7 +285,7 @@
         <RegistryValue Root="HKLM" Key="Software\Sintec.PDF\Shortcuts" Name="Desktop" Type="integer" Value="1" KeyPath="yes" />
       </Component>
 
-      <!-- PDF context menu (#682): "Edit with PdfCraft" opens the file in PdfCraft whichever app is
+      <!-- PDF context menu (#682): "Edit with Sintec.PDF" opens the file in Sintec.PDF whichever app is
            the default for .pdf, which it leaves alone (SystemFileAssociations, like the image
            menu). Several PDFs selected (up to 15, Windows' limit for this kind of entry) start one
            launch each, and the single-instance hand-off opens them as tabs of one window. On
@@ -294,7 +294,7 @@
            INSTALLPDFCONTEXTMENU=0 leaves it out and uninstall removes it. -->
       <Component Id="PdfcraftPdfContextMenu" Guid="439F084F-657D-4AC2-A4CC-F099C518D71F"
           Condition="INSTALLPDFCONTEXTMENU = 1">
-        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Edit" Value="Edit with PdfCraft" Type="string" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Edit" Value="Edit with Sintec.PDF" Type="string" KeyPath="yes" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Edit" Name="Icon" Value="&quot;[#PdfcraftExe]&quot;,0" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Edit" Name="MultiSelectModel" Value="Document" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Edit\command" Value="&quot;[#PdfcraftExe]&quot; &quot;%1&quot;" Type="string" />
@@ -380,10 +380,10 @@
       <!-- OCR models (CC-BY-SA-4.0, licences alongside) in models\ beside the exe, where
            pdfcraft_ocr::Models::find looks, so Scan & OCR works offline right after install. -->
       <Component Id="PdfcraftOcrModels" Subdirectory="models" Guid="CF874DC8-D68A-4AEA-ABD9-0E63A3992E5F">
-        <File Id="OcrDetectionModel" Source="$(var.BinDir)\models\text-detection.rten" KeyPath="yes" />
-        <File Id="OcrRecognitionModel" Source="$(var.BinDir)\models\text-recognition.rten" />
-        <File Id="OcrDetectionLicence" Source="$(var.BinDir)\models\text-detection.rten.LICENCE.txt" />
-        <File Id="OcrRecognitionLicence" Source="$(var.BinDir)\models\text-recognition.rten.LICENCE.txt" />
+        <File Id="OcrDetectionModel" Source="$(var.BinDir)\models\text-detection.onnx" KeyPath="yes" />
+        <File Id="OcrRecognitionModel" Source="$(var.BinDir)\models\text-recognition.onnx" />
+        <File Id="OcrDetectionLicence" Source="$(var.BinDir)\models\text-detection.onnx.LICENCE.txt" />
+        <File Id="OcrRecognitionLicence" Source="$(var.BinDir)\models\text-recognition.onnx.LICENCE.txt" />
       </Component>
 
       <!-- PP-OCRv5 detector and East Slavic models (Apache-2.0, licences alongside): Russian,

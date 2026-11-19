@@ -77,7 +77,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: storytold/craft-fonts
-          ref: abb83316d96aa59c1cf64784289e378fe9fa5695
+          ref: b076417b5880bd4154bd22f00695b1d28c6bea83
           path: craft-fonts
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -136,7 +136,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: storytold/craft-fonts
-          ref: abb83316d96aa59c1cf64784289e378fe9fa5695
+          ref: b076417b5880bd4154bd22f00695b1d28c6bea83
           path: craft-fonts
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -198,7 +198,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: storytold/craft-fonts
-          ref: abb83316d96aa59c1cf64784289e378fe9fa5695
+          ref: b076417b5880bd4154bd22f00695b1d28c6bea83
           path: craft-fonts
       - name: Install build and packaging tools
         run: |
@@ -236,7 +236,7 @@ jobs:
           grep -E 'metainfo/io\.github\.sintec_llc\.sintec_pdf\.metainfo\.xml$' <<<"$contents"
           grep -E 'icons/hicolor/256x256/apps/io\.github\.sintec_llc\.sintec_pdf\.png$' <<<"$contents"
           # OCR models and substitute fonts where the installed app looks: <bin>/../share/sintec-pdf.
-          grep -E 'usr/share/sintec-pdf/models/.+\.rten$' <<<"$contents"
+          grep -E 'usr/share/sintec-pdf/models/.+\.onnx$' <<<"$contents"
           grep -E 'usr/share/sintec-pdf/fonts/.+\.ttf$' <<<"$contents"
           ldd target/release/pdfcraft
           # The CLI-only archive: the binary and its licences, and it runs.

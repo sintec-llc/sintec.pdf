@@ -13,7 +13,7 @@ use crate::Session;
 pub const DEFAULT_DATE_FORMAT: &str = "m/d/yyyy";
 
 /// Ready-made formats for Preferences ▸ Date format. Any other valid pattern works too.
-pub const DATE_FORMATS: [&str; 12] = [
+pub const DATE_FORMATS: [&str; 14] = [
     "m/d/yyyy",
     "mm/dd/yyyy",
     "d/m/yyyy",
@@ -21,6 +21,9 @@ pub const DATE_FORMATS: [&str; 12] = [
     "dd.mm.yyyy",
     "yyyy-mm-dd",
     "yyyy.mm.dd.",
+    // Year first with slashes, as Taiwan, Japan and China write it (Windows' zh-TW short date).
+    "yyyy/mm/dd",
+    "yyyy/m/d",
     "d mmm yyyy",
     "d mmmm yyyy",
     "mmm d, yyyy",
@@ -49,7 +52,7 @@ pub struct DateLanguage {
 
 /// The languages month and weekday names can be written in (Preferences ▸ Date format ▸ Language):
 /// the interface languages, in the same order and with the same names.
-pub const DATE_LANGUAGES: [DateLanguage; 2] = [
+pub static DATE_LANGUAGES: [DateLanguage; 2] = [
     DateLanguage {
         code: "en",
         name: "English",
@@ -75,9 +78,21 @@ pub fn date_language(code: &str) -> Option<&'static DateLanguage> {
     DATE_LANGUAGES.iter().find(|l| l.code.eq_ignore_ascii_case(code.trim()))
 }
 
+/// Form date fields (`AFDate_FormatEx`, `util.printd`, `util.scand`) write month and weekday
+/// names in date language `code` from now on, as a localized Acrobat writes its own language's:
+/// `dd-mmm-yy` is `18-ott-26` in Italian (#5303). An unknown code is English.
+pub fn use_form_date_language(code: &str) {
+    let l = date_language(code).unwrap_or(&DATE_LANGUAGES[0]);
+    let names = pdfcraft_forms::af::DateNames { months: l.months, months_short: l.months_short, days: l.days, days_short: l.days_short };
+    if pdfcraft_forms::af::date_names() != names {
+        pdfcraft_forms::af::set_date_names(names);
+        pdfcraft_js::set_date_names(l.months, l.months_short, l.days, l.days_short);
+    }
+}
+
 /// The characters of `text` that Fill & Sign can't write into a PDF yet, each once. Its text is
 /// drawn in Helvetica with WinAnsi encoding (Western European letters), so anything else (`ř`,
-/// Cyrillic, Japanese) would become `?` in the file.
+/// Japanese, Chinese) would become `?` in the file.
 pub fn unwritable(text: &str) -> String {
     let mut out = String::new();
     for c in text.chars() {
@@ -274,6 +289,8 @@ mod tests {
                 "07.03.2026",
                 "2026-03-07",
                 "2026.03.07.",
+                "2026/03/07",
+                "2026/3/7",
                 "7 Mar 2026",
                 "7 March 2026",
                 "Mar 7, 2026",
@@ -400,8 +417,8 @@ mod tests {
 
     #[test]
     fn dates_the_pdf_cannot_hold_are_refused_not_damaged() {
-        assert_eq!(unwritable("8. října 2026"), "ř");
         assert_eq!(unwritable("14 ноя"), "ноя");
+        assert_eq!(unwritable("2026年10月8日"), "年月日");
         assert_eq!(unwritable("sábado, 7 de março – 2026?"), "", "Western European, dashes and ? are fine");
         let mut s = Session::new().with_clock(|| 1_700_000_000);
         s.set_date_format("d mmmm yyyy").unwrap();

@@ -194,11 +194,13 @@ pub fn xlsx(pages: &[Page], title: &str, page_label: &str) -> Vec<u8> {
                     sheets.push(Sheet::default());
                 }
             }
-            Item::Para(b, level) => {
-                let text = b.text.split_whitespace().collect::<Vec<_>>().join(" ");
+            Item::Para(runs, level) => {
+                let joined: String = runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>().join(" ");
+                let bold = runs.first().is_some_and(|r| r.block.bold);
+                let text = joined.split_whitespace().collect::<Vec<_>>().join(" ");
                 let style = if level > 0 {
                     HEADING
-                } else if b.bold {
+                } else if bold {
                     BOLD
                 } else {
                     PLAIN
@@ -217,7 +219,7 @@ pub fn xlsx(pages: &[Page], title: &str, page_label: &str) -> Vec<u8> {
                     let mut lines = 1usize;
                     for cell in row {
                         let span = cell.span.max(1);
-                        let style = match (t.ruled, cell.bold) {
+                        let style = match (t.ruled.is_some(), cell.bold) {
                             (true, true) => GRID_BOLD,
                             (true, false) => GRID,
                             (false, true) => BOLD,
@@ -226,11 +228,11 @@ pub fn xlsx(pages: &[Page], title: &str, page_label: &str) -> Vec<u8> {
                         if !cell.text.is_empty() && !cell.continued {
                             cells.push((col, value(&cell.text), style));
                             lines = lines.max(cell.text.lines().count());
-                        } else if t.ruled {
+                        } else if t.ruled.is_some() {
                             // Empty cells of a ruled table still carry its borders.
                             cells.push((col, Value::Text(String::new()), style));
                         }
-                        if t.ruled {
+                        if t.ruled.is_some() {
                             // Every grid cell a merged cell covers carries the borders too.
                             cells.extend((col + 1..col + span).map(|c| (c, Value::Text(String::new()), style)));
                         }
@@ -355,7 +357,7 @@ mod tests {
     use crate::Block;
 
     fn block(text: &str, rect: [f64; 4], bold: bool) -> Block {
-        Block { text: text.into(), rect, size: 11.0, bold, italic: false, color: [0.0; 3], rotation: 0.0 }
+        Block { text: text.into(), rect, size: 11.0, bold, italic: false, color: [0.0; 3], rotation: 0.0, space_around: [false; 2] }
     }
 
     #[test]

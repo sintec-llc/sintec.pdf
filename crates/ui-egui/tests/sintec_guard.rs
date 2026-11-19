@@ -1,6 +1,7 @@
 //! Sintec.PDF guards for the weekly upstream sync (docs/upstream-sync.md):
-//! - the Russian catalog covers every command, tool and `tl!` UI label, so strings upstream adds
-//!   don't silently show in English;
+//! - the Russian catalogs (`i18n/locales/ru/`) cover every command, tool and `tl!` UI label, so
+//!   strings upstream adds don't silently show in English;
+//! - the interface offers English and Russian only;
 //! - the upstream product name and the ArtCraft marks stay out of what users see.
 
 use std::collections::BTreeSet;
@@ -52,6 +53,18 @@ fn ui_literals() -> BTreeSet<String> {
     out
 }
 
+fn tsv_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            tsv_files(&p, out);
+        } else if p.extension().is_some_and(|x| x == "tsv") {
+            out.push(p);
+        }
+    }
+}
+
 #[test]
 fn russian_covers_commands_tools_and_ui_labels() {
     let ru = Lang::from_code("ru").expect("ru registered");
@@ -80,7 +93,10 @@ fn russian_covers_commands_tools_and_ui_labels() {
     let literals = ui_literals();
     assert!(literals.len() > 900, "the source scan found only {} labels", literals.len());
     missing.extend(literals.into_iter().filter(|l| !has(ru, l)));
-    assert!(missing.is_empty(), "untranslated in ru.tsv (add them, see docs/upstream-sync.md): {missing:#?}");
+    // Upstream's ArtCraft community labels go away with its links (see
+    // `the_artcraft_links_stay_out_of_the_app`); the catalogs never name ArtCraft.
+    missing.retain(|l| !l.contains("ArtCraft"));
+    assert!(missing.is_empty(), "untranslated in i18n/locales/ru/pdfcraft.tsv (add them, see docs/upstream-sync.md): {missing:#?}");
 }
 
 /// The upstream product name as a word (not inside identifiers such as `PdfCraftApp`, the PDF
@@ -100,9 +116,8 @@ fn allowed(line: &str) -> bool {
     ["contributors", "Based on PdfCraft", "based on PdfCraft", "ArtCraft team", "storytold"].iter().any(|k| line.contains(k))
 }
 
-#[test]
-fn the_upstream_name_and_marks_stay_out_of_the_app() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+/// Code lines (not comments or credit lines) of `crates/` and `apps/` that `bad` matches.
+fn code_lines(root: &Path, bad: impl Fn(&str) -> bool) -> Vec<String> {
     let mut files = Vec::new();
     for dir in ["crates", "apps"] {
         rust_files(&root.join(dir), &mut files);
@@ -116,17 +131,26 @@ fn the_upstream_name_and_marks_stay_out_of_the_app() {
             if code.starts_with("//") || allowed(line) {
                 continue;
             }
-            if names_upstream(line) || line.contains("discord.gg/artcraft") || line.contains("getartcraft.com") {
+            if bad(line) {
                 found.push(format!("{}:{}: {}", f.display(), n + 1, line.trim()));
             }
         }
     }
-    let i18n = root.join("crates/ui-egui/src/i18n");
-    for e in std::fs::read_dir(&i18n).unwrap().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "tsv")) {
-        let text = std::fs::read_to_string(e.path()).unwrap();
+    found
+}
+
+#[test]
+fn the_upstream_name_and_marks_stay_out_of_the_app() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut found = code_lines(&root, names_upstream);
+    let mut catalogs = Vec::new();
+    tsv_files(&root.join("i18n"), &mut catalogs);
+    assert!(!catalogs.is_empty(), "no catalogs under i18n/");
+    for path in catalogs {
+        let text = std::fs::read_to_string(&path).unwrap();
         for (n, line) in text.lines().enumerate() {
             if !line.starts_with('#') && !allowed(line) && (names_upstream(line) || line.contains("ArtCraft")) {
-                found.push(format!("{}:{}: {}", e.path().display(), n + 1, line.trim()));
+                found.push(format!("{}:{}: {}", path.display(), n + 1, line.trim()));
             }
         }
     }
@@ -134,18 +158,31 @@ fn the_upstream_name_and_marks_stay_out_of_the_app() {
     assert!(!root.join("docs/brand").exists(), "the ArtCraft marks (docs/brand/) must not come back");
 }
 
-/// Shortcuts read as the platform writes them: Ctrl+ on Windows and Linux, ⌘ on the Mac.
+/// The ArtCraft community links (Discord, website) stay out of the Help menu and home screen.
 #[test]
-fn shortcuts_use_the_platform_s_keys() {
-    let keys = pdfcraft_ui_egui::i18n::keys;
-    if cfg!(target_os = "macos") {
-        assert_eq!(keys("⇧⌘G"), "⇧⌘G");
-    } else {
-        assert_eq!(keys("⌘K"), "Ctrl+K");
-        assert_eq!(keys("Next (⇧⌘G)"), "Next (Ctrl+Shift+G)");
-        assert_eq!(keys("⌥⌘1 / ⌥F"), "Ctrl+Alt+1 / Alt+F");
-    }
-    assert_eq!(keys("Esc"), "Esc");
+fn the_artcraft_links_stay_out_of_the_app() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let found = code_lines(&root, |line| line.contains("discord.gg/artcraft") || line.contains("getartcraft.com"));
+    assert!(found.is_empty(), "ArtCraft links in the app:\n{}", found.join("\n"));
+}
+
+/// Sintec.PDF offers English and Russian, and Russian is embedded (`i18n/locales/ru/`).
+#[test]
+fn the_interface_is_english_and_russian() {
+    let codes: Vec<&str> = Lang::all().map(Lang::code).collect();
+    assert_eq!(codes, ["en", "ru"]);
+    let ru = Lang::from_code("ru").expect("ru registered");
+    assert_eq!(ru.name(), "Русский");
+    assert_eq!(pdfcraft_ui_egui::i18n::tr(ru, "Open"), "Открыть");
+    let dates: Vec<&str> = pdfcraft_engine::dates::DATE_LANGUAGES.iter().map(|l| l.code).collect();
+    assert_eq!(dates, ["en", "ru"]);
+    let locales: BTreeSet<String> = std::fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../i18n/locales"))
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(locales.iter().all(|l| l == "en" || l == "ru"), "only English and Russian catalogs: {locales:?}");
 }
 
 /// No internal milestone codes ("M4", "(M6)", "этапе M7") in Russian text the app still uses;
@@ -156,7 +193,8 @@ fn russian_text_shows_no_internal_milestones() {
     let mut files = Vec::new();
     rust_files(&src, &mut files);
     let sources: Vec<String> = files.iter().filter_map(|f| std::fs::read_to_string(f).ok()).collect();
-    let ru = std::fs::read_to_string(src.join("i18n/ru.tsv")).unwrap();
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../i18n/locales/ru");
+    let ru = ["common.tsv", "pdfcraft.tsv"].map(|f| std::fs::read_to_string(dir.join(f)).unwrap()).join("\n");
     let bad: Vec<&str> = ru
         .lines()
         .filter(|l| {

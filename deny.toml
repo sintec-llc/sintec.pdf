@@ -34,7 +34,13 @@ unknown-registry = "deny"
 unknown-git = "deny"
 # Shared UI components and spooler; Cargo.toml pins the immutable revision. craft-print pins
 # storytold's winprint fork (Windows printing, #1107) to an immutable revision of its own.
-allow-git = ["https://github.com/storytold/craft-libs", "https://github.com/storytold/winprint.rs"]
+allow-git = [
+    "https://github.com/storytold/craft-libs",
+    "https://github.com/storytold/winprint.rs",
+    # The reviewed egui 0.37 and winit 0.30.13 fork revisions (immutable pins in Cargo.toml).
+    "https://github.com/storytold/egui",
+    "https://github.com/storytold/winit",
+]
 
 [advisories]
 yanked = "warn"
@@ -54,6 +60,8 @@ ignore = [
     # winprint's fmt-derive (craft-print's Windows spooler), so it runs at compile time on Windows
     # and is not in the binary.
     { id = "RUSTSEC-2024-0370", reason = "compile-time proc macro of winprint's fmt-derive (craft-print Windows printing, #1107)" },
+    # chrono is unmaintained (no vulnerability, no safe upgrade); it comes in through craft-update.
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, no vulnerability; used by craft-update" },
 ]
 
 # egui's default UI fonts (Ubuntu-Light, Hack, emoji-icon-font): font licences on the AGENTS.md

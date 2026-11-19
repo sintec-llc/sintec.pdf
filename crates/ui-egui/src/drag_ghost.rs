@@ -66,7 +66,7 @@ fn contents(ui: &mut egui::Ui, t: &Tokens, g: &Ghost, thumb: Option<(egui::Textu
 /// Draw the ghost in this window if the pointer is over it. Nothing while no drag is under way.
 /// Returns whether it was drawn.
 pub(crate) fn paint(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
-    if app.tab_drag.is_none() && app.page_transfer.is_none() {
+    if app.tab_drag.is_none() {
         return false;
     }
     let Some(g) = &app.drag_ghost else { return false };
@@ -76,7 +76,7 @@ pub(crate) fn paint(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
     }
     let t = Tokens::get(ctx);
     let thumb = thumb_of(app, g);
-    egui::Area::new(egui::Id::new("drag-ghost"))
+    egui::Area::new(egui::Id::unique("drag-ghost"))
         .order(egui::Order::Tooltip)
         .interactable(false)
         .fixed_pos(at + OFFSET)
@@ -89,7 +89,7 @@ pub(crate) fn paint(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
 /// Call once per frame from the root window after every window has had its [`paint`];
 /// `painted_in_a_window` is whether any of them drew the ghost. A frame without this call closes it.
 pub(crate) fn show_overlay(app: &PdfCraftApp, ctx: &egui::Context, painted_in_a_window: bool) {
-    let dragging = app.tab_drag.is_some() || app.page_transfer.is_some();
+    let dragging = app.tab_drag.is_some();
     let Some(g) = app.drag_ghost.as_ref() else { return };
     if ctx.embed_viewports() || !overlay_wanted(cfg!(windows), dragging, painted_in_a_window, g.screen) {
         return;
@@ -121,7 +121,7 @@ pub(crate) fn show_overlay(app: &PdfCraftApp, ctx: &egui::Context, painted_in_a_
 /// The tab-like card: the document icon and the title.
 fn card(ui: &mut egui::Ui, t: &Tokens, g: &Ghost) {
     let font = theme::regular(13.0);
-    let title = crate::bidi::visual(&g.title).into_owned();
+    let title = g.title.clone();
     let galley = ui.fonts_mut(|f| f.layout_no_wrap(title, font, t.text));
     let width = (galley.size().x + 40.0).min(CARD_MAX_WIDTH);
     let (rect, _) = ui.allocate_exact_size(vec2(width, 30.0), egui::Sense::hover());

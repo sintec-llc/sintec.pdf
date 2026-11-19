@@ -183,6 +183,8 @@ fn droppable(marker: u8) -> bool {
 }
 
 /// The coefficients of a sequential Huffman-coded JPEG.
+// A marker-by-marker parser (T.81 Annex B); its cases read best side by side.
+#[allow(clippy::cognitive_complexity)]
 pub(crate) fn read(data: &[u8]) -> Option<Jpeg> {
     if data.get(..2)? != [0xFF, 0xD8] {
         return None;
@@ -319,6 +321,8 @@ pub(crate) fn read(data: &[u8]) -> Option<Jpeg> {
 /// Decode one scan whose header is `seg` and whose data starts at `pos`; returns where the next
 /// marker starts.
 #[allow(clippy::too_many_arguments)]
+// One scan's entropy-coded data (T.81 F.2): its components and restart intervals in one place.
+#[allow(clippy::cognitive_complexity)]
 fn scan(
     j: &mut Jpeg,
     seg: &[u8],

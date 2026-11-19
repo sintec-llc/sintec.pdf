@@ -23,11 +23,21 @@ pub enum Role {
 
 /// Pool `paths` with any other launches and decide this process's role.
 pub fn collect(paths: Vec<PathBuf>, spool: &Path) -> Role {
+    collect_expecting(paths, spool, 1)
+}
+
+/// `collect`, where the collector also waits (up to `MAX_WAIT`) until `expected` lists are in
+/// the spool. Production expects only its own; a test that knows how many launches there are
+/// passes that, so it does not depend on how fast they start.
+fn collect_expecting(paths: Vec<PathBuf>, spool: &Path, expected: usize) -> Role {
     if std::fs::create_dir_all(spool).is_err() {
         return Role::Convert(paths);
     }
     let stamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
-    let list = spool.join(format!("{stamp}-{}.list", std::process::id()));
+    // The process id tells launches apart; the counter does the same for threads of one process
+    // (the test below), where a coarse clock (macOS) can give two of them the same stamp.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let list = spool.join(format!("{stamp}-{}-{}.list", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     let text: String = paths.iter().map(|p| format!("{}\n", p.display())).collect();
     if std::fs::write(&list, text).is_err() {
         return Role::Convert(paths);
@@ -40,7 +50,7 @@ pub fn collect(paths: Vec<PathBuf>, spool: &Path) -> Role {
     let start = Instant::now();
     let mut seen = count_lists(spool);
     let mut last_change = Instant::now();
-    while last_change.elapsed() < QUIET && start.elapsed() < MAX_WAIT {
+    while (last_change.elapsed() < QUIET || seen < expected) && start.elapsed() < MAX_WAIT {
         std::thread::sleep(Duration::from_millis(100));
         let now = count_lists(spool);
         if now != seen {
@@ -108,7 +118,7 @@ mod tests {
         let handles: Vec<_> = (0..5)
             .map(|i| {
                 let spool = spool.clone();
-                std::thread::spawn(move || collect(vec![PathBuf::from(format!("C:\\docs\\file{i}.jpg"))], &spool))
+                std::thread::spawn(move || collect_expecting(vec![PathBuf::from(format!("C:\\docs\\file{i}.jpg"))], &spool, 5))
             })
             .collect();
         let roles: Vec<Role> = handles.into_iter().map(|h| h.join().unwrap()).collect();

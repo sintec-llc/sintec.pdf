@@ -264,7 +264,7 @@ fn table_from_frame(hs: &[Line], vs: &[Line], lines: &[Block]) -> Option<Table> 
         }
         rows.push(row);
     }
-    Some(Table { rect: [left, bottom, right, top], cols: xs[..ncols].to_vec(), rows, ruled: true, row_edges: ys })
+    Some(Table { rect: [left, bottom, right, top], cols: xs[..ncols].to_vec(), rows, ruled: Some([true; 4]), row_edges: ys })
 }
 
 /// A cell from its words or text lines: pieces whose centres sit at one height (within half
@@ -318,6 +318,7 @@ mod tests {
             italic: false,
             color: [0.0; 3],
             rotation: 0.0,
+            space_around: [false; 2],
         }
     }
 
@@ -357,7 +358,7 @@ mod tests {
         let tables = ruled_tables(&page);
         assert_eq!(tables.len(), 1);
         let t = &tables[0];
-        assert!(t.ruled && t.cols == [50.0, 150.0, 250.0] && t.row_edges == [700.0, 680.0, 660.0, 640.0]);
+        assert!(t.ruled.is_some() && t.cols == [50.0, 150.0, 250.0] && t.row_edges == [700.0, 680.0, 660.0, 640.0]);
         assert_eq!(texts(t), [["Name", "Qty", "Price"], ["Paper", "10", "1 250,50"], ["Toner", "2", "3 400"]]);
     }
 
@@ -457,6 +458,7 @@ mod writer_tests {
             italic: false,
             color: [0.0; 3],
             rotation: 0.0,
+            space_around: [false; 2],
         };
         let mut rules = Vec::new();
         for y in [700.0, 640.0] {

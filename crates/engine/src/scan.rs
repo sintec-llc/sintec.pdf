@@ -4,7 +4,7 @@
 //! driver, which is nearly all of them; no scanner software is needed.
 //!
 //! The script runs in PowerShell (WIA is a COM interface), handed over on standard input like the
-//! printing and Office scripts (`pdfcraft_print::spool::run_powershell`).
+//! printing and Office scripts (`crate::office::run_powershell`).
 //!
 //! On Linux the page comes from SANE's `scanimage` instead (task 028); macOS has no scanning yet.
 
@@ -49,7 +49,7 @@ pub fn scan_page(dir: &std::path::Path) -> Result<Option<Vec<u8>>, ScanError> {
     let failed = |e: std::io::Error| ScanError::Failed(e.to_string());
     std::fs::create_dir_all(dir).map_err(failed)?;
     let file = dir.join("scan.png");
-    let out = pdfcraft_print::spool::run_powershell(SCAN_SCRIPT, &[("SINTEC_SCAN_FILE", file.as_os_str())]).map_err(|_| ScanError::NoWia)?;
+    let out = crate::office::run_powershell(SCAN_SCRIPT, &[("SINTEC_SCAN_FILE", file.as_os_str())]).map_err(|_| ScanError::NoWia)?;
     let stdout = String::from_utf8_lossy(&out.stdout);
     let result = if stdout.lines().any(|l| l.trim() == "CANCEL") {
         Ok(None)

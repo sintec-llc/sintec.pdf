@@ -20,6 +20,209 @@ use rten_tensor::{NdTensor, Tensor};
 
 use crate::{Line, OcrError, Word};
 
+/// What [`crate::Word::source`] carries for words this engine read.
+pub const ENGINE_ID: &str = "paddle";
+
+/// The PP-OCRv5 text detection model every [`Script`] shares, as named in ATTRIBUTION.toml.
+pub const PADDLE_DETECTION_MODEL: &str = "pp-ocrv5_mobile_det.onnx";
+
+/// Every language text can be recognised in (Sintec.PDF): English through ocrs, then
+/// [`PADDLE_LANGUAGES`]. ISO 639-1 code and English name (the interface translates it).
+pub const ALL_LANGUAGES: &[(&str, &str)] = &[
+    ("en", "English"),
+    ("ru", "Russian"),
+    ("uk", "Ukrainian"),
+    ("be", "Belarusian"),
+    ("kk", "Kazakh"),
+    ("bg", "Bulgarian"),
+    ("sr", "Serbian"),
+    ("mk", "Macedonian"),
+    ("mn", "Mongolian"),
+    ("ky", "Kyrgyz"),
+    ("tg", "Tajik"),
+    ("de", "German"),
+    ("fr", "French"),
+    ("es", "Spanish"),
+    ("it", "Italian"),
+    ("pt", "Portuguese"),
+    ("nl", "Dutch"),
+    ("pl", "Polish"),
+    ("cs", "Czech"),
+    ("sk", "Slovak"),
+    ("hu", "Hungarian"),
+    ("ro", "Romanian"),
+    ("tr", "Turkish"),
+    ("sv", "Swedish"),
+    ("da", "Danish"),
+    ("no", "Norwegian"),
+    ("fi", "Finnish"),
+    ("hr", "Croatian"),
+    ("sl", "Slovenian"),
+    ("lt", "Lithuanian"),
+    ("lv", "Latvian"),
+    ("et", "Estonian"),
+    ("id", "Indonesian"),
+    ("el", "Greek"),
+    ("zh", "Chinese"),
+    ("ja", "Japanese"),
+    ("ko", "Korean"),
+    ("ar", "Arabic"),
+    ("fa", "Persian"),
+    ("ur", "Urdu"),
+    ("hi", "Hindi"),
+    ("mr", "Marathi"),
+    ("ne", "Nepali"),
+    ("th", "Thai"),
+    ("ta", "Tamil"),
+    ("te", "Telugu"),
+];
+
+/// The languages PP-OCRv5 reads here: [`ALL_LANGUAGES`] but English (ocrs reads that). Russian
+/// first, then by writing system.
+pub const PADDLE_LANGUAGES: &[(&str, &str)] = ALL_LANGUAGES.split_at(1).1;
+
+/// The writing system a set of PP-OCRv5 models reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Script {
+    /// East Slavic: Russian, Ukrainian, Belarusian.
+    EastSlavic,
+    /// Cyrillic: Kazakh, Bulgarian, Serbian, Macedonian, Mongolian, Kyrgyz, Tajik.
+    Cyrillic,
+    /// Latin: European languages with accents, Turkish, Indonesian.
+    LatinAccented,
+    /// The main model: Simplified and Traditional Chinese, Japanese.
+    Chinese,
+    Korean,
+    /// Arabic, Persian, Urdu: written right to left (see [`Script::rtl`]).
+    Arabic,
+    /// Hindi, Marathi, Nepali.
+    Devanagari,
+    Greek,
+    Thai,
+    Tamil,
+    Telugu,
+}
+
+impl Script {
+    /// The script for a [`PADDLE_LANGUAGES`] code; `None` for any other code (English and
+    /// unknown codes are read by the other engines).
+    pub fn for_language(code: &str) -> Option<Script> {
+        Some(match code {
+            "ru" | "uk" | "be" => Script::EastSlavic,
+            "kk" | "bg" | "sr" | "mk" | "mn" | "ky" | "tg" => Script::Cyrillic,
+            "de" | "fr" | "es" | "it" | "pt" | "nl" | "pl" | "cs" | "sk" | "hu" | "ro" | "tr" | "sv" | "da" | "no" | "fi" | "hr" | "sl" | "lt"
+            | "lv" | "et" | "id" => Script::LatinAccented,
+            "zh" | "ja" => Script::Chinese,
+            "ko" => Script::Korean,
+            "ar" | "fa" | "ur" => Script::Arabic,
+            "hi" | "mr" | "ne" => Script::Devanagari,
+            "el" => Script::Greek,
+            "th" => Script::Thai,
+            "ta" => Script::Tamil,
+            "te" => Script::Telugu,
+            _ => return None,
+        })
+    }
+
+    /// The recognition model and its character dictionary, as named in ATTRIBUTION.toml.
+    pub fn files(self) -> (&'static str, &'static str) {
+        match self {
+            Script::EastSlavic => ("eslav_pp-ocrv5_mobile_rec.onnx", "ppocrv5_eslav_dict.txt"),
+            Script::Cyrillic => ("cyrillic_pp-ocrv5_mobile_rec.onnx", "ppocrv5_cyrillic_dict.txt"),
+            Script::LatinAccented => ("latin_pp-ocrv5_mobile_rec.onnx", "ppocrv5_latin_dict.txt"),
+            Script::Chinese => ("pp-ocrv5_mobile_rec.onnx", "ppocrv5_dict.txt"),
+            Script::Korean => ("korean_pp-ocrv5_mobile_rec.onnx", "ppocrv5_korean_dict.txt"),
+            Script::Arabic => ("arabic_pp-ocrv5_mobile_rec.onnx", "ppocrv5_arabic_dict.txt"),
+            Script::Devanagari => ("devanagari_pp-ocrv5_mobile_rec.onnx", "ppocrv5_devanagari_dict.txt"),
+            Script::Greek => ("el_pp-ocrv5_mobile_rec.onnx", "ppocrv5_el_dict.txt"),
+            Script::Thai => ("th_pp-ocrv5_mobile_rec.onnx", "ppocrv5_th_dict.txt"),
+            Script::Tamil => ("ta_pp-ocrv5_mobile_rec.onnx", "ppocrv5_ta_dict.txt"),
+            Script::Telugu => ("te_pp-ocrv5_mobile_rec.onnx", "ppocrv5_te_dict.txt"),
+        }
+    }
+
+    /// Written right to left: the recognition model reads a line left to right as it is drawn,
+    /// so its words are put back into reading order ([`logical_rtl`]).
+    pub fn rtl(self) -> bool {
+        self == Script::Arabic
+    }
+}
+
+/// Where a script's three model files are.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PaddleModels {
+    pub script: Script,
+    pub detection: std::path::PathBuf,
+    pub recognition: std::path::PathBuf,
+    pub dictionary: std::path::PathBuf,
+}
+
+impl PaddleModels {
+    /// `script`'s models in `dir`, if all three files are there.
+    pub fn in_dir(dir: &Path, script: Script) -> Option<PaddleModels> {
+        let (recognition, dictionary) = script.files();
+        let m = PaddleModels {
+            script,
+            detection: dir.join(PADDLE_DETECTION_MODEL),
+            recognition: dir.join(recognition),
+            dictionary: dir.join(dictionary),
+        };
+        (m.detection.is_file() && m.recognition.is_file() && m.dictionary.is_file()).then_some(m)
+    }
+
+    /// Look in the same places as [`crate::Models::find`].
+    pub fn find(script: Script) -> Option<PaddleModels> {
+        crate::Models::search_dirs().iter().find_map(|d| Self::in_dir(d, script))
+    }
+}
+
+/// A loaded PP-OCRv5 recogniser for one [`Script`]. Loading takes a moment; keep one and reuse
+/// it (it is shared across threads as an `Arc<dyn Recognizer>`).
+pub struct PaddleRecognizer {
+    script: Script,
+    engine: PaddleOcr,
+}
+
+impl PaddleRecognizer {
+    /// Load `models`.
+    pub fn load(models: &PaddleModels) -> Result<PaddleRecognizer, OcrError> {
+        let engine = PaddleOcr::load(&models.detection, &models.recognition, &models.dictionary, models.script.rtl())?;
+        Ok(PaddleRecognizer { script: models.script, engine })
+    }
+
+    /// Load the installed models for `script` ([`OcrError::NoModels`] when they are missing).
+    pub fn find(script: Script) -> Result<PaddleRecognizer, OcrError> {
+        Self::load(&PaddleModels::find(script).ok_or(OcrError::NoModels)?)
+    }
+
+    /// The script this recogniser reads.
+    pub fn script(&self) -> Script {
+        self.script
+    }
+}
+
+impl crate::Recognizer for PaddleRecognizer {
+    fn id(&self) -> &'static str {
+        ENGINE_ID
+    }
+
+    fn available(&self) -> bool {
+        true
+    }
+
+    fn languages(&self) -> Vec<(String, String)> {
+        PADDLE_LANGUAGES
+            .iter()
+            .filter(|(c, _)| Script::for_language(c) == Some(self.script))
+            .map(|(c, n)| ((*c).to_string(), (*n).to_string()))
+            .collect()
+    }
+
+    fn recognize(&self, image: &crate::OcrImage, _options: &crate::RecognizeOptions) -> Result<Vec<Line>, OcrError> {
+        self.engine.recognize(image.rgba(), image.width(), image.height())
+    }
+}
+
 /// Detection input: the longer side is scaled to at most this (a multiple of 32), so small
 /// print on a 300 dpi page is still found without a huge tensor.
 const DET_MAX_SIDE: usize = 2560;
@@ -43,11 +246,12 @@ pub(crate) struct PaddleOcr {
     rtl: bool,
 }
 
-/// An RGB image borrowed from the caller.
+/// An RGB or RGBA image borrowed from the caller (`channels` bytes per pixel, R first).
 struct Rgb<'a> {
     px: &'a [u8],
     width: usize,
     height: usize,
+    channels: usize,
 }
 
 impl Rgb<'_> {
@@ -55,7 +259,7 @@ impl Rgb<'_> {
     fn at(&self, x: usize, y: usize, c: usize) -> f32 {
         let x = x.min(self.width.saturating_sub(1));
         let y = y.min(self.height.saturating_sub(1));
-        let i = y.saturating_mul(self.width).saturating_add(x).saturating_mul(3).saturating_add(c);
+        let i = y.saturating_mul(self.width).saturating_add(x).saturating_mul(self.channels).saturating_add(c);
         self.px.get(i).copied().map_or(255.0, f32::from)
     }
 
@@ -104,8 +308,9 @@ impl PaddleOcr {
         Ok(PaddleOcr { detection: load(detection)?, recognition: load(recognition)?, dictionary: entries, rtl })
     }
 
-    pub(crate) fn recognize(&self, rgb: &[u8], width: u32, height: u32) -> Result<Vec<Line>, OcrError> {
-        let img = Rgb { px: rgb, width: width as usize, height: height as usize };
+    /// Read an RGBA image (an [`crate::OcrImage`]'s pixels).
+    pub(crate) fn recognize(&self, rgba: &[u8], width: u32, height: u32) -> Result<Vec<Line>, OcrError> {
+        let img = Rgb { px: rgba, width: width as usize, height: height as usize, channels: 4 };
         let mut lines = Vec::new();
         for b in self.detect(&img)? {
             if let Some(line) = self.read_line(&img, b)? {
@@ -235,7 +440,7 @@ impl PaddleOcr {
             {
                 let left = x0 as f32 + first as f32 * step;
                 let right = (x0 as f32 + (last + 1) as f32 * step).min(x1 as f32);
-                words.push(Word { text, rect: [left, y0 as f32, right.max(left + 1.0), y1 as f32] });
+                words.push(Word::new(text, [left, y0 as f32, right.max(left + 1.0), y1 as f32], ENGINE_ID));
             }
         };
         for (ch, t, _) in chars {
@@ -318,14 +523,41 @@ pub(crate) fn logical_rtl(line: Line) -> Line {
 mod tests {
     use super::*;
 
-    fn line(words: &[&str]) -> Line {
-        Line {
-            words: words
-                .iter()
-                .enumerate()
-                .map(|(i, t)| Word { text: (*t).to_string(), rect: [i as f32 * 10.0, 0.0, i as f32 * 10.0 + 9.0, 10.0] })
-                .collect(),
+    #[test]
+    fn every_language_has_one_script_and_its_model_files() {
+        let mut codes = std::collections::HashSet::new();
+        assert_eq!(ALL_LANGUAGES.first(), Some(&("en", "English")), "English first, read by ocrs");
+        assert_eq!(PADDLE_LANGUAGES.len() + 1, ALL_LANGUAGES.len());
+        assert_eq!(Script::for_language("en"), None, "English is not PP-OCRv5's");
+        for (code, name) in PADDLE_LANGUAGES {
+            assert!(codes.insert(*code) && !name.is_empty(), "{code}");
+            let script = Script::for_language(code).unwrap_or_else(|| panic!("{code} has no script"));
+            let (recognition, dictionary) = script.files();
+            assert!(recognition.ends_with(".onnx") && dictionary.ends_with(".txt"), "{code}");
         }
+        assert!(codes.contains("ru"));
+        assert_eq!(Script::for_language("xx"), None);
+    }
+
+    #[test]
+    fn models_are_found_only_when_all_three_files_are_there() {
+        let dir = std::env::temp_dir().join(format!("pdfcraft-paddle-models-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (recognition, dictionary) = Script::EastSlavic.files();
+        std::fs::write(dir.join(PADDLE_DETECTION_MODEL), b"x").unwrap();
+        std::fs::write(dir.join(recognition), b"x").unwrap();
+        assert_eq!(PaddleModels::in_dir(&dir, Script::EastSlavic), None, "no dictionary yet");
+        std::fs::write(dir.join(dictionary), b"x").unwrap();
+        let found = PaddleModels::in_dir(&dir, Script::EastSlavic).unwrap();
+        assert_eq!(found.script, Script::EastSlavic);
+        assert_eq!(PaddleModels::in_dir(&dir, Script::Greek), None);
+        // Files that aren't models are an error, not a panic.
+        assert!(PaddleRecognizer::load(&found).is_err());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn line(words: &[&str]) -> Line {
+        Line { words: words.iter().enumerate().map(|(i, t)| Word::new(*t, [i as f32 * 10.0, 0.0, i as f32 * 10.0 + 9.0, 10.0], ENGINE_ID)).collect() }
     }
 
     fn texts(l: &Line) -> Vec<&str> {

@@ -6,8 +6,8 @@ this page repeats that table for users and must change with it.
 
 **File ▸ Reduce file size…** opens a small dialog with three levels. Next to each it shows about
 how large the copy would be (`~1.2 MB (45% smaller)`), worked out on a worker thread while the
-dialog is open ("calculating…" until then). **Reduce** writes the copy and a notice gives the
-real sizes before and after; **Cancel** writes nothing. The open document is never changed: the
+dialog is open ("calculating…" until then). **Reduce** asks where to save, writes the copy in
+the background and a notice gives the real sizes before and after; **Cancel** writes nothing. The open document is never changed: the
 reduced copy is saved as a new file, and a copy that would be no smaller is not saved.
 
 | | Light | Medium (default) | Strong |
@@ -17,7 +17,8 @@ reduced copy is saved as a new file, and a copy that would be no smaller is not 
 | JPEG quality | — | per image: the lowest from 70 to 92 whose result keeps SSIM ≥ 0.985 | the lowest from 65 to 90 keeping SSIM ≥ 0.970 |
 | JPEGs not resampled | transcoded losslessly: Huffman tables made for the image, progressive when smaller, Exif/XMP/Photoshop data and comments dropped | colour pages that are grey to the eye kept as their luma alone; quantization steps doubled where SSIM ≥ 0.985 holds; kept only if 5 % smaller than the lossless transcode | the same with steps up to tripled, SSIM ≥ 0.970, 3 % smaller |
 | Graphics (screenshots, charts, line art: ≤ 256 colours, or at least half the pixels equal to their neighbour) | indexed palette (1, 2, 4 or 8 bits) when smaller than Flate | lossless as in Light; never JPEG, never resampled | same |
-| Streams | every stream in a general-purpose encoding stored again with Flate at the best level; image samples with PNG predictors | same | same |
+| Black-and-white images (1-bit, image masks, CCITT, JBIG2; grey or RGB of only black and white, packed to 1 bit) | CCITT Group 4 when smaller (lossless), never resampled | above 450 ppi averaged down to 300 ppi; Group 4 | as Medium, stored as lossless JBIG2 when smaller (up to 16 images share a symbol dictionary) |
+| Streams | every stream in a general-purpose encoding stored again with Flate at the best level; image samples with PNG predictors; LZW stored as Flate | same | same |
 | Structure | object streams and a cross-reference stream (400 objects per stream, best level), identical fonts and images merged, unused objects dropped | same | same |
 | Discarded | page thumbnails, alternate images | same | same, plus print settings, document information and XMP metadata, other applications' private data (`/PieceInfo`), invalid links and unreferenced named destinations |
 | Kept | text, fonts, forms, comments, attachments, bookmarks, links, tags, layers | same | same, except what is discarded |
@@ -51,8 +52,10 @@ Rules that hold at every level:
   are left alone. A soft mask is resampled with its image (a tent filter, no halo).
 - Every image and stream is replaced only when the new one is smaller; a lossless JPEG transcode
   is kept only when it decodes to exactly the same pixels.
-- 1-bit scans, CCITT, JBIG2 and JPEG 2000 images are never turned into JPEG; 1-bit and other
-  Flate or uncompressed images get the lossless recompression.
+- 1-bit scans, CCITT, JBIG2 and JPEG 2000 images are never turned into JPEG. Black-and-white
+  images go through the upstream optimizer's monochrome step (`MonoSettings`): CCITT Group 4,
+  lossless JBIG2 at Strong, or 1-bit Flate, whichever is smallest, kept only when smaller than
+  the image as it is; other Flate or uncompressed images get the lossless recompression.
 - CMYK and other colour spaces, masks, decode arrays and 16-bit images keep their samples
   (a CMYK JPEG still gets the lossless transcode).
 - Progressive and arithmetic-coded JPEGs aren't transcoded (they are re-encoded from pixels when
@@ -65,18 +68,20 @@ Rules that hold at every level:
 The quick steps are really run on a copy (merging page pictures printed as strips, dropping
 unused images, the discards). Then:
 
-- the largest image of each kind (grey or colour, JPEG or not, resampled or not) is really
+- the largest image of each kind (black-and-white, grey or colour, JPEG or not, resampled or not) is really
   encoded, quality search included, and the next largest ones (images of one size spread evenly
   over the document) as long as a budget of 24 million source pixels lasts; the others are
   predicted from their kind: resampled ones from the bytes per output pixel, the others from
   the share of their size the trials kept, weighted by how many trials were replaced;
+- trials go through the same decision as the real run (the monochrome step included) and
+  spend the same decoding allowance;
 - the lossless recompression (JPEG transcodes included) is really tried on the largest streams
   of each class (kind, compressed or not, bits per component) within 48 MB; the others are
   predicted from the ratio their class reached;
 - the copy is written with those streams empty, and the predicted sizes are added.
 
 Files that fit the budget are estimated within a few hundred bytes of the result. The tests
-(`crates/engine/tests/reduce_levels.rs`) allow 5 % (25 % for a sample-only estimate); the
+(`crates/engine/tests/it/reduce_levels.rs`) allow 5 % (25 % for a sample-only estimate); the
 60-page scan below is estimated within 1 % at Medium and 8 % at Strong. Automation:
 `doc_reduce` takes `level` (light, medium, strong; default medium) and `doc_reduce_estimate`
 returns the same estimates as the dialog.
@@ -118,8 +123,8 @@ so the target wins.
 - Fonts are merged when identical but not subset, and unused glyphs stay.
 - Unused fonts, colour spaces and patterns that a page lists but never uses stay (only images
   and forms are dropped).
-- No JBIG2 or CCITT encoder: 1-bit scans get Flate with a predictor, which is good but larger
-  than JBIG2.
+- JBIG2 is lossless only (no symbol substitution) and used at Strong alone; Light and Medium
+  use CCITT Group 4, which every reader draws.
 - No trellis quantization or successive-approximation progressive scans (mozjpeg's further few
   percent); progressive JPEGs in the source aren't transcoded.
 - Zopfli-style Flate is not used: no pure-Rust implementation is in the tree, and it is about a
@@ -127,6 +132,11 @@ so the target wins.
 - The SSIM is luma only; colour loss is limited by the chroma choice and the quality floor.
 
 ## Revision history
+
+- 2026-11-12: carried onto upstream PdfCraft's optimizer (task 046). Black-and-white images now
+  use its CCITT Group 4 / JBIG2 encoders instead of Flate; streams are decoded within its
+  run-wide allowance; Acrobat's own choices (`Settings::default`, the Standard and Mobile
+  presets) are upstream's, with `recompress_streams` off.
 
 - 2026-10-23: quality-targeted levels, lossless JPEG transcode, palettes, grey pages,
   coefficient requantization; measurements (task 026).

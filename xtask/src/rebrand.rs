@@ -1,7 +1,7 @@
 //! `cargo xtask rebrand`: after merging upstream PdfCraft (docs/upstream-sync.md), name the
-//! product Sintec.PDF wherever upstream's new code strings and translation catalogs say
-//! "PdfCraft". It follows the rule `crates/ui-egui/tests/sintec_guard.rs` enforces: identifiers
-//! (`PdfCraftApp`), PDF markers (`%PdfCraft`, `PdfCraft-Identity-UCS`), paths and URLs, comments
+//! product Sintec.PDF wherever upstream's new code strings (`crates/`, `apps/`) and translation
+//! catalogs (`i18n/`) say "PdfCraft". It follows the rule `crates/ui-egui/tests/sintec_guard.rs`
+//! enforces: identifiers (`PdfCraftApp`), PDF markers (`%PdfCraft`, `PdfCraft-Identity-UCS`), paths and URLs, comments
 //! and credit lines ("PdfCraft contributors", "Based on PdfCraft") are left alone.
 //! `--check` lists what would change without writing.
 
@@ -52,7 +52,7 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
     let check = args.iter().any(|a| a == "--check");
     let root = crate::gates::root();
     let mut all = Vec::new();
-    for dir in ["crates", "apps"] {
+    for dir in ["crates", "apps", "i18n"] {
         files(&root.join(dir), &mut all);
     }
     let mut changed = 0;

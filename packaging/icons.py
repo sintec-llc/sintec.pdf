@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIR = os.path.join(ROOT, "assets", "app-icon")
-ID = "ai.storyteller.pdfcraft"
+ID = "io.github.sintec_llc.sintec_pdf"
 ORANGE = (252, 154, 26, 255)  # Sintec orange, as the logo's S
 LOGO = os.path.join(DIR, "sintec-pdf-logo.png")
 DOCUMENT = os.path.join(DIR, "pdfcraft-document.png")

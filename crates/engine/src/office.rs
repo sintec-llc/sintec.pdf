@@ -1,7 +1,8 @@
 //! Office documents to PDF through the installed office suite: Microsoft Office (Word, Excel,
 //! PowerPoint through their automation interface, invisibly) or, without it, LibreOffice.
 //! Sintec.PDF doesn't read Office formats itself; the suite that wrote them converts them with
-//! their formatting, tables and images intact.
+//! their formatting, tables and images intact. Where Microsoft Office can't (or isn't there),
+//! `pdfcraft_create::office_to_pdf` runs LibreOffice, which is also what upstream's File ▸ Open uses.
 //!
 //! One PowerShell run converts a whole batch, starting each Office application once. Files open
 //! read-only and aren't added to the recent-files list; a password-protected file fails (it is
@@ -116,13 +117,15 @@ foreach ($a in $apps.Values) { try { $a.Quit() } catch {} }"#;
 /// The results of a batch, by input path: the PDF bytes or why it failed.
 pub type Results = Vec<(PathBuf, Result<Vec<u8>, String>)>;
 
-/// Convert `inputs` to PDF with the installed office suite. Every input gets a result.
+/// Convert `inputs` to PDF with the installed office suite. Every input gets a result. On
+/// Windows Microsoft Office goes first; whatever it can't do (or on other systems) LibreOffice
+/// converts ([`pdfcraft_create::office_to_pdf`]).
 pub fn convert(inputs: &[(Kind, PathBuf)]) -> Results {
     if inputs.is_empty() {
         return Vec::new();
     }
     #[cfg(windows)]
-    {
+    let first: Results = {
         let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
         let dir = std::env::temp_dir().join(format!("sintec-pdf-office-{}-{stamp}", std::process::id()));
         if let Err(e) = std::fs::create_dir_all(&dir) {
@@ -131,32 +134,79 @@ pub fn convert(inputs: &[(Kind, PathBuf)]) -> Results {
         let items: Vec<(Kind, PathBuf, PathBuf)> =
             inputs.iter().enumerate().map(|(i, (k, p))| (*k, p.clone(), dir.join(format!("doc-{i:05}.pdf")))).collect();
         let results = run_office(&items, &dir).unwrap_or_else(|e| inputs.iter().map(|(_, p)| (p.clone(), Err(e.clone()))).collect());
-        // Whatever Microsoft Office couldn't do, LibreOffice may.
-        let results = results
-            .into_iter()
-            .map(|(p, r)| match r {
-                Err(e) if !e.contains("password") => match libreoffice(&p, &dir) {
-                    Some(Ok(b)) => (p, Ok(b)),
-                    _ => (p, Err(e)),
-                },
-                other => (p, other),
-            })
-            .collect();
         let _ = std::fs::remove_dir_all(&dir);
         results
-    }
+    };
     #[cfg(not(windows))]
-    {
-        inputs.iter().map(|(_, p)| (p.clone(), Err("Office documents are converted with Microsoft Office on Windows".to_string()))).collect()
+    let first: Results = inputs.iter().map(|(_, p)| (p.clone(), Err("Microsoft Office is available only on Windows".to_string()))).collect();
+    first
+        .into_iter()
+        .map(|(p, r)| match r {
+            // A password-protected file stays that way in LibreOffice too.
+            Err(e) if !e.contains("password") => match libreoffice(&p) {
+                Ok(b) => (p, Ok(b)),
+                // Off Windows the only converter is LibreOffice: say what it said.
+                Err(l) if cfg!(not(windows)) => (p, Err(l)),
+                Err(_) => (p, Err(e)),
+            },
+            other => (p, other),
+        })
+        .collect()
+}
+
+/// `input` converted by LibreOffice.
+fn libreoffice(input: &Path) -> Result<Vec<u8>, String> {
+    let name = input.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let bytes = std::fs::read(input).map_err(|e| e.to_string())?;
+    pdfcraft_create::office_to_pdf(&name, &bytes).map_err(|e| e.to_string())
+}
+
+/// Runs a PowerShell script from standard input (not `-EncodedCommand`, which antivirus products
+/// read as malware, and not a `.ps1` file, which the execution policy can block). The script must
+/// be ASCII (PowerShell reads standard input in the console code page); data goes in `env`.
+#[cfg(windows)]
+pub(crate) fn run_powershell(script: &str, env: &[(&str, &std::ffi::OsStr)]) -> std::io::Result<std::process::Output> {
+    use std::io::Write;
+    use std::os::windows::process::CommandExt;
+    use std::process::Stdio;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    if !script.is_ascii() {
+        return Err(std::io::Error::other("PowerShell scripts must be ASCII"));
     }
+    // System32's PowerShell, not whatever a writable folder earlier on PATH holds.
+    let exe = std::env::var_os("SystemRoot").map_or_else(
+        || PathBuf::from("powershell.exe"),
+        |root| PathBuf::from(root).join("System32").join("WindowsPowerShell").join("v1.0").join("powershell.exe"),
+    );
+    let mut c = std::process::Command::new(exe);
+    c.args(["-NoProfile", "-NonInteractive", "-Command", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW);
+    for (k, v) in env {
+        c.env(k, v);
+    }
+    let mut child = c.spawn()?;
+    let stdin = child.stdin.take();
+    // Written on its own thread so a script that prints a lot before reading all of its input
+    // can't deadlock against a full output pipe.
+    let text = format!("& {{\r\n{script}\r\n}}\r\n\r\n");
+    let writer = std::thread::spawn(move || {
+        if let Some(mut stdin) = stdin {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+    });
+    let out = child.wait_with_output();
+    let _ = writer.join();
+    out
 }
 
 #[cfg(windows)]
 fn run_office(items: &[(Kind, PathBuf, PathBuf)], dir: &Path) -> Result<Results, String> {
     let job = dir.join("job.tsv");
     std::fs::write(&job, job_lines(items)).map_err(|e| e.to_string())?;
-    let out = pdfcraft_print::spool::run_powershell(OFFICE_SCRIPT, &[("SINTEC_OFFICE_JOB", job.as_os_str())])
-        .map_err(|e| format!("PowerShell is not available: {e}"))?;
+    let out = run_powershell(OFFICE_SCRIPT, &[("SINTEC_OFFICE_JOB", job.as_os_str())]).map_err(|e| format!("PowerShell is not available: {e}"))?;
     let report = String::from_utf8_lossy(&out.stdout);
     Ok(items
         .iter()
@@ -192,35 +242,19 @@ pub fn explain(kind: Kind, raw: &str) -> String {
     }
 }
 
-/// LibreOffice's soffice, if installed in the usual place.
-#[cfg(windows)]
-fn libreoffice(input: &Path, dir: &Path) -> Option<Result<Vec<u8>, String>> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let soffice = [std::env::var_os("ProgramFiles"), std::env::var_os("ProgramFiles(x86)")]
-        .into_iter()
-        .flatten()
-        .map(|p| PathBuf::from(p).join("LibreOffice").join("program").join("soffice.exe"))
-        .find(|p| p.is_file())?;
-    let out_dir = dir.join("libreoffice");
-    let _ = std::fs::create_dir_all(&out_dir);
-    let status = std::process::Command::new(soffice)
-        .args(["--headless", "--norestore", "--convert-to", "pdf", "--outdir"])
-        .arg(&out_dir)
-        .arg(input)
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
-    let stem = input.file_stem()?.to_string_lossy().into_owned();
-    Some(match status {
-        Ok(s) if s.success() => std::fs::read(out_dir.join(format!("{stem}.pdf"))).map_err(|e| e.to_string()),
-        Ok(_) => Err("LibreOffice couldn't convert it".to_string()),
-        Err(e) => Err(e.to_string()),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_missing_file_is_an_error_for_that_file_not_a_crash() {
+        let missing = PathBuf::from("no-such-dir-047/missing.docx");
+        let out = convert(&[(Kind::Word, missing.clone())]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].0, missing);
+        assert!(out[0].1.is_err());
+        assert!(convert(&[]).is_empty());
+    }
 
     #[test]
     fn office_types_and_job_file() {
