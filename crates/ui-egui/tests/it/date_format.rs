@@ -140,7 +140,7 @@ fn a_date_the_pdf_cannot_hold_is_refused_with_a_warning_first() {
     if crate::support::skip_without_glyphs(
         "a_date_the_pdf_cannot_hold_is_refused_with_a_warning_first",
         "en",
-        "日曜日月曜日火曜日水曜日木曜日金曜日土曜日",
+        "воскресенье понедельник вторник среда четверг пятница суббота",
     ) {
         return;
     }
@@ -149,9 +149,9 @@ fn a_date_the_pdf_cannot_hold_is_refused_with_a_warning_first() {
         app.set_option("language", "en").unwrap();
         app.open_bytes("form.pdf", None, PDF.to_vec()).expect("opens");
         app.set_option("left", "closed").unwrap();
-        // Japanese weekday names: Fill & Sign text can't hold them yet.
+        // Russian weekday names (this build's only non-Latin date language): Fill & Sign text can't hold them yet.
         app.set_option("date-format", "dddd").unwrap();
-        app.set_option("date-language", "ja").unwrap();
+        app.set_option("date-language", "ru").unwrap();
         app.set_option("dialog", "preferences").unwrap();
         app
     });

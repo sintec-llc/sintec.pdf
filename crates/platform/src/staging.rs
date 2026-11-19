@@ -220,7 +220,7 @@ pub fn write_atomically_with(
 /// Provenance is managed by macOS for the new file, not writable document metadata.
 #[cfg(target_os = "macos")]
 fn preserve_target_xattrs(path: &Path, staged: &std::fs::File) -> std::io::Result<()> {
-    use rustix::fs::{Mode, OFlags, XattrFlags, fgetxattr, flistxattr, fsetxattr, open};
+    use rustix::fs::{Mode, OFlags, XattrFlags, fgetxattr_query, flistxattr, fsetxattr, open};
     use rustix::io::Errno;
 
     // A new destination has nothing to retain. Replacing a symlink has always replaced the
@@ -257,16 +257,23 @@ fn preserve_target_xattrs(path: &Path, staged: &std::fs::File) -> std::io::Resul
             continue;
         }
         let name = std::ffi::CString::new(name).map_err(|_| std::io::Error::other("invalid extended attribute name"))?;
-        let size = fgetxattr(&source, &name, &mut [] as &mut [u8])?;
+        let size = fgetxattr_query(&source, name.as_c_str())?;
         if size > MAX_VALUE_BYTES || size > MAX_TOTAL_BYTES.saturating_sub(total) {
             return Err(std::io::Error::other("extended attributes exceed the 16 MiB per-value or 64 MiB total limit"));
         }
         // Resource forks may return a prefix instead of ERANGE on growth; check the size again.
-        let value = read_xattr_value(size, |buffer| Ok(fgetxattr(&source, &name, buffer)?))?;
+        let value = read_xattr_value(size, |buffer| Ok(get_xattr(&source, &name, buffer)?))?;
         fsetxattr(staged, &name, &value, XattrFlags::empty())?;
         total = total.saturating_add(value.len());
     }
     Ok(())
+}
+
+/// Read an attribute into `buffer`. rustix 1.1.6 answers an empty buffer with 0, not the size:
+/// the size query has its own call, so an empty buffer asks for the size here.
+#[cfg(target_os = "macos")]
+fn get_xattr(file: &std::fs::File, name: &std::ffi::CStr, buffer: &mut [u8]) -> rustix::io::Result<usize> {
+    if buffer.is_empty() { rustix::fs::fgetxattr_query(file, name) } else { rustix::fs::fgetxattr(file, name, buffer) }
 }
 
 /// Read an already size-bounded attribute, refusing a partial result or a changed post-read size.

@@ -242,8 +242,8 @@ fn a_save_preserves_opening_settings_changed_while_staging() {
     });
     write_atomically_with(&target.to_string_lossy(), b"NEW", suffixes).unwrap();
     assert_eq!(read(&target), "NEW");
-    assert_eq!(xattr::get(&target, "com.apple.LaunchServices.OpenWith").unwrap(), Some(b"new handler".to_vec()));
-    assert_eq!(xattr::get(&target, "com.apple.quarantine").unwrap(), Some(b"0082;5678;another app;".to_vec()));
+    assert_eq!(crate::platform::test_xattr::get(&target, "com.apple.LaunchServices.OpenWith").unwrap(), Some(b"new handler".to_vec()));
+    assert_eq!(crate::platform::test_xattr::get(&target, "com.apple.quarantine").unwrap(), Some(b"0082;5678;another app;".to_vec()));
     let _ = std::fs::remove_dir_all(dir);
 }
 
