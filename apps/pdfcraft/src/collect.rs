@@ -34,7 +34,10 @@ fn collect_expecting(paths: Vec<PathBuf>, spool: &Path, expected: usize) -> Role
         return Role::Convert(paths);
     }
     let stamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
-    let list = spool.join(format!("{stamp}-{}.list", std::process::id()));
+    // The process id tells launches apart; the counter does the same for threads of one process
+    // (the test below), where a coarse clock (macOS) can give two of them the same stamp.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let list = spool.join(format!("{stamp}-{}-{}.list", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     let text: String = paths.iter().map(|p| format!("{}\n", p.display())).collect();
     if std::fs::write(&list, text).is_err() {
         return Role::Convert(paths);

@@ -403,6 +403,12 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
             }
         }
     }
+    // Last resort: Inter has no U+FFFD, which a PDF name that isn't UTF-8 is listed with, and egui
+    // panics on a character no face can draw. JetBrains Mono has it (the others never reach it).
+    let stack = fonts.families.entry(FontFamily::Proportional).or_default();
+    if !stack.iter().any(|n| n == "JetBrainsMono") {
+        stack.push("JetBrainsMono".to_owned());
+    }
     let fallback: Vec<String> = fonts.families[&FontFamily::Proportional].clone();
     for (fam, primary) in [("medium", "Inter-Medium"), ("semibold", "Inter-SemiBold")] {
         let mut stack = vec![primary.to_owned()];

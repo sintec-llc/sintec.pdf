@@ -342,6 +342,10 @@ fn simplified_chinese_ui_uses_an_installed_hans_face_without_an_embedded_one() {
         eprintln!("skipping simplified_chinese_ui_uses_an_installed_hans_face_without_an_embedded_one: a Hans face is bundled");
         return;
     }
+    if pdfcraft_ui_egui::i18n::Lang::from_code("zh-hans").is_none() {
+        eprintln!("skipping: this build has no Simplified Chinese interface catalog (only en and ru)");
+        return;
+    }
     installed_chinese_face_covers(theme::CjkPreference::SimplifiedChinese, &catalog("zh-hans"), "Simplified");
 }
 
@@ -351,6 +355,10 @@ fn simplified_chinese_ui_uses_an_installed_hans_face_without_an_embedded_one() {
 #[test]
 fn traditional_chinese_ui_keeps_an_installed_hant_face_before_japanese() {
     if crate::support::skip_without_catalogs("traditional_chinese_ui_keeps_an_installed_hant_face_before_japanese") {
+        return;
+    }
+    if pdfcraft_ui_egui::i18n::Lang::from_code("zh-hant").is_none() {
+        eprintln!("skipping: this build has no Traditional Chinese interface catalog (only en and ru)");
         return;
     }
     installed_chinese_face_covers(theme::CjkPreference::TraditionalChinese, &catalog("zh-hant"), "Traditional");
