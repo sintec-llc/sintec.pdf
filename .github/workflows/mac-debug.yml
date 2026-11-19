@@ -1,0 +1,11 @@
+name: mac-debug
+on:
+  push:
+    branches: [debug/mac-xattr]
+jobs:
+  t:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p pdfcraft-platform staging 2>&1 | tail -80

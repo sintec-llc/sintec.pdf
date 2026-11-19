@@ -257,13 +257,14 @@ fn preserve_target_xattrs(path: &Path, staged: &std::fs::File) -> std::io::Resul
             continue;
         }
         let name = std::ffi::CString::new(name).map_err(|_| std::io::Error::other("invalid extended attribute name"))?;
-        let size = fgetxattr(&source, &name, &mut [] as &mut [u8])?;
+        let ctx = |what: &'static str| move |e: Errno| std::io::Error::other(format!("{what} {name:?}: {e}"));
+        let size = fgetxattr(&source, &name, &mut [] as &mut [u8]).map_err(ctx("size of"))?;
         if size > MAX_VALUE_BYTES || size > MAX_TOTAL_BYTES.saturating_sub(total) {
             return Err(std::io::Error::other("extended attributes exceed the 16 MiB per-value or 64 MiB total limit"));
         }
         // Resource forks may return a prefix instead of ERANGE on growth; check the size again.
-        let value = read_xattr_value(size, |buffer| Ok(fgetxattr(&source, &name, buffer)?))?;
-        fsetxattr(staged, &name, &value, XattrFlags::empty())?;
+        let value = read_xattr_value(size, |buffer| fgetxattr(&source, &name, buffer).map_err(|e| std::io::Error::other(format!("read {name:?} (buffer {}): {e}", buffer.len()))))?;
+        fsetxattr(staged, &name, &value, XattrFlags::empty()).map_err(|e| std::io::Error::other(format!("write {name:?} ({} bytes): {e}", value.len())))?;
         total = total.saturating_add(value.len());
     }
     Ok(())
