@@ -380,10 +380,10 @@
       <!-- OCR models (CC-BY-SA-4.0, licences alongside) in models\ beside the exe, where
            pdfcraft_ocr::Models::find looks, so Scan & OCR works offline right after install. -->
       <Component Id="PdfcraftOcrModels" Subdirectory="models" Guid="CF874DC8-D68A-4AEA-ABD9-0E63A3992E5F">
-        <File Id="OcrDetectionModel" Source="$(var.BinDir)\models\text-detection.rten" KeyPath="yes" />
-        <File Id="OcrRecognitionModel" Source="$(var.BinDir)\models\text-recognition.rten" />
-        <File Id="OcrDetectionLicence" Source="$(var.BinDir)\models\text-detection.rten.LICENCE.txt" />
-        <File Id="OcrRecognitionLicence" Source="$(var.BinDir)\models\text-recognition.rten.LICENCE.txt" />
+        <File Id="OcrDetectionModel" Source="$(var.BinDir)\models\text-detection.onnx" KeyPath="yes" />
+        <File Id="OcrRecognitionModel" Source="$(var.BinDir)\models\text-recognition.onnx" />
+        <File Id="OcrDetectionLicence" Source="$(var.BinDir)\models\text-detection.onnx.LICENCE.txt" />
+        <File Id="OcrRecognitionLicence" Source="$(var.BinDir)\models\text-recognition.onnx.LICENCE.txt" />
       </Component>
 
       <!-- PP-OCRv5 detector and East Slavic models (Apache-2.0, licences alongside): Russian,

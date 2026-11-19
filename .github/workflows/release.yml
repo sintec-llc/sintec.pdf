@@ -236,7 +236,7 @@ jobs:
           grep -E 'metainfo/io\.github\.sintec_llc\.sintec_pdf\.metainfo\.xml$' <<<"$contents"
           grep -E 'icons/hicolor/256x256/apps/io\.github\.sintec_llc\.sintec_pdf\.png$' <<<"$contents"
           # OCR models and substitute fonts where the installed app looks: <bin>/../share/sintec-pdf.
-          grep -E 'usr/share/sintec-pdf/models/.+\.rten$' <<<"$contents"
+          grep -E 'usr/share/sintec-pdf/models/.+\.onnx$' <<<"$contents"
           grep -E 'usr/share/sintec-pdf/fonts/.+\.ttf$' <<<"$contents"
           ldd target/release/pdfcraft
           # The CLI-only archive: the binary and its licences, and it runs.
