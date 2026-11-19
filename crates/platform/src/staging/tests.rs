@@ -249,7 +249,7 @@ fn attribute_reads_require_a_complete_value_and_stable_size() {
 #[cfg(target_os = "macos")]
 #[test]
 fn oversized_extended_attributes_refuse_the_save_without_replacing_the_target() {
-    use rustix::fs::{XattrFlags, getxattr, setxattr};
+    use rustix::fs::{XattrFlags, setxattr};
     let dir = test_dir("xattrs-limit");
     let target = dir.join("out.pdf");
     std::fs::write(&target, b"OLD").unwrap();
